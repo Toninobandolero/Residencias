@@ -9,8 +9,11 @@ from functools import wraps
 from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
 from werkzeug.security import check_password_hash
+from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from db_connector import get_db_connection
+from storage_manager import upload_document, get_document_url, delete_document
+import mimetypes
 
 # Cargar variables de entorno desde .env
 load_dotenv()
@@ -196,13 +199,15 @@ def listar_residentes():
         
         try:
             cursor.execute("""
-                SELECT id_residente, nombre, apellido, documento_identidad, 
-                       fecha_nacimiento, telefono, direccion, contacto_emergencia,
-                       telefono_emergencia, activo, fecha_ingreso, habitacion,
-                       costo_habitacion, servicios_extra, medicaciones, peculiaridades, fecha_creacion
-                FROM residente
-                WHERE id_residencia = %s
-                ORDER BY apellido, nombre
+                SELECT r.id_residente, r.id_residencia, r.nombre, r.apellido, r.documento_identidad, 
+                       r.fecha_nacimiento, r.telefono, r.direccion, r.contacto_emergencia,
+                       r.telefono_emergencia, r.activo, r.fecha_ingreso, r.habitacion,
+                       r.costo_habitacion, r.servicios_extra, r.medicaciones, r.peculiaridades, r.fecha_creacion,
+                       res.nombre as nombre_residencia
+                FROM residente r
+                JOIN residencia res ON r.id_residencia = res.id_residencia
+                WHERE r.id_residencia = %s
+                ORDER BY r.id_residencia, r.apellido, r.nombre
             """, (g.id_residencia,))
             
             residentes = cursor.fetchall()
@@ -211,22 +216,24 @@ def listar_residentes():
             for res in residentes:
                 resultado.append({
                     'id_residente': res[0],
-                    'nombre': res[1],
-                    'apellido': res[2],
-                    'documento_identidad': res[3],
-                    'fecha_nacimiento': str(res[4]) if res[4] else None,
-                    'telefono': res[5],
-                    'direccion': res[6],
-                    'contacto_emergencia': res[7],
-                    'telefono_emergencia': res[8],
-                    'activo': res[9],
-                    'fecha_ingreso': str(res[10]) if res[10] else None,
-                    'habitacion': res[11],
-                    'costo_habitacion': float(res[12]) if res[12] else None,
-                    'servicios_extra': res[13],
-                    'medicaciones': res[14],
-                    'peculiaridades': res[15],
-                    'fecha_creacion': res[16].isoformat() if res[16] else None
+                    'id_residencia': res[1],
+                    'nombre': res[2],
+                    'apellido': res[3],
+                    'documento_identidad': res[4],
+                    'fecha_nacimiento': str(res[5]) if res[5] else None,
+                    'telefono': res[6],
+                    'direccion': res[7],
+                    'contacto_emergencia': res[8],
+                    'telefono_emergencia': res[9],
+                    'activo': res[10],
+                    'fecha_ingreso': str(res[11]) if res[11] else None,
+                    'habitacion': res[12],
+                    'costo_habitacion': float(res[13]) if res[13] else None,
+                    'servicios_extra': res[14],
+                    'medicaciones': res[15],
+                    'peculiaridades': res[16],
+                    'fecha_creacion': res[17].isoformat() if res[17] else None,
+                    'nombre_residencia': res[18]
                 })
             
             return jsonify({'residentes': resultado, 'total': len(resultado)}), 200
@@ -242,20 +249,20 @@ def listar_residentes():
 
 @app.route('/api/v1/residentes/<int:id_residente>', methods=['GET'])
 def obtener_residente(id_residente):
-    """Obtiene un residente específico (solo de la residencia del usuario)."""
+    """Obtiene un residente específico. Permite obtener residentes de cualquier residencia para poder editarlos."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
             cursor.execute("""
-                SELECT id_residente, nombre, apellido, documento_identidad,
+                SELECT id_residente, id_residencia, nombre, apellido, documento_identidad,
                        fecha_nacimiento, telefono, direccion, contacto_emergencia,
                        telefono_emergencia, activo, fecha_ingreso, habitacion,
                        costo_habitacion, servicios_extra, medicaciones, peculiaridades, fecha_creacion
                 FROM residente
-                WHERE id_residente = %s AND id_residencia = %s
-            """, (id_residente, g.id_residencia))
+                WHERE id_residente = %s
+            """, (id_residente,))
             
             res = cursor.fetchone()
             
@@ -264,22 +271,23 @@ def obtener_residente(id_residente):
             
             return jsonify({
                 'id_residente': res[0],
-                'nombre': res[1],
-                'apellido': res[2],
-                'documento_identidad': res[3],
-                'fecha_nacimiento': str(res[4]) if res[4] else None,
-                'telefono': res[5],
-                'direccion': res[6],
-                'contacto_emergencia': res[7],
-                'telefono_emergencia': res[8],
-                'activo': res[9],
-                'fecha_ingreso': str(res[10]) if res[10] else None,
-                'habitacion': res[11],
-                'costo_habitacion': float(res[12]) if res[12] else None,
-                'servicios_extra': res[13],
-                'medicaciones': res[14],
-                'peculiaridades': res[15],
-                'fecha_creacion': res[16].isoformat() if res[16] else None
+                'id_residencia': res[1],
+                'nombre': res[2],
+                'apellido': res[3],
+                'documento_identidad': res[4],
+                'fecha_nacimiento': str(res[5]) if res[5] else None,
+                'telefono': res[6],
+                'direccion': res[7],
+                'contacto_emergencia': res[8],
+                'telefono_emergencia': res[9],
+                'activo': res[10],
+                'fecha_ingreso': str(res[11]) if res[11] else None,
+                'habitacion': res[12],
+                'costo_habitacion': float(res[13]) if res[13] else None,
+                'servicios_extra': res[14],
+                'medicaciones': res[15],
+                'peculiaridades': res[16],
+                'fecha_creacion': res[17].isoformat() if res[17] else None
             }), 200
             
         finally:
@@ -294,7 +302,7 @@ def obtener_residente(id_residente):
 @app.route('/api/v1/residentes', methods=['POST'])
 def crear_residente():
     """
-    Crea un nuevo residente en la residencia del usuario autenticado.
+    Crea un nuevo residente. Permite elegir la residencia (Violetas 1 o Violetas 2).
     """
     try:
         data = request.get_json()
@@ -304,14 +312,27 @@ def crear_residente():
         
         nombre = data.get('nombre')
         apellido = data.get('apellido')
+        id_residencia = data.get('id_residencia')
         
         if not nombre or not apellido:
             return jsonify({'error': 'Nombre y apellido son requeridos'}), 400
+        
+        # Validar que id_residencia sea 1 o 2 (Violetas 1 o Violetas 2)
+        if id_residencia is None:
+            return jsonify({'error': 'id_residencia es requerido'}), 400
+        
+        if id_residencia not in [1, 2]:
+            return jsonify({'error': 'id_residencia debe ser 1 (Violetas 1) o 2 (Violetas 2)'}), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
+            # Verificar que la residencia existe
+            cursor.execute("SELECT id_residencia FROM residencia WHERE id_residencia = %s", (id_residencia,))
+            if not cursor.fetchone():
+                return jsonify({'error': 'Residencia no encontrada'}), 404
+            
             cursor.execute("""
                 INSERT INTO residente (id_residencia, nombre, apellido, documento_identidad,
                                      fecha_nacimiento, telefono, direccion, contacto_emergencia,
@@ -320,7 +341,7 @@ def crear_residente():
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_residente, fecha_creacion
             """, (
-                g.id_residencia,
+                id_residencia,
                 nombre,
                 apellido,
                 data.get('documento_identidad'),
@@ -373,18 +394,32 @@ def actualizar_residente(id_residente):
         cursor = conn.cursor()
         
         try:
-            # Verificar que el residente existe y pertenece a la residencia
-            cursor.execute("""
-                SELECT id_residente FROM residente
-                WHERE id_residente = %s AND id_residencia = %s
-            """, (id_residente, g.id_residencia))
+            # Si se está cambiando la residencia, validar que sea 1 o 2
+            nueva_residencia = data.get('id_residencia')
+            if nueva_residencia is not None:
+                if nueva_residencia not in [1, 2]:
+                    return jsonify({'error': 'id_residencia debe ser 1 (Violetas 1) o 2 (Violetas 2)'}), 400
+                # Verificar que la residencia existe
+                cursor.execute("SELECT id_residencia FROM residencia WHERE id_residencia = %s", (nueva_residencia,))
+                if not cursor.fetchone():
+                    return jsonify({'error': 'Residencia no encontrada'}), 404
             
-            if not cursor.fetchone():
+            # Verificar que el residente existe (sin filtrar por residencia para permitir cambio)
+            cursor.execute("""
+                SELECT id_residente, id_residencia FROM residente
+                WHERE id_residente = %s
+            """, (id_residente,))
+            
+            residente_actual = cursor.fetchone()
+            if not residente_actual:
                 return jsonify({'error': 'Residente no encontrado'}), 404
+            
+            # La residencia actual del residente (para el WHERE)
+            id_residencia_actual = residente_actual[1]
             
             # Actualizar campos permitidos
             campos_actualizables = [
-                'nombre', 'apellido', 'documento_identidad', 'fecha_nacimiento',
+                'id_residencia', 'nombre', 'apellido', 'documento_identidad', 'fecha_nacimiento',
                 'telefono', 'direccion', 'contacto_emergencia', 'telefono_emergencia',
                 'activo', 'fecha_ingreso', 'habitacion', 'costo_habitacion',
                 'servicios_extra', 'medicaciones', 'peculiaridades'
@@ -401,7 +436,8 @@ def actualizar_residente(id_residente):
             if not updates:
                 return jsonify({'error': 'No hay campos para actualizar'}), 400
             
-            valores.extend([id_residente, g.id_residencia])
+            # Usar la residencia ACTUAL para el WHERE (antes del cambio)
+            valores.extend([id_residente, id_residencia_actual])
             
             query = f"""
                 UPDATE residente
@@ -429,11 +465,11 @@ def actualizar_residente(id_residente):
 
 
 # ============================================================================
-# ENDPOINTS DE PAGOS DE RESIDENTES
+# ENDPOINTS DE FACTURACIÓN - COBROS PREVISTOS DE RESIDENTES
 # ============================================================================
 
-@app.route('/api/v1/pagos-residentes', methods=['GET'])
-def listar_pagos_residentes():
+@app.route('/api/v1/facturacion/cobros', methods=['GET'])
+def listar_cobros():
     """Lista los pagos de residentes de la residencia del usuario."""
     try:
         conn = get_db_connection()
@@ -442,32 +478,35 @@ def listar_pagos_residentes():
         try:
             cursor.execute("""
                 SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
-                       p.monto, p.fecha_pago, p.mes_pagado, p.concepto,
-                       p.metodo_pago, p.estado, p.fecha_creacion
+                       p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                       p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion
                 FROM pago_residente p
                 JOIN residente r ON p.id_residente = r.id_residente
                 WHERE p.id_residencia = %s
-                ORDER BY p.fecha_pago DESC
+                ORDER BY COALESCE(p.fecha_prevista, p.fecha_pago) DESC, p.fecha_creacion DESC
             """, (g.id_residencia,))
             
-            pagos = cursor.fetchall()
+            cobros = cursor.fetchall()
             
             resultado = []
-            for pago in pagos:
+            for cobro in cobros:
                 resultado.append({
-                    'id_pago': pago[0],
-                    'id_residente': pago[1],
-                    'residente': pago[2],
-                    'monto': float(pago[3]),
-                    'fecha_pago': str(pago[4]),
-                    'mes_pagado': pago[5],
-                    'concepto': pago[6],
-                    'metodo_pago': pago[7],
-                    'estado': pago[8],
-                    'fecha_creacion': pago[9].isoformat() if pago[9] else None
+                    'id_pago': cobro[0],
+                    'id_residente': cobro[1],
+                    'residente': cobro[2],
+                    'monto': float(cobro[3]),
+                    'fecha_pago': str(cobro[4]) if cobro[4] else None,
+                    'fecha_prevista': str(cobro[5]) if cobro[5] else None,
+                    'mes_pagado': cobro[6],
+                    'concepto': cobro[7],
+                    'metodo_pago': cobro[8],
+                    'estado': cobro[9],
+                    'es_cobro_previsto': cobro[10],
+                    'observaciones': cobro[11],
+                    'fecha_creacion': cobro[12].isoformat() if cobro[12] else None
                 })
             
-            return jsonify({'pagos': resultado, 'total': len(resultado)}), 200
+            return jsonify({'cobros': resultado, 'total': len(resultado)}), 200
             
         finally:
             cursor.close()
@@ -478,8 +517,8 @@ def listar_pagos_residentes():
         return jsonify({'error': 'Error al obtener pagos'}), 500
 
 
-@app.route('/api/v1/pagos-residentes', methods=['POST'])
-def crear_pago_residente():
+@app.route('/api/v1/facturacion/cobros', methods=['POST'])
+def crear_cobro():
     """Crea un nuevo pago de residente."""
     try:
         data = request.get_json()
@@ -590,6 +629,290 @@ def listar_personal():
     except Exception as e:
         app.logger.error(f"Error al listar personal: {str(e)}")
         return jsonify({'error': 'Error al obtener personal'}), 500
+
+
+# ============================================================================
+# ENDPOINTS DE DOCUMENTACIÓN DE RESIDENTES
+# ============================================================================
+
+@app.route('/api/v1/residentes/<int:id_residente>/documentos', methods=['GET'])
+def listar_documentos_residente(id_residente):
+    """Lista los documentos de un residente."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el residente existe
+            cursor.execute("""
+                SELECT id_residente FROM residente WHERE id_residente = %s
+            """, (id_residente,))
+            
+            if not cursor.fetchone():
+                return jsonify({'error': 'Residente no encontrado'}), 404
+            
+            cursor.execute("""
+                SELECT id_documento, tipo_documento, nombre_archivo, descripcion,
+                       fecha_subida, fecha_creacion, url_archivo, tamaño_bytes, tipo_mime
+                FROM documento_residente
+                WHERE id_residente = %s
+                ORDER BY fecha_subida DESC
+            """, (id_residente,))
+            
+            documentos = cursor.fetchall()
+            
+            resultado = []
+            for doc in documentos:
+                url_descarga = None
+                if doc[6]:  # Si hay url_archivo
+                    url_descarga = get_document_url(doc[6], expiration_minutes=60)
+                
+                resultado.append({
+                    'id_documento': doc[0],
+                    'tipo_documento': doc[1],
+                    'nombre_archivo': doc[2],
+                    'descripcion': doc[3],
+                    'fecha_subida': doc[4].isoformat() if doc[4] else None,
+                    'fecha_creacion': doc[5].isoformat() if doc[5] else None,
+                    'url_archivo': doc[6],
+                    'url_descarga': url_descarga,
+                    'tamaño_bytes': doc[7],
+                    'tipo_mime': doc[8]
+                })
+            
+            return jsonify({'documentos': resultado, 'total': len(resultado)}), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al listar documentos: {str(e)}")
+        return jsonify({'error': 'Error al obtener documentos'}), 500
+
+
+@app.route('/api/v1/residentes/<int:id_residente>/documentos', methods=['POST'])
+def crear_documento_residente(id_residente):
+    """Crea un nuevo documento para un residente y lo sube a Cloud Storage."""
+    try:
+        # Verificar si hay archivo en la petición
+        if 'archivo' not in request.files:
+            # Si no hay archivo, crear solo el registro (modo compatible)
+            data = request.get_json() if request.is_json else {}
+            tipo_documento = data.get('tipo_documento') or request.form.get('tipo_documento')
+            nombre_archivo = data.get('nombre_archivo') or request.form.get('nombre_archivo')
+            descripcion = data.get('descripcion') or request.form.get('descripcion')
+            
+            if not tipo_documento or not nombre_archivo:
+                return jsonify({'error': 'tipo_documento y nombre_archivo son requeridos'}), 400
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            try:
+                cursor.execute("""
+                    SELECT id_residente, id_residencia FROM residente WHERE id_residente = %s
+                """, (id_residente,))
+                
+                residente = cursor.fetchone()
+                if not residente:
+                    return jsonify({'error': 'Residente no encontrado'}), 404
+                
+                id_residencia = residente[1]
+                
+                cursor.execute("""
+                    INSERT INTO documento_residente (id_residente, id_residencia, tipo_documento,
+                                                    nombre_archivo, descripcion)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id_documento, fecha_subida
+                """, (id_residente, id_residencia, tipo_documento, nombre_archivo, descripcion))
+                
+                resultado = cursor.fetchone()
+                id_documento = resultado[0]
+                conn.commit()
+                
+                return jsonify({
+                    'id_documento': id_documento,
+                    'mensaje': 'Documento creado exitosamente'
+                }), 201
+                
+            except Exception as e:
+                conn.rollback()
+                app.logger.error(f"Error al crear documento: {str(e)}")
+                return jsonify({'error': 'Error al crear documento'}), 500
+            finally:
+                cursor.close()
+                conn.close()
+        
+        # Si hay archivo, subirlo a Cloud Storage
+        archivo = request.files['archivo']
+        tipo_documento = request.form.get('tipo_documento')
+        descripcion = request.form.get('descripcion')
+        
+        if not tipo_documento:
+            return jsonify({'error': 'tipo_documento es requerido'}), 400
+        
+        if archivo.filename == '':
+            return jsonify({'error': 'No se seleccionó ningún archivo'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el residente existe y obtener su residencia
+            cursor.execute("""
+                SELECT id_residente, id_residencia FROM residente WHERE id_residente = %s
+            """, (id_residente,))
+            
+            residente = cursor.fetchone()
+            if not residente:
+                return jsonify({'error': 'Residente no encontrado'}), 404
+            
+            id_residencia = residente[1]
+            
+            # Leer contenido del archivo
+            file_content = archivo.read()
+            nombre_archivo = secure_filename(archivo.filename)
+            tipo_mime = archivo.content_type or mimetypes.guess_type(nombre_archivo)[0] or 'application/octet-stream'
+            tamaño_bytes = len(file_content)
+            
+            # Subir a Cloud Storage
+            blob_path = upload_document(
+                file_content=file_content,
+                id_residencia=id_residencia,
+                id_residente=id_residente,
+                tipo_documento=tipo_documento,
+                nombre_archivo=nombre_archivo
+            )
+            
+            if not blob_path:
+                return jsonify({'error': 'Error al subir el archivo a Cloud Storage'}), 500
+            
+            # Guardar en base de datos
+            cursor.execute("""
+                INSERT INTO documento_residente (id_residente, id_residencia, tipo_documento,
+                                                nombre_archivo, descripcion, url_archivo,
+                                                tamaño_bytes, tipo_mime)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id_documento, fecha_subida
+            """, (
+                id_residente,
+                id_residencia,
+                tipo_documento,
+                nombre_archivo,
+                descripcion,
+                blob_path,
+                tamaño_bytes,
+                tipo_mime
+            ))
+            
+            resultado = cursor.fetchone()
+            id_documento = resultado[0]
+            conn.commit()
+            
+            return jsonify({
+                'id_documento': id_documento,
+                'mensaje': 'Documento subido exitosamente',
+                'url_archivo': blob_path
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al crear documento: {str(e)}")
+            return jsonify({'error': f'Error al crear documento: {str(e)}'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/documentos/<int:id_documento>', methods=['DELETE'])
+def eliminar_documento(id_documento):
+    """Elimina un documento de la base de datos y de Cloud Storage."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Obtener información del documento incluyendo url_archivo
+            cursor.execute("""
+                SELECT id_documento, url_archivo FROM documento_residente WHERE id_documento = %s
+            """, (id_documento,))
+            
+            documento = cursor.fetchone()
+            if not documento:
+                return jsonify({'error': 'Documento no encontrado'}), 404
+            
+            url_archivo = documento[1]
+            
+            # Eliminar de Cloud Storage si existe
+            if url_archivo:
+                try:
+                    delete_document(url_archivo)
+                except Exception as e:
+                    app.logger.warning(f"No se pudo eliminar archivo de Cloud Storage: {str(e)}")
+            
+            # Eliminar de base de datos
+            cursor.execute("""
+                DELETE FROM documento_residente WHERE id_documento = %s
+            """, (id_documento,))
+            
+            conn.commit()
+            
+            return jsonify({'mensaje': 'Documento eliminado exitosamente'}), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al eliminar documento: {str(e)}")
+            return jsonify({'error': 'Error al eliminar documento'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/documentos/<int:id_documento>/descargar', methods=['GET'])
+def descargar_documento(id_documento):
+    """Genera una URL firmada para descargar un documento."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT url_archivo FROM documento_residente WHERE id_documento = %s
+            """, (id_documento,))
+            
+            documento = cursor.fetchone()
+            if not documento:
+                return jsonify({'error': 'Documento no encontrado'}), 404
+            
+            url_archivo = documento[0]
+            
+            if not url_archivo:
+                return jsonify({'error': 'El documento no tiene archivo asociado'}), 404
+            
+            # Generar URL firmada válida por 1 hora
+            url_descarga = get_document_url(url_archivo, expiration_minutes=60)
+            
+            if not url_descarga:
+                return jsonify({'error': 'Error al generar URL de descarga'}), 500
+            
+            return jsonify({'url_descarga': url_descarga}), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
 
 
 @app.errorhandler(404)

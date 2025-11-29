@@ -59,19 +59,23 @@
             font-size: 14px;
         }
 
-        input {
+        input, select {
             width: 100%;
             padding: 12px 15px;
             border: 2px solid #e0e0e0;
             border-radius: 10px;
             font-size: 16px;
+            background-color: #ffffff;
+            color: #333333;
             transition: all 0.3s;
         }
 
-        input:focus, textarea:focus {
+        input:focus, select:focus, textarea:focus {
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            background-color: #ffffff;
+            color: #333333;
         }
 
         textarea {
@@ -82,6 +86,8 @@
             font-size: 16px;
             font-family: inherit;
             resize: vertical;
+            background-color: #ffffff;
+            color: #333333;
             transition: all 0.3s;
         }
 
@@ -415,9 +421,13 @@
                 <button class="close-modal" onclick="closeModal('modalResidente')">&times;</button>
             </div>
             <form id="formResidente" onsubmit="saveResidente(event)">
-                <div class="form-group" id="residenciaInfo" style="background: #f0f7ff; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
-                    <label style="font-weight: 600; color: #667eea;">Residencia:</label>
-                    <span id="residenciaNombre" style="color: #333;">Cargando...</span>
+                <div class="form-group">
+                    <label for="res_id_residencia">Residencia *</label>
+                    <select id="res_id_residencia" name="id_residencia" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white;">
+                        <option value="">Seleccione una residencia</option>
+                        <option value="1">Violetas 1</option>
+                        <option value="2">Violetas 2</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label for="res_nombre">Nombre *</label>
@@ -648,6 +658,7 @@
                             <table class="data-table">
                                 <thead>
                                     <tr>
+                                        <th>Residencia</th>
                                         <th>Nombre</th>
                                         <th>Habitación</th>
                                         <th>Documento</th>
@@ -661,6 +672,7 @@
                         data.residentes.forEach(res => {
                             html += `
                                 <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
+                                    <td>${res.nombre_residencia || (res.id_residencia === 1 ? 'Violetas 1' : res.id_residencia === 2 ? 'Violetas 2' : `Residencia ${res.id_residencia}`)}</td>
                                     <td>${res.nombre} ${res.apellido}</td>
                                     <td>${res.habitacion || '-'}</td>
                                     <td>${res.documento_identidad || '-'}</td>
@@ -812,17 +824,19 @@
         function openModal(modalId) {
             document.getElementById(modalId).style.display = 'block';
             
-            // Cargar información de la residencia
+            // Si es el modal de agregar residente, establecer residencia por defecto según el token
             if (modalId === 'modalResidente') {
                 const token = localStorage.getItem('violetas_token');
                 if (token) {
                     try {
                         const payload = JSON.parse(atob(token.split('.')[1]));
                         const residenciaId = payload.id_residencia;
-                        const residenciaNombre = residenciaId === 1 ? 'Violetas 1' : residenciaId === 2 ? 'Violetas 2' : `Residencia ${residenciaId}`;
-                        document.getElementById('residenciaNombre').textContent = residenciaNombre;
+                        const selectResidencia = document.getElementById('res_id_residencia');
+                        if (selectResidencia) {
+                            selectResidencia.value = residenciaId; // Establecer como valor por defecto
+                        }
                     } catch (e) {
-                        document.getElementById('residenciaNombre').textContent = 'Residencia actual';
+                        console.error('Error al obtener residencia del token:', e);
                     }
                 }
             }
@@ -882,9 +896,12 @@
                     
                     let html = `
                         <form id="formEditResidente" onsubmit="updateResidente(event, ${idResidente})">
-                            <div class="form-group" style="background: #f0f7ff; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                                <label style="font-weight: 600; color: #667eea; display: block; margin-bottom: 5px;">Residencia:</label>
-                                <span style="color: #333; font-size: 16px;">${residenciaNombre}</span>
+                            <div class="form-group">
+                                <label for="edit_id_residencia">Residencia *</label>
+                                <select id="edit_id_residencia" name="id_residencia" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                    <option value="1" ${res.id_residencia === 1 ? 'selected' : ''}>Violetas 1</option>
+                                    <option value="2" ${res.id_residencia === 2 ? 'selected' : ''}>Violetas 2</option>
+                                </select>
                             </div>
                             
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
@@ -969,6 +986,34 @@
                                 </label>
                             </div>
                             
+                            <hr style="margin: 30px 0; border: none; border-top: 2px solid #e0e0e0;">
+                            
+                            <div class="form-group">
+                                <h3 style="color: #667eea; margin-bottom: 15px;">📄 Documentación</h3>
+                                
+                                <div id="documentosList" style="margin-bottom: 20px;">
+                                    <p style="color: #666;">Cargando documentos...</p>
+                                </div>
+                                
+                                <div style="background: #f5f5f5; padding: 15px; border-radius: 10px; margin-top: 15px;">
+                                    <h4 style="color: #667eea; margin-bottom: 10px; font-size: 14px;">Agregar Nuevo Documento</h4>
+                                    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-bottom: 10px;">
+                                        <select id="doc_tipo" style="padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; color: #333;">
+                                            <option value="">Tipo de documento</option>
+                                            <option value="Médica">Médica</option>
+                                            <option value="Bancaria">Bancaria</option>
+                                            <option value="Legal">Legal</option>
+                                            <option value="Seguro">Seguro</option>
+                                            <option value="Identidad">Identidad</option>
+                                            <option value="Otro">Otro</option>
+                                        </select>
+                                        <input type="file" id="doc_archivo" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; color: #333;">
+                                    </div>
+                                    <textarea id="doc_descripcion" placeholder="Descripción (opcional)" rows="2" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; background: white; color: #333; font-family: inherit;"></textarea>
+                                    <button type="button" onclick="agregarDocumento(${idResidente})" style="width: auto; padding: 8px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">+ Subir Documento</button>
+                                </div>
+                            </div>
+                            
                             <div id="editModalAlert" class="alert" style="display: none;"></div>
                             
                             <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -979,11 +1024,146 @@
                     `;
                     
                     content.innerHTML = html;
+                    // Cargar documentos del residente
+                    await loadDocumentos(idResidente);
                 } else {
                     content.innerHTML = `<div class="alert error">Error: ${res.error}</div>`;
                 }
             } catch (error) {
                 content.innerHTML = `<div class="alert error">Error de conexión: ${error.message}</div>`;
+            }
+        }
+
+        async function loadDocumentos(idResidente) {
+            const token = localStorage.getItem('violetas_token');
+            const documentosList = document.getElementById('documentosList');
+            
+            if (!documentosList) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residentes/${idResidente}/documentos`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    if (data.documentos && data.documentos.length > 0) {
+                        let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                        data.documentos.forEach(doc => {
+                            const tamaño = doc.tamaño_bytes ? `(${(doc.tamaño_bytes / 1024).toFixed(1)} KB)` : '';
+                            html += `
+                                <div style="background: white; padding: 12px; border-radius: 8px; border: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center;">
+                                    <div style="flex: 1;">
+                                        <strong style="color: #667eea;">${doc.tipo_documento}</strong>
+                                        <p style="margin: 5px 0; color: #333;">${doc.nombre_archivo} ${tamaño}</p>
+                                        ${doc.descripcion ? `<p style="margin: 0; color: #666; font-size: 12px;">${doc.descripcion}</p>` : ''}
+                                        <p style="margin: 5px 0 0 0; color: #999; font-size: 11px;">${new Date(doc.fecha_subida).toLocaleDateString()}</p>
+                                    </div>
+                                    <div style="display: flex; gap: 8px;">
+                                        ${doc.url_descarga ? `<button onclick="window.open('${doc.url_descarga}', '_blank')" style="background: #667eea; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;">📥 Descargar</button>` : ''}
+                                        <button onclick="eliminarDocumento(${doc.id_documento}, ${idResidente})" style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;">Eliminar</button>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        html += '</div>';
+                        documentosList.innerHTML = html;
+                    } else {
+                        documentosList.innerHTML = '<p style="color: #666; font-style: italic;">No hay documentos registrados.</p>';
+                    }
+                } else {
+                    documentosList.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+                }
+            } catch (error) {
+                documentosList.innerHTML = `<p style="color: red;">Error de conexión: ${error.message}</p>`;
+            }
+        }
+
+        async function agregarDocumento(idResidente) {
+            const token = localStorage.getItem('violetas_token');
+            const tipo = document.getElementById('doc_tipo').value;
+            const archivoInput = document.getElementById('doc_archivo');
+            const archivo = archivoInput.files[0];
+            const descripcion = document.getElementById('doc_descripcion').value;
+            
+            if (!tipo) {
+                alert('Por favor seleccione el tipo de documento');
+                return;
+            }
+            
+            if (!archivo) {
+                alert('Por favor seleccione un archivo');
+                return;
+            }
+            
+            // Validar tamaño (máximo 10MB)
+            if (archivo.size > 10 * 1024 * 1024) {
+                alert('El archivo es demasiado grande. Máximo 10MB');
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('archivo', archivo);
+                formData.append('tipo_documento', tipo);
+                if (descripcion) {
+                    formData.append('descripcion', descripcion);
+                }
+                
+                const response = await fetch(`${API_URL}/api/v1/residentes/${idResidente}/documentos`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // Limpiar formulario
+                    document.getElementById('doc_tipo').value = '';
+                    archivoInput.value = '';
+                    document.getElementById('doc_descripcion').value = '';
+                    
+                    // Recargar lista de documentos
+                    await loadDocumentos(idResidente);
+                } else {
+                    alert('Error: ' + (result.error || 'Error al subir documento'));
+                }
+            } catch (error) {
+                alert('Error de conexión: ' + error.message);
+            }
+        }
+
+        async function eliminarDocumento(idDocumento, idResidente) {
+            if (!confirm('¿Está seguro de que desea eliminar este documento?')) {
+                return;
+            }
+            
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/documentos/${idDocumento}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // Recargar lista de documentos
+                    await loadDocumentos(idResidente);
+                } else {
+                    alert('Error: ' + (result.error || 'Error al eliminar documento'));
+                }
+            } catch (error) {
+                alert('Error de conexión: ' + error.message);
             }
         }
 
@@ -998,7 +1178,16 @@
             const formData = new FormData(form);
             const activoCheckbox = document.getElementById('edit_activo');
             
+            const id_residencia = formData.get('id_residencia');
+            if (!id_residencia) {
+                showEditModalError('Debe seleccionar una residencia');
+                updateBtn.disabled = false;
+                updateBtn.textContent = originalText;
+                return;
+            }
+            
             const data = {
+                id_residencia: parseInt(id_residencia),
                 nombre: formData.get('nombre'),
                 apellido: formData.get('apellido'),
                 habitacion: formData.get('habitacion'),
@@ -1094,7 +1283,16 @@
             const formData = new FormData(form);
             const activoCheckbox = document.getElementById('res_activo');
             
+            const id_residencia = formData.get('id_residencia');
+            if (!id_residencia) {
+                showModalError('Debe seleccionar una residencia');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
             const data = {
+                id_residencia: parseInt(id_residencia),
                 nombre: formData.get('nombre'),
                 apellido: formData.get('apellido'),
                 habitacion: formData.get('habitacion') || null,
