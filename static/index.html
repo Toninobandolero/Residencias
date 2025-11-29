@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Violetas - Sistema de Gestión</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 1200px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .logo p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            font-family: inherit;
+            resize: vertical;
+            transition: all 0.3s;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .alert {
+            padding: 12px 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .alert.error {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+        }
+
+        .alert.success {
+            background: #efe;
+            color: #3c3;
+            border: 1px solid #cfc;
+        }
+
+        .token-display {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .token-display h3 {
+            color: #333;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .token-value {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            word-break: break-all;
+            color: #666;
+            border: 1px solid #ddd;
+        }
+
+        .copy-btn {
+            margin-top: 10px;
+            padding: 8px 15px;
+            background: #667eea;
+            font-size: 14px;
+        }
+
+        .user-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f0f7ff;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .user-info h3 {
+            color: #667eea;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .user-info p {
+            color: #666;
+            font-size: 14px;
+            margin: 5px 0;
+        }
+
+        .logout-btn {
+            margin-top: 15px;
+            background: #dc3545;
+        }
+
+        .logout-btn:hover {
+            box-shadow: 0 10px 20px rgba(220, 53, 69, 0.3);
+        }
+
+        .module-btn {
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .module-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .module-content {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+            overflow-x: auto;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+
+        .data-table {
+            width: 100%;
+            min-width: 600px;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+            color: #333;
+        }
+
+        .data-table th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+
+        .data-table td {
+            background: white;
+            color: #333;
+        }
+
+        .data-table tr:hover {
+            background: #f0f0f0;
+        }
+
+        .data-table tr:hover td {
+            background: #f0f0f0;
+        }
+
+        .add-btn {
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .add-btn:hover {
+            background: #218838;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            overflow: auto;
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 20px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            color: #667eea;
+            margin: 0;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #999;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+        }
+
+        .close-modal:hover {
+            color: #333;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        @media (max-width: 600px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <h1>🏥 Violetas</h1>
+            <p>Sistema de Gestión de Residencias</p>
+        </div>
+
+        <div id="loginForm">
+            <div id="alert" class="alert"></div>
+            
+            <form id="loginFormElement">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required 
+                           placeholder="admin@violetas1.com" autocomplete="email">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Contraseña</label>
+                    <input type="password" id="password" name="password" required 
+                           placeholder="••••••••" autocomplete="current-password">
+                </div>
+
+                <button type="submit" id="loginBtn">Iniciar Sesión</button>
+            </form>
+        </div>
+
+        <div id="dashboard" style="display: none;">
+            <div class="user-info" id="userInfo"></div>
+            
+            <div style="margin-top: 20px;">
+                <h3 style="color: #667eea; margin-bottom: 15px;">📋 Módulos del Sistema</h3>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <button class="module-btn" onclick="showModule('residentes')">
+                        👥 Residentes
+                    </button>
+                    <button class="module-btn" onclick="showModule('pagos')">
+                        💰 Pagos
+                    </button>
+                    <button class="module-btn" onclick="showModule('personal')">
+                        👔 Personal
+                    </button>
+                    <button class="module-btn" onclick="showModule('token')">
+                        🔑 Token JWT
+                    </button>
+                </div>
+            </div>
+
+            <div id="moduleContent" style="margin-top: 20px;"></div>
+
+            <button class="logout-btn" onclick="logout()" style="margin-top: 20px;">Cerrar Sesión</button>
+        </div>
+    </div>
+
+    <!-- Modal para ver/editar residente -->
+    <div id="modalViewResidente" class="modal">
+        <div class="modal-content" style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>👤 Detalle del Residente</h2>
+                <button class="close-modal" onclick="closeModal('modalViewResidente')">&times;</button>
+            </div>
+            <div id="viewResidenteContent">
+                <p>Cargando...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para agregar residente -->
+    <div id="modalResidente" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>➕ Agregar Residente</h2>
+                <button class="close-modal" onclick="closeModal('modalResidente')">&times;</button>
+            </div>
+            <form id="formResidente" onsubmit="saveResidente(event)">
+                <div class="form-group" id="residenciaInfo" style="background: #f0f7ff; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+                    <label style="font-weight: 600; color: #667eea;">Residencia:</label>
+                    <span id="residenciaNombre" style="color: #333;">Cargando...</span>
+                </div>
+                <div class="form-group">
+                    <label for="res_nombre">Nombre *</label>
+                    <input type="text" id="res_nombre" name="nombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="res_apellido">Apellido *</label>
+                    <input type="text" id="res_apellido" name="apellido" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="res_habitacion">Habitación *</label>
+                        <input type="text" id="res_habitacion" name="habitacion" required placeholder="Ej: 101, A-12">
+                    </div>
+                    <div class="form-group">
+                        <label for="res_documento">Documento de Identidad</label>
+                        <input type="text" id="res_documento" name="documento_identidad">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="res_telefono">Teléfono</label>
+                    <input type="tel" id="res_telefono" name="telefono">
+                </div>
+                <div class="form-group">
+                    <label for="res_fecha_nacimiento">Fecha de Nacimiento</label>
+                    <input type="date" id="res_fecha_nacimiento" name="fecha_nacimiento">
+                </div>
+                <div class="form-group">
+                    <label for="res_direccion">Dirección</label>
+                    <input type="text" id="res_direccion" name="direccion">
+                </div>
+                <div class="form-group">
+                    <label for="res_contacto_emergencia">Contacto de Emergencia</label>
+                    <input type="text" id="res_contacto_emergencia" name="contacto_emergencia">
+                </div>
+                <div class="form-group">
+                    <label for="res_telefono_emergencia">Teléfono de Emergencia</label>
+                    <input type="tel" id="res_telefono_emergencia" name="telefono_emergencia">
+                </div>
+                <div class="form-group">
+                    <label for="res_fecha_ingreso">Fecha de Ingreso</label>
+                    <input type="date" id="res_fecha_ingreso" name="fecha_ingreso">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="res_activo" name="activo" checked style="width: auto; margin-right: 8px;">
+                        Activo
+                    </label>
+                </div>
+                <div id="modalAlert" class="alert" style="display: none;"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="saveResidenteBtn" style="flex: 1;">Guardar</button>
+                    <button type="button" onclick="closeModal('modalResidente')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin;
+        let currentToken = null;
+
+        // Verificar si hay token guardado
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedToken = localStorage.getItem('violetas_token');
+            if (savedToken) {
+                verifyToken(savedToken);
+            }
+        });
+
+        document.getElementById('loginFormElement').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            const alert = document.getElementById('alert');
+
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Iniciando sesión...';
+            hideAlert();
+
+            try {
+                const response = await fetch(`${API_URL}/api/v1/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentToken = data.token;
+                    localStorage.setItem('violetas_token', currentToken);
+                    showSuccess('¡Login exitoso!');
+                    showDashboard(currentToken);
+                } else {
+                    showError(data.error || 'Error al iniciar sesión');
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = 'Iniciar Sesión';
+                }
+            } catch (error) {
+                showError('Error de conexión. Verifica que el servidor esté corriendo.');
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Iniciar Sesión';
+            }
+        });
+
+        async function verifyToken(token) {
+            try {
+                // Decodificar el token (sin verificar, solo para mostrar info)
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                
+                // Mostrar dashboard
+                showDashboard(token);
+                
+                // Mostrar información del usuario
+                document.getElementById('userInfo').innerHTML = `
+                    <h3>👤 Información del Usuario</h3>
+                    <p><strong>ID Usuario:</strong> ${payload.id_usuario}</p>
+                    <p><strong>Rol ID:</strong> ${payload.id_rol}</p>
+                    <p><strong>Residencia ID:</strong> ${payload.id_residencia}</p>
+                    <p><strong>Expira:</strong> ${new Date(payload.exp * 1000).toLocaleString()}</p>
+                `;
+                document.getElementById('userInfo').style.display = 'block';
+            } catch (error) {
+                console.error('Error al verificar token:', error);
+                logout();
+            }
+        }
+
+        function showDashboard(token) {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('tokenValue').textContent = token;
+            document.getElementById('tokenDisplay').style.display = 'block';
+        }
+
+        function logout() {
+            localStorage.removeItem('violetas_token');
+            currentToken = null;
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('email').value = '';
+            document.getElementById('password').value = '';
+            hideAlert();
+        }
+
+        function copyToken() {
+            const tokenValue = document.getElementById('tokenValue').textContent;
+            navigator.clipboard.writeText(tokenValue).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '¡Copiado!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            });
+        }
+
+        function showError(message) {
+            const alert = document.getElementById('alert');
+            alert.className = 'alert error';
+            alert.textContent = message;
+            alert.style.display = 'block';
+        }
+
+        function showSuccess(message) {
+            const alert = document.getElementById('alert');
+            alert.className = 'alert success';
+            alert.textContent = message;
+            alert.style.display = 'block';
+        }
+
+        function hideAlert() {
+            document.getElementById('alert').style.display = 'none';
+        }
+
+        function showModule(module) {
+            const content = document.getElementById('moduleContent');
+            const token = localStorage.getItem('violetas_token');
+            
+            if (module === 'token') {
+                content.innerHTML = `
+                    <div class="module-content">
+                        <h3 style="color: #667eea; margin-bottom: 15px;">🔑 Token JWT</h3>
+                        <div class="token-display">
+                            <div class="token-value" id="tokenValue">${token}</div>
+                            <button class="copy-btn" onclick="copyToken()" style="margin-top: 10px;">Copiar Token</button>
+                        </div>
+                    </div>
+                `;
+            } else if (module === 'residentes') {
+                loadResidentes();
+            } else if (module === 'pagos') {
+                loadPagos();
+            } else if (module === 'personal') {
+                loadPersonal();
+            }
+        }
+
+        async function loadResidentes() {
+            const content = document.getElementById('moduleContent');
+            const token = localStorage.getItem('violetas_token');
+            
+            content.innerHTML = '<div class="module-content"><p>Cargando residentes...</p></div>';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residentes`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let html = `
+                        <div class="module-content">
+                            <h3 style="color: #667eea; margin-bottom: 15px;">👥 Residentes (${data.total})</h3>
+                            <button class="add-btn" onclick="openModal('modalResidente')">+ Agregar Residente</button>
+                    `;
+                    
+                    if (data.residentes && data.residentes.length > 0) {
+                        html += `
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nombre</th>
+                                        <th>Habitación</th>
+                                        <th>Documento</th>
+                                        <th>Teléfono</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                        data.residentes.forEach(res => {
+                            html += `
+                                <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
+                                    <td>${res.nombre} ${res.apellido}</td>
+                                    <td>${res.habitacion || '-'}</td>
+                                    <td>${res.documento_identidad || '-'}</td>
+                                    <td>${res.telefono || '-'}</td>
+                                    <td>${res.activo ? '✅ Activo' : '❌ Inactivo'}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += '</tbody></table>';
+                    } else {
+                        html += '<p>No hay residentes registrados.</p>';
+                    }
+                    
+                    html += '</div>';
+                    content.innerHTML = html;
+                } else {
+                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: ${data.error}</p></div>`;
+                }
+            } catch (error) {
+                content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}</p></div>`;
+            }
+        }
+
+        async function loadPagos() {
+            const content = document.getElementById('moduleContent');
+            const token = localStorage.getItem('violetas_token');
+            
+            content.innerHTML = '<div class="module-content"><p>Cargando pagos...</p></div>';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/pagos-residentes`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let html = `
+                        <div class="module-content">
+                            <h3 style="color: #667eea; margin-bottom: 15px;">💰 Pagos de Residentes (${data.total})</h3>
+                            <button class="add-btn" onclick="alert('Función de agregar pago próximamente')">+ Registrar Pago</button>
+                    `;
+                    
+                    if (data.pagos && data.pagos.length > 0) {
+                        html += `
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Residente</th>
+                                        <th>Monto</th>
+                                        <th>Fecha</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                        data.pagos.forEach(pago => {
+                            html += `
+                                <tr>
+                                    <td>${pago.residente}</td>
+                                    <td>€${parseFloat(pago.monto).toFixed(2)}</td>
+                                    <td>${pago.fecha_pago}</td>
+                                    <td>${pago.estado}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += '</tbody></table>';
+                    } else {
+                        html += '<p>No hay pagos registrados.</p>';
+                    }
+                    
+                    html += '</div>';
+                    content.innerHTML = html;
+                } else {
+                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: ${data.error}</p></div>`;
+                }
+            } catch (error) {
+                content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}</p></div>`;
+            }
+        }
+
+        async function loadPersonal() {
+            const content = document.getElementById('moduleContent');
+            const token = localStorage.getItem('violetas_token');
+            
+            content.innerHTML = '<div class="module-content"><p>Cargando personal...</p></div>';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/personal`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let html = `
+                        <div class="module-content">
+                            <h3 style="color: #667eea; margin-bottom: 15px;">👔 Personal (${data.total})</h3>
+                            <button class="add-btn" onclick="alert('Función de agregar personal próximamente')">+ Agregar Personal</button>
+                    `;
+                    
+                    if (data.personal && data.personal.length > 0) {
+                        html += `
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nombre</th>
+                                        <th>Cargo</th>
+                                        <th>Teléfono</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                        data.personal.forEach(p => {
+                            html += `
+                                <tr>
+                                    <td>${p.nombre} ${p.apellido}</td>
+                                    <td>${p.cargo || '-'}</td>
+                                    <td>${p.telefono || '-'}</td>
+                                    <td>${p.activo ? '✅ Activo' : '❌ Inactivo'}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += '</tbody></table>';
+                    } else {
+                        html += '<p>No hay personal registrado.</p>';
+                    }
+                    
+                    html += '</div>';
+                    content.innerHTML = html;
+                } else {
+                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: ${data.error}</p></div>`;
+                }
+            } catch (error) {
+                content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}</p></div>`;
+            }
+        }
+
+        function openModal(modalId) {
+            document.getElementById(modalId).style.display = 'block';
+            
+            // Cargar información de la residencia
+            if (modalId === 'modalResidente') {
+                const token = localStorage.getItem('violetas_token');
+                if (token) {
+                    try {
+                        const payload = JSON.parse(atob(token.split('.')[1]));
+                        const residenciaId = payload.id_residencia;
+                        const residenciaNombre = residenciaId === 1 ? 'Violetas 1' : residenciaId === 2 ? 'Violetas 2' : `Residencia ${residenciaId}`;
+                        document.getElementById('residenciaNombre').textContent = residenciaNombre;
+                    } catch (e) {
+                        document.getElementById('residenciaNombre').textContent = 'Residencia actual';
+                    }
+                }
+            }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+            const form = document.getElementById('formResidente');
+            if (form) {
+                form.reset();
+                const activoCheckbox = document.getElementById('res_activo');
+                if (activoCheckbox) {
+                    activoCheckbox.checked = true;
+                }
+            }
+            hideModalAlert();
+        }
+
+        // Cerrar modal al hacer clic fuera
+        window.onclick = function(event) {
+            const modalResidente = document.getElementById('modalResidente');
+            const modalViewResidente = document.getElementById('modalViewResidente');
+            if (event.target == modalResidente) {
+                closeModal('modalResidente');
+            }
+            if (event.target == modalViewResidente) {
+                closeModal('modalViewResidente');
+            }
+        }
+
+        let currentEditingResidenteId = null;
+
+        async function viewResidente(idResidente) {
+            const token = localStorage.getItem('violetas_token');
+            const content = document.getElementById('viewResidenteContent');
+            
+            content.innerHTML = '<p>Cargando información del residente...</p>';
+            openModal('modalViewResidente');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residentes/${idResidente}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const res = await response.json();
+                
+                if (response.ok) {
+                    currentEditingResidenteId = idResidente;
+                    
+                    // Obtener nombre de residencia
+                    const tokenPayload = JSON.parse(atob(token.split('.')[1]));
+                    const residenciaNombre = tokenPayload.id_residencia === 1 ? 'Violetas 1' : 
+                                           tokenPayload.id_residencia === 2 ? 'Violetas 2' : 
+                                           `Residencia ${tokenPayload.id_residencia}`;
+                    
+                    let html = `
+                        <form id="formEditResidente" onsubmit="updateResidente(event, ${idResidente})">
+                            <div class="form-group" style="background: #f0f7ff; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                                <label style="font-weight: 600; color: #667eea; display: block; margin-bottom: 5px;">Residencia:</label>
+                                <span style="color: #333; font-size: 16px;">${residenciaNombre}</span>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label for="edit_nombre">Nombre *</label>
+                                    <input type="text" id="edit_nombre" name="nombre" value="${res.nombre || ''}" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_apellido">Apellido *</label>
+                                    <input type="text" id="edit_apellido" name="apellido" value="${res.apellido || ''}" required>
+                                </div>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label for="edit_habitacion">Habitación *</label>
+                                    <input type="text" id="edit_habitacion" name="habitacion" value="${res.habitacion || ''}" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_documento">Documento de Identidad</label>
+                                    <input type="text" id="edit_documento" name="documento_identidad" value="${res.documento_identidad || ''}">
+                                </div>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label for="edit_telefono">Teléfono</label>
+                                    <input type="tel" id="edit_telefono" name="telefono" value="${res.telefono || ''}">
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_fecha_nacimiento">Fecha de Nacimiento</label>
+                                    <input type="date" id="edit_fecha_nacimiento" name="fecha_nacimiento" value="${res.fecha_nacimiento || ''}">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="edit_direccion">Dirección</label>
+                                <input type="text" id="edit_direccion" name="direccion" value="${res.direccion || ''}">
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label for="edit_contacto_emergencia">Contacto de Emergencia</label>
+                                    <input type="text" id="edit_contacto_emergencia" name="contacto_emergencia" value="${res.contacto_emergencia || ''}">
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_telefono_emergencia">Teléfono de Emergencia</label>
+                                    <input type="tel" id="edit_telefono_emergencia" name="telefono_emergencia" value="${res.telefono_emergencia || ''}">
+                                </div>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                <div class="form-group">
+                                    <label for="edit_fecha_ingreso">Fecha de Ingreso</label>
+                                    <input type="date" id="edit_fecha_ingreso" name="fecha_ingreso" value="${res.fecha_ingreso || ''}">
+                                </div>
+                                <div class="form-group">
+                                    <label for="edit_costo_habitacion">Costo de Habitación (€)</label>
+                                    <input type="number" id="edit_costo_habitacion" name="costo_habitacion" step="0.01" value="${res.costo_habitacion || ''}" placeholder="0.00">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="edit_servicios_extra">Servicios Extra</label>
+                                <textarea id="edit_servicios_extra" name="servicios_extra" rows="3" placeholder="Ej: Lavandería, Peluquería, etc.">${res.servicios_extra || ''}</textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="edit_medicaciones">Medicaciones</label>
+                                <textarea id="edit_medicaciones" name="medicaciones" rows="3" placeholder="Lista de medicaciones y horarios">${res.medicaciones || ''}</textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="edit_peculiaridades">Peculiaridades / Notas Importantes</label>
+                                <textarea id="edit_peculiaridades" name="peculiaridades" rows="3" placeholder="Información adicional relevante">${res.peculiaridades || ''}</textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="edit_activo" name="activo" ${res.activo ? 'checked' : ''} style="width: auto; margin-right: 8px;">
+                                    Activo
+                                </label>
+                            </div>
+                            
+                            <div id="editModalAlert" class="alert" style="display: none;"></div>
+                            
+                            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                                <button type="submit" id="updateResidenteBtn" style="flex: 1;">Guardar Cambios</button>
+                                <button type="button" onclick="closeModal('modalViewResidente')" style="flex: 1; background: #6c757d;">Cerrar</button>
+                            </div>
+                        </form>
+                    `;
+                    
+                    content.innerHTML = html;
+                } else {
+                    content.innerHTML = `<div class="alert error">Error: ${res.error}</div>`;
+                }
+            } catch (error) {
+                content.innerHTML = `<div class="alert error">Error de conexión: ${error.message}</div>`;
+            }
+        }
+
+        async function updateResidente(event, idResidente) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const updateBtn = document.getElementById('updateResidenteBtn');
+            const originalText = updateBtn.textContent;
+            
+            const formData = new FormData(form);
+            const activoCheckbox = document.getElementById('edit_activo');
+            
+            const data = {
+                nombre: formData.get('nombre'),
+                apellido: formData.get('apellido'),
+                habitacion: formData.get('habitacion'),
+                documento_identidad: formData.get('documento_identidad') || null,
+                telefono: formData.get('telefono') || null,
+                fecha_nacimiento: formData.get('fecha_nacimiento') || null,
+                direccion: formData.get('direccion') || null,
+                contacto_emergencia: formData.get('contacto_emergencia') || null,
+                telefono_emergencia: formData.get('telefono_emergencia') || null,
+                fecha_ingreso: formData.get('fecha_ingreso') || null,
+                costo_habitacion: formData.get('costo_habitacion') ? parseFloat(formData.get('costo_habitacion')) : null,
+                servicios_extra: formData.get('servicios_extra') || null,
+                medicaciones: formData.get('medicaciones') || null,
+                peculiaridades: formData.get('peculiaridades') || null,
+                activo: activoCheckbox ? activoCheckbox.checked : true
+            };
+            
+            // Limpiar valores vacíos
+            Object.keys(data).forEach(key => {
+                if (data[key] === '' || data[key] === null) {
+                    delete data[key];
+                }
+            });
+            
+            updateBtn.disabled = true;
+            updateBtn.textContent = 'Guardando...';
+            hideEditModalAlert();
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residentes/${idResidente}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showEditModalSuccess('Residente actualizado exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalViewResidente');
+                        loadResidentes(); // Recargar la lista
+                    }, 1500);
+                } else {
+                    showEditModalError(result.error || 'Error al actualizar el residente');
+                    updateBtn.disabled = false;
+                    updateBtn.textContent = originalText;
+                }
+            } catch (error) {
+                showEditModalError('Error de conexión: ' + error.message);
+                updateBtn.disabled = false;
+                updateBtn.textContent = originalText;
+            }
+        }
+
+        function showEditModalError(message) {
+            const alert = document.getElementById('editModalAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function showEditModalSuccess(message) {
+            const alert = document.getElementById('editModalAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function hideEditModalAlert() {
+            const alert = document.getElementById('editModalAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
+
+        async function saveResidente(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const saveBtn = document.getElementById('saveResidenteBtn');
+            const originalText = saveBtn.textContent;
+            
+            // Obtener datos del formulario
+            const formData = new FormData(form);
+            const activoCheckbox = document.getElementById('res_activo');
+            
+            const data = {
+                nombre: formData.get('nombre'),
+                apellido: formData.get('apellido'),
+                habitacion: formData.get('habitacion') || null,
+                documento_identidad: formData.get('documento_identidad') || null,
+                telefono: formData.get('telefono') || null,
+                fecha_nacimiento: formData.get('fecha_nacimiento') || null,
+                direccion: formData.get('direccion') || null,
+                contacto_emergencia: formData.get('contacto_emergencia') || null,
+                telefono_emergencia: formData.get('telefono_emergencia') || null,
+                fecha_ingreso: formData.get('fecha_ingreso') || null,
+                costo_habitacion: formData.get('costo_habitacion') ? parseFloat(formData.get('costo_habitacion')) : null,
+                servicios_extra: formData.get('servicios_extra') || null,
+                medicaciones: formData.get('medicaciones') || null,
+                peculiaridades: formData.get('peculiaridades') || null,
+                activo: activoCheckbox ? activoCheckbox.checked : true
+            };
+            
+            // Limpiar valores vacíos
+            Object.keys(data).forEach(key => {
+                if (data[key] === '' || data[key] === null) {
+                    delete data[key];
+                }
+            });
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Guardando...';
+            hideModalAlert();
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residentes`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showModalSuccess('Residente agregado exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalResidente');
+                        loadResidentes(); // Recargar la lista
+                    }, 1500);
+                } else {
+                    showModalError(result.error || 'Error al guardar el residente');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            } catch (error) {
+                showModalError('Error de conexión: ' + error.message);
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        }
+
+        function showModalError(message) {
+            const alert = document.getElementById('modalAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function showModalSuccess(message) {
+            const alert = document.getElementById('modalAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function hideModalAlert() {
+            const alert = document.getElementById('modalAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
+
