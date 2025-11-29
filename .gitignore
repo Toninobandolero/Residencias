@@ -29,6 +29,13 @@ instance/
 .env.local
 .env.*.local
 
+# Credenciales de Google Cloud (NUNCA SUBIR A GIT)
+residencias-*.json
+*service-account*.json
+*credentials*.json
+*-*-*.json
+*.service-account.json
+
 # IDE
 .vscode/
 .idea/
