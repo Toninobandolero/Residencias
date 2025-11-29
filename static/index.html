@@ -32,7 +32,7 @@
         }
 
         .logo {
-            text-align: center;
+            text-align: left;
             margin-bottom: 30px;
         }
 
@@ -45,6 +45,128 @@
         .logo p {
             color: #666;
             font-size: 14px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .header-logo {
+            flex: 1;
+        }
+
+        .header-logo h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 5px;
+        }
+
+        .header-logo p {
+            color: #666;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .user-menu-container {
+            position: relative;
+        }
+
+        .user-icon-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: white;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.3);
+        }
+
+        .user-icon-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .user-menu {
+            position: absolute;
+            top: 55px;
+            right: 0;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            min-width: 200px;
+            z-index: 1000;
+            display: none;
+            overflow: hidden;
+        }
+
+        .user-menu.show {
+            display: block;
+        }
+
+        .user-menu-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #333;
+            font-size: 14px;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+
+        .user-menu-item:hover {
+            background: #f5f5f5;
+        }
+
+        .user-menu-item:first-child {
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+        }
+
+        .user-menu-item:last-child {
+            border-bottom-left-radius: 10px;
+            border-bottom-right-radius: 10px;
+        }
+
+        .user-menu-item.logout {
+            color: #dc3545;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .user-menu-item.logout:hover {
+            background: #fee;
+        }
+
+        .user-menu-info {
+            padding: 12px 20px;
+            border-bottom: 1px solid #e0e0e0;
+            background: #f9f9f9;
+        }
+
+        .user-menu-info-item {
+            font-size: 11px;
+            color: #666;
+            margin: 4px 0;
+            line-height: 1.4;
+        }
+
+        .user-menu-info-item strong {
+            color: #333;
         }
 
         .form-group {
@@ -218,6 +340,50 @@
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
 
+        .tabs-container {
+            margin-bottom: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s;
+            position: relative;
+            top: 2px;
+        }
+
+        .tab:hover {
+            color: #667eea;
+            background: #f0f7ff;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
         .module-content {
             background: #f5f5f5;
             padding: 20px;
@@ -347,9 +513,35 @@
 </head>
 <body>
     <div class="container">
-        <div class="logo">
-            <h1>🏥 Violetas</h1>
-            <p>Sistema de Gestión de Residencias</p>
+        <!-- Header para login -->
+        <div class="logo" id="loginHeader">
+            <h1>🏥 Violetas Sistema de Gestión de Residencias</h1>
+        </div>
+
+        <!-- Header para dashboard con menú de usuario -->
+        <div class="header" id="dashboardHeader" style="display: none;">
+            <div class="header-logo">
+                <h1>🏥 Violetas Sistema de Gestión de Residencias</h1>
+            </div>
+            <div class="user-menu-container">
+                <button class="user-icon-btn" onclick="toggleUserMenu()" title="Menú de usuario">
+                    👤
+                </button>
+                <div class="user-menu" id="userMenu">
+                    <div class="user-menu-info" id="userMenuInfo">
+                        <div class="user-menu-info-item"><strong>ID Usuario:</strong> -</div>
+                        <div class="user-menu-info-item"><strong>Rol ID:</strong> -</div>
+                        <div class="user-menu-info-item"><strong>Residencia ID:</strong> -</div>
+                        <div class="user-menu-info-item"><strong>Expira:</strong> -</div>
+                    </div>
+                    <button class="user-menu-item" onclick="showConfiguracion()">
+                        ⚙️ Configuración
+                    </button>
+                    <button class="user-menu-item logout" onclick="logout()">
+                        🚪 Cerrar Sesión
+                    </button>
+                </div>
+            </div>
         </div>
 
         <div id="loginForm">
@@ -373,7 +565,7 @@
         </div>
 
         <div id="dashboard" style="display: none;">
-            <div class="user-info" id="userInfo"></div>
+            <div class="user-info" id="userInfo" style="display: none;"></div>
             
             <div style="margin-top: 20px;">
                 <h3 style="color: #667eea; margin-bottom: 15px;">📋 Módulos del Sistema</h3>
@@ -395,8 +587,6 @@
             </div>
 
             <div id="moduleContent" style="margin-top: 20px;"></div>
-
-            <button class="logout-btn" onclick="logout()" style="margin-top: 20px;">Cerrar Sesión</button>
         </div>
     </div>
 
@@ -421,66 +611,337 @@
                 <button class="close-modal" onclick="closeModal('modalResidente')">&times;</button>
             </div>
             <form id="formResidente" onsubmit="saveResidente(event)">
-                <div class="form-group">
-                    <label for="res_id_residencia">Residencia *</label>
-                    <select id="res_id_residencia" name="id_residencia" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white;">
-                        <option value="">Seleccione una residencia</option>
-                        <option value="1">Violetas 1</option>
-                        <option value="2">Violetas 2</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="res_nombre">Nombre *</label>
-                    <input type="text" id="res_nombre" name="nombre" required>
-                </div>
-                <div class="form-group">
-                    <label for="res_apellido">Apellido *</label>
-                    <input type="text" id="res_apellido" name="apellido" required>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="res_habitacion">Habitación *</label>
-                        <input type="text" id="res_habitacion" name="habitacion" required placeholder="Ej: 101, A-12">
+                
+                <!-- SECCIÓN: Información de Residencia -->
+                <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">🏠 Información de Residencia</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label for="res_id_residencia">Residencia *</label>
+                            <select id="res_id_residencia" name="id_residencia" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                <option value="">Seleccione una residencia</option>
+                                <option value="1">Violetas 1</option>
+                                <option value="2">Violetas 2</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="res_habitacion">Habitación *</label>
+                            <input type="text" id="res_habitacion" name="habitacion" required placeholder="Ej: 101, A-12">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="res_documento">Documento de Identidad</label>
-                        <input type="text" id="res_documento" name="documento_identidad">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="res_fecha_ingreso">Fecha de Ingreso</label>
+                            <input type="text" id="res_fecha_ingreso" name="fecha_ingreso" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                        </div>
+                        <div class="form-group">
+                            <label for="res_costo_habitacion">Costo de Habitación (€)</label>
+                            <input type="number" id="res_costo_habitacion" name="costo_habitacion" step="0.01" placeholder="0.00">
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="res_metodo_pago_preferido">Método de Pago Preferido</label>
+                            <select id="res_metodo_pago_preferido" name="metodo_pago_preferido" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                <option value="">Seleccione un método</option>
+                                <option value="transferencia">Transferencia</option>
+                                <option value="remesa">Remesa</option>
+                                <option value="metálico">Metálico</option>
+                                <option value="bizum">Bizum</option>
+                                <option value="otro">Otro</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="res_telefono">Teléfono</label>
-                    <input type="tel" id="res_telefono" name="telefono">
+                
+                <!-- SECCIÓN: Información Personal -->
+                <div style="background: #fff5f5; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #f56565;">
+                    <h3 style="color: #f56565; margin-bottom: 15px; font-size: 18px;">👤 Información Personal</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label for="res_nombre">Nombre *</label>
+                            <input type="text" id="res_nombre" name="nombre" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="res_apellido">Apellido *</label>
+                            <input type="text" id="res_apellido" name="apellido" required>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="res_documento">Documento de Identidad</label>
+                            <input type="text" id="res_documento" name="documento_identidad">
+                        </div>
+                        <div class="form-group">
+                            <label for="res_fecha_nacimiento">Fecha de Nacimiento</label>
+                            <input type="text" id="res_fecha_nacimiento" name="fecha_nacimiento" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="res_fecha_nacimiento">Fecha de Nacimiento</label>
-                    <input type="date" id="res_fecha_nacimiento" name="fecha_nacimiento">
+                
+                <!-- SECCIÓN: Información de Contacto -->
+                <div style="background: #f0fff4; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #48bb78;">
+                    <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;">📞 Información de Contacto</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label for="res_telefono">Teléfono</label>
+                            <input type="tel" id="res_telefono" name="telefono">
+                        </div>
+                        <div class="form-group">
+                            <label for="res_direccion">Dirección</label>
+                            <input type="text" id="res_direccion" name="direccion">
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                        <h4 style="color: #48bb78; margin-bottom: 10px; font-size: 14px; font-weight: 600;">Contacto de Emergencia</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div class="form-group">
+                                <label for="res_contacto_emergencia">Nombre del Contacto</label>
+                                <input type="text" id="res_contacto_emergencia" name="contacto_emergencia">
+                            </div>
+                            <div class="form-group">
+                                <label for="res_telefono_emergencia">Teléfono de Emergencia</label>
+                                <input type="tel" id="res_telefono_emergencia" name="telefono_emergencia">
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="res_direccion">Dirección</label>
-                    <input type="text" id="res_direccion" name="direccion">
+                
+                <!-- SECCIÓN: Información Médica y Servicios -->
+                <div style="background: #fffaf0; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ed8936;">
+                    <h3 style="color: #ed8936; margin-bottom: 15px; font-size: 18px;">🏥 Información Médica y Servicios</h3>
+                    <div class="form-group">
+                        <label for="res_medicaciones">Medicaciones</label>
+                        <textarea id="res_medicaciones" name="medicaciones" rows="3" placeholder="Lista de medicaciones y horarios"></textarea>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="res_servicios_extra">Servicios Extra</label>
+                        <textarea id="res_servicios_extra" name="servicios_extra" rows="3" placeholder="Ej: Lavandería, Peluquería, etc."></textarea>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="res_peculiaridades">Peculiaridades / Notas Importantes</label>
+                        <textarea id="res_peculiaridades" name="peculiaridades" rows="3" placeholder="Información adicional relevante"></textarea>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label for="res_contacto_emergencia">Contacto de Emergencia</label>
-                    <input type="text" id="res_contacto_emergencia" name="contacto_emergencia">
-                </div>
-                <div class="form-group">
-                    <label for="res_telefono_emergencia">Teléfono de Emergencia</label>
-                    <input type="tel" id="res_telefono_emergencia" name="telefono_emergencia">
-                </div>
-                <div class="form-group">
-                    <label for="res_fecha_ingreso">Fecha de Ingreso</label>
-                    <input type="date" id="res_fecha_ingreso" name="fecha_ingreso">
-                </div>
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" id="res_activo" name="activo" checked style="width: auto; margin-right: 8px;">
-                        Activo
-                    </label>
+                
+                <!-- SECCIÓN: Estado -->
+                <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #718096;">
+                    <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;">⚙️ Estado</h3>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="res_activo" name="activo" checked style="width: auto; margin-right: 8px;">
+                            Residente Activo
+                        </label>
+                    </div>
                 </div>
                 <div id="modalAlert" class="alert" style="display: none;"></div>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
                     <button type="submit" id="saveResidenteBtn" style="flex: 1;">Guardar</button>
                     <button type="button" onclick="closeModal('modalResidente')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para agregar proveedor -->
+    <div id="modalProveedor" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>➕ Agregar Proveedor</h2>
+                <button class="close-modal" onclick="closeModal('modalProveedor')">&times;</button>
+            </div>
+            <form id="formProveedor" onsubmit="saveProveedor(event)">
+                
+                <!-- SECCIÓN: Información Básica -->
+                <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">📋 Información Básica</h3>
+                    <div class="form-group">
+                        <label for="prov_nombre">Nombre del Proveedor *</label>
+                        <input type="text" id="prov_nombre" name="nombre" required placeholder="Ej: Empresa de Limpieza SL">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="prov_nif_cif">NIF/CIF</label>
+                            <input type="text" id="prov_nif_cif" name="nif_cif" placeholder="B12345678">
+                        </div>
+                        <div class="form-group">
+                            <label for="prov_tipo_servicio">Tipo de Servicio</label>
+                            <select id="prov_tipo_servicio" name="tipo_servicio" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                <option value="">Seleccione un tipo</option>
+                                <option value="Limpieza">Limpieza</option>
+                                <option value="Mantenimiento">Mantenimiento</option>
+                                <option value="Alimentación">Alimentación</option>
+                                <option value="Farmacia">Farmacia</option>
+                                <option value="Servicios Médicos">Servicios Médicos</option>
+                                <option value="Suministros">Suministros</option>
+                                <option value="Otro">Otro</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- SECCIÓN: Información de Contacto -->
+                <div style="background: #f0fff4; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #48bb78;">
+                    <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;">📞 Información de Contacto</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label for="prov_telefono">Teléfono</label>
+                            <input type="tel" id="prov_telefono" name="telefono" placeholder="666 555 444">
+                        </div>
+                        <div class="form-group">
+                            <label for="prov_email">Email</label>
+                            <input type="email" id="prov_email" name="email" placeholder="contacto@proveedor.com">
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="prov_direccion">Dirección</label>
+                            <input type="text" id="prov_direccion" name="direccion" placeholder="Calle, número, ciudad">
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="prov_contacto">Persona de Contacto</label>
+                            <input type="text" id="prov_contacto" name="contacto" placeholder="Nombre del contacto principal">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- SECCIÓN: Estado y Observaciones -->
+                <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #718096;">
+                    <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;">⚙️ Estado y Observaciones</h3>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="prov_activo" name="activo" checked style="width: auto; margin-right: 8px;">
+                            Proveedor Activo
+                        </label>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="prov_observaciones">Observaciones</label>
+                        <textarea id="prov_observaciones" name="observaciones" rows="3" placeholder="Notas adicionales sobre el proveedor"></textarea>
+                    </div>
+                </div>
+                
+                <div id="modalProveedorAlert" class="alert" style="display: none;"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="saveProveedorBtn" style="flex: 1;">Guardar</button>
+                    <button type="button" onclick="closeModal('modalProveedor')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para agregar pago a proveedor -->
+    <div id="modalPagoProveedor" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>💰 Agregar Pago a Proveedor</h2>
+                <button class="close-modal" onclick="closeModal('modalPagoProveedor')">&times;</button>
+            </div>
+            <form id="formPagoProveedor" onsubmit="savePagoProveedor(event)">
+                
+                <!-- SECCIÓN: Información del Pago -->
+                <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">💳 Información del Pago</h3>
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <label for="pago_id_proveedor">Proveedor *</label>
+                            <button type="button" onclick="openModal('modalProveedor')" style="padding: 6px 12px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">+ Nuevo Proveedor</button>
+                        </div>
+                        <select id="pago_id_proveedor" name="id_proveedor" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                            <option value="">Cargando proveedores...</option>
+                        </select>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="pago_concepto">Concepto *</label>
+                            <input type="text" id="pago_concepto" name="concepto" required placeholder="Ej: Servicio de limpieza mensual">
+                        </div>
+                        <div class="form-group">
+                            <label for="pago_monto">Monto (€) *</label>
+                            <input type="number" id="pago_monto" name="monto" step="0.01" required placeholder="0.00">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="pago_fecha_pago">Fecha de Pago</label>
+                            <input type="text" id="pago_fecha_pago" name="fecha_pago" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                        </div>
+                        <div class="form-group">
+                            <label for="pago_fecha_prevista">Fecha Prevista</label>
+                            <input type="text" id="pago_fecha_prevista" name="fecha_prevista" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="pago_metodo_pago">Método de Pago</label>
+                            <select id="pago_metodo_pago" name="metodo_pago" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                <option value="">Seleccione un método</option>
+                                <option value="transferencia">Transferencia</option>
+                                <option value="remesa">Remesa</option>
+                                <option value="metálico">Metálico</option>
+                                <option value="cheque">Cheque</option>
+                                <option value="otro">Otro</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="pago_numero_factura">Número de Factura</label>
+                            <input type="text" id="pago_numero_factura" name="numero_factura" placeholder="FAC-2025-001">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- SECCIÓN: Tipo de Pago -->
+                <div style="background: #fffaf0; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ed8936;">
+                    <h3 style="color: #ed8936; margin-bottom: 15px; font-size: 18px;">📊 Tipo de Pago</h3>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="pago_es_estimacion" name="es_estimacion" style="width: auto; margin-right: 8px;">
+                            Es una Estimación (no es un pago real)
+                        </label>
+                    </div>
+                    <div id="estimacionFields" style="display: none; margin-top: 15px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div class="form-group">
+                                <label for="pago_frecuencia_pago">Frecuencia de Pago</label>
+                                <select id="pago_frecuencia_pago" name="frecuencia_pago" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                    <option value="">Seleccione frecuencia</option>
+                                    <option value="mensual">Mensual</option>
+                                    <option value="trimestral">Trimestral</option>
+                                    <option value="semestral">Semestral</option>
+                                    <option value="anual">Anual</option>
+                                    <option value="puntual">Puntual</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="pago_monto_estimado">Monto Estimado (€)</label>
+                                <input type="number" id="pago_monto_estimado" name="monto_estimado" step="0.01" placeholder="0.00">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- SECCIÓN: Estado y Observaciones -->
+                <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #718096;">
+                    <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;">⚙️ Estado y Observaciones</h3>
+                    <div class="form-group">
+                        <label for="pago_estado">Estado</label>
+                        <select id="pago_estado" name="estado" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                            <option value="pendiente">Pendiente</option>
+                            <option value="pagado">Pagado</option>
+                            <option value="cancelado">Cancelado</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="pago_observaciones">Observaciones</label>
+                        <textarea id="pago_observaciones" name="observaciones" rows="3" placeholder="Notas adicionales sobre el pago"></textarea>
+                    </div>
+                </div>
+                
+                <div id="modalPagoProveedorAlert" class="alert" style="display: none;"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="savePagoProveedorBtn" style="flex: 1;">Guardar</button>
+                    <button type="button" onclick="closeModal('modalPagoProveedor')" style="flex: 1; background: #6c757d;">Cancelar</button>
                 </div>
             </form>
         </div>
@@ -546,15 +1007,19 @@
                 // Mostrar dashboard
                 showDashboard(token);
                 
-                // Mostrar información del usuario
-                document.getElementById('userInfo').innerHTML = `
-                    <h3>👤 Información del Usuario</h3>
-                    <p><strong>ID Usuario:</strong> ${payload.id_usuario}</p>
-                    <p><strong>Rol ID:</strong> ${payload.id_rol}</p>
-                    <p><strong>Residencia ID:</strong> ${payload.id_residencia}</p>
-                    <p><strong>Expira:</strong> ${new Date(payload.exp * 1000).toLocaleString()}</p>
-                `;
-                document.getElementById('userInfo').style.display = 'block';
+                // Actualizar información del usuario en el menú
+                const userMenuInfo = document.getElementById('userMenuInfo');
+                if (userMenuInfo) {
+                    userMenuInfo.innerHTML = `
+                        <div class="user-menu-info-item"><strong>ID Usuario:</strong> ${payload.id_usuario}</div>
+                        <div class="user-menu-info-item"><strong>Rol ID:</strong> ${payload.id_rol}</div>
+                        <div class="user-menu-info-item"><strong>Residencia ID:</strong> ${payload.id_residencia}</div>
+                        <div class="user-menu-info-item"><strong>Expira:</strong> ${new Date(payload.exp * 1000).toLocaleString('es-ES')}</div>
+                    `;
+                }
+                
+                // Ocultar la sección userInfo antigua
+                document.getElementById('userInfo').style.display = 'none';
             } catch (error) {
                 console.error('Error al verificar token:', error);
                 logout();
@@ -563,7 +1028,9 @@
 
         function showDashboard(token) {
             document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('loginHeader').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('dashboardHeader').style.display = 'flex';
             // tokenValue solo existe cuando se muestra el módulo de token, así que verificamos primero
             const tokenValueEl = document.getElementById('tokenValue');
             if (tokenValueEl) {
@@ -577,11 +1044,38 @@
             localStorage.removeItem('violetas_token');
             currentToken = null;
             document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('loginHeader').style.display = 'block';
             document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('dashboardHeader').style.display = 'none';
             document.getElementById('email').value = '';
             document.getElementById('password').value = '';
             hideAlert();
+            closeUserMenu();
         }
+
+        function toggleUserMenu() {
+            const menu = document.getElementById('userMenu');
+            menu.classList.toggle('show');
+        }
+
+        function closeUserMenu() {
+            const menu = document.getElementById('userMenu');
+            menu.classList.remove('show');
+        }
+
+        function showConfiguracion() {
+            closeUserMenu();
+            alert('Configuración - Próximamente');
+        }
+
+        // Cerrar el menú al hacer clic fuera
+        document.addEventListener('click', function(event) {
+            const menuContainer = document.querySelector('.user-menu-container');
+            const menu = document.getElementById('userMenu');
+            if (menuContainer && !menuContainer.contains(event.target) && menu.classList.contains('show')) {
+                closeUserMenu();
+            }
+        });
 
         function copyToken() {
             const tokenValue = document.getElementById('tokenValue').textContent;
@@ -710,33 +1204,74 @@
             
             try {
                 // Cargar cobros y pagos a proveedores
-                const [cobrosRes, proveedoresRes] = await Promise.all([
-                    fetch(`${API_URL}/api/v1/facturacion/cobros`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    }),
-                    fetch(`${API_URL}/api/v1/facturacion/proveedores`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    })
-                ]);
+                let cobrosRes = await fetch(`${API_URL}/api/v1/facturacion/cobros`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
                 
-                const cobrosData = await cobrosRes.json();
+                let cobrosData = await cobrosRes.json();
+                
+                // Si no hay cobros previstos, intentar generarlos automáticamente
+                const tieneCobrosPrevistos = cobrosData.cobros && cobrosData.cobros.length > 0 && 
+                                            cobrosData.cobros.some(c => c && c.es_cobro_previsto === true);
+                
+                if (cobrosRes.ok && !tieneCobrosPrevistos) {
+                    try {
+                        console.log('Generando cobros previstos automáticamente...');
+                        const generarRes = await fetch(`${API_URL}/api/v1/facturacion/cobros/generar-previstos`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({})
+                        });
+                        
+                        const generarData = await generarRes.json();
+                        
+                        if (generarRes.ok) {
+                            console.log(`✅ Cobros generados: ${generarData.cobros_generados || 0}`);
+                            // Recargar los cobros después de generarlos
+                            cobrosRes = await fetch(`${API_URL}/api/v1/facturacion/cobros`, {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            cobrosData = await cobrosRes.json();
+                        } else {
+                            console.warn('⚠️ No se pudieron generar cobros previstos:', generarData.error || 'Error desconocido');
+                        }
+                    } catch (e) {
+                        console.error('❌ Error al generar cobros previstos automáticamente:', e);
+                    }
+                }
+                
+                const proveedoresRes = await fetch(`${API_URL}/api/v1/facturacion/proveedores`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
                 const proveedoresData = await proveedoresRes.json();
                 
                 if (cobrosRes.ok && proveedoresRes.ok) {
+                    // Filtrar cobros previstos: pendientes y completados
+                    const todosCobrosPrevistos = cobrosData.cobros ? cobrosData.cobros.filter(c => c.es_cobro_previsto) : [];
+                    const cobrosPrevistos = todosCobrosPrevistos.filter(c => c.estado === 'pendiente');
+                    const cobrosCompletados = todosCobrosPrevistos.filter(c => c.estado === 'cobrado');
+                    
                     let html = `
                         <div class="module-content">
                             <h3 style="color: #667eea; margin-bottom: 20px;">💰 Facturación</h3>
                             
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-                                <button class="add-btn" onclick="openModalCobro()">+ Cobro Previsto</button>
-                                <button class="add-btn" onclick="openModalProveedor()">+ Pago Proveedor</button>
-                            </div>
-                            
-                            <div style="margin-bottom: 30px;">
-                                <h4 style="color: #667eea; margin-bottom: 10px;">📋 Cobros Previstos (${cobrosData.total || 0})</h4>
+                            <div class="tabs-container">
+                                <div class="tabs">
+                                    <button class="tab active" onclick="switchFacturacionTab('cobros')">💵 Cobros</button>
+                                    <button class="tab" onclick="switchFacturacionTab('pagos')">🏢 Pagos a Proveedores</button>
+                                </div>
+                                
+                                <!-- Pestaña de Cobros -->
+                                <div id="tabCobros" class="tab-content active">
+                                    <div style="margin-bottom: 30px;">
+                                        <h4 style="color: #667eea; margin-bottom: 10px;">📋 Cobros Previstos (${cobrosPrevistos.length})</h4>
                     `;
                     
-                    if (cobrosData.cobros && cobrosData.cobros.length > 0) {
+                    if (cobrosPrevistos.length > 0) {
                         html += `
                             <table class="data-table">
                                 <thead>
@@ -751,17 +1286,16 @@
                                 <tbody>
                         `;
                         
-                        cobrosData.cobros.forEach(cobro => {
-                            const estadoColor = cobro.estado === 'cobrado' ? '#28a745' : 
-                                               cobro.estado === 'pendiente' ? '#ffc107' : '#6c757d';
+                        cobrosPrevistos.forEach(cobro => {
+                            const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
                             html += `
                                 <tr>
-                                    <td>${cobro.residente}</td>
-                                    <td>€${parseFloat(cobro.monto).toFixed(2)}</td>
-                                    <td>${cobro.fecha_prevista || cobro.fecha_pago || '-'}</td>
-                                    <td><span style="color: ${estadoColor}; font-weight: 600;">${cobro.estado}</span></td>
+                                    <td style="color: #333;">${cobro.residente}</td>
+                                    <td style="color: #333;">€${parseFloat(cobro.monto).toFixed(2)}</td>
+                                    <td style="color: #333;">${fechaPrevista}</td>
+                                    <td><span style="color: #ffc107; font-weight: 600;">Pendiente</span></td>
                                     <td>
-                                        <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'cobrado')" style="padding: 4px 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Cobrado</button>
+                                        <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'cobrado')" style="padding: 4px 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Marcar como Cobrado</button>
                                     </td>
                                 </tr>
                             `;
@@ -769,14 +1303,63 @@
                         
                         html += '</tbody></table>';
                     } else {
-                        html += '<p>No hay cobros previstos.</p>';
+                        html += '<p style="color: #333;">No hay cobros previstos pendientes.</p>';
                     }
                     
                     html += `
-                            </div>
-                            
-                            <div>
-                                <h4 style="color: #667eea; margin-bottom: 10px;">🏢 Pagos a Proveedores (${proveedoresData.total || 0})</h4>
+                                    </div>
+                                    
+                                    <div style="margin-bottom: 30px;">
+                                        <h4 style="color: #667eea; margin-bottom: 10px;">✅ Cobros Completados (${cobrosCompletados.length})</h4>
+                    `;
+                    
+                    if (cobrosCompletados.length > 0) {
+                        html += `
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Residente</th>
+                                        <th>Monto</th>
+                                        <th>Fecha Prevista</th>
+                                        <th>Fecha de Pago</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                        cobrosCompletados.forEach(cobro => {
+                            const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
+                            const fechaPago = cobro.fecha_pago ? fechaISOToEspanol(cobro.fecha_pago) : '-';
+                            html += `
+                                <tr>
+                                    <td style="color: #333;">${cobro.residente}</td>
+                                    <td style="color: #333;">€${parseFloat(cobro.monto).toFixed(2)}</td>
+                                    <td style="color: #333;">${fechaPrevista}</td>
+                                    <td style="color: #333;">${fechaPago}</td>
+                                    <td><span style="color: #28a745; font-weight: 600;">✅ Cobrado</span></td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += '</tbody></table>';
+                    } else {
+                        html += '<p style="color: #333;">No hay cobros completados.</p>';
+                    }
+                    
+                    html += `
+                                    </div>
+                                </div>
+                                
+                                <!-- Pestaña de Pagos a Proveedores -->
+                                <div id="tabPagos" class="tab-content">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                        <h4 style="color: #667eea; margin: 0;">🏢 Pagos a Proveedores (${proveedoresData.total || 0})</h4>
+                                        <div style="display: flex; gap: 10px;">
+                                            <button class="add-btn" onclick="openModal('modalProveedor')" style="padding: 8px 16px; font-size: 14px; background: #6c757d;">+ Proveedor</button>
+                                            <button class="add-btn" onclick="openModalProveedor()" style="padding: 8px 16px; font-size: 14px;">+ Pago Proveedor</button>
+                                        </div>
+                                    </div>
                     `;
                     
                     if (proveedoresData.pagos && proveedoresData.pagos.length > 0) {
@@ -811,10 +1394,14 @@
                         
                         html += '</tbody></table>';
                     } else {
-                        html += '<p>No hay pagos a proveedores registrados.</p>';
+                        html += '<p style="color: #333;">No hay pagos a proveedores registrados.</p>';
                     }
                     
-                    html += '</div></div>';
+                    html += `
+                                </div>
+                            </div>
+                        </div>
+                    `;
                     content.innerHTML = html;
                 } else {
                     content.innerHTML = `<div class="module-content"><p style="color: red;">Error al cargar facturación</p></div>`;
@@ -824,18 +1411,342 @@
             }
         }
         
-        function cambiarEstadoCobro(idPago, nuevoEstado) {
-            // Implementar cambio de estado
-            console.log(`Cambiar cobro ${idPago} a ${nuevoEstado}`);
+        async function cambiarEstadoCobro(idPago, nuevoEstado) {
+            const token = localStorage.getItem('violetas_token');
+            
+            if (!confirm(`¿Está seguro de marcar este cobro como "${nuevoEstado}"?`)) {
+                return;
+            }
+            
+            try {
+                // Preparar datos para actualizar
+                const data = {
+                    estado: nuevoEstado
+                };
+                
+                // Si se marca como cobrado, establecer la fecha de pago a hoy
+                if (nuevoEstado === 'cobrado') {
+                    const hoy = new Date();
+                    const fechaHoy = hoy.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+                    data.fecha_pago = fechaHoy;
+                }
+                
+                const response = await fetch(`${API_URL}/api/v1/facturacion/cobros/${idPago}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // Recargar la lista de cobros
+                    await loadFacturacion();
+                } else {
+                    alert('Error: ' + (result.error || 'Error al actualizar el cobro'));
+                }
+            } catch (error) {
+                alert('Error de conexión: ' + error.message);
+            }
         }
         
-        function openModalCobro() {
-            alert('Modal de cobro previsto - próximamente');
+        async function openModalProveedor() {
+            // Cargar proveedores antes de abrir el modal
+            await loadProveedoresForSelect();
+            openModal('modalPagoProveedor');
         }
-        
-        function openModalProveedor() {
-            alert('Modal de pago a proveedor - próximamente');
+
+        async function loadProveedoresForSelect() {
+            const token = localStorage.getItem('violetas_token');
+            const select = document.getElementById('pago_id_proveedor');
+            
+            if (!select) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/proveedores`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.proveedores) {
+                    select.innerHTML = '<option value="">Seleccione un proveedor</option>';
+                    data.proveedores.filter(p => p.activo).forEach(prov => {
+                        select.innerHTML += `<option value="${prov.id_proveedor}">${prov.nombre}${prov.tipo_servicio ? ' - ' + prov.tipo_servicio : ''}</option>`;
+                    });
+                } else {
+                    select.innerHTML = '<option value="">No hay proveedores disponibles</option>';
+                }
+            } catch (error) {
+                console.error('Error al cargar proveedores:', error);
+                select.innerHTML = '<option value="">Error al cargar proveedores</option>';
+            }
         }
+
+        async function saveProveedor(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const saveBtn = document.getElementById('saveProveedorBtn');
+            const originalText = saveBtn.textContent;
+            
+            const formData = new FormData(form);
+            const activoCheckbox = document.getElementById('prov_activo');
+            
+            const data = {
+                nombre: formData.get('nombre'),
+                nif_cif: formData.get('nif_cif') || null,
+                direccion: formData.get('direccion') || null,
+                telefono: formData.get('telefono') || null,
+                email: formData.get('email') || null,
+                contacto: formData.get('contacto') || null,
+                tipo_servicio: formData.get('tipo_servicio') || null,
+                activo: activoCheckbox ? activoCheckbox.checked : true,
+                observaciones: formData.get('observaciones') || null
+            };
+            
+            // Limpiar valores vacíos
+            Object.keys(data).forEach(key => {
+                if (data[key] === '' || data[key] === null) {
+                    delete data[key];
+                }
+            });
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Guardando...';
+            hideProveedorModalAlert();
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/proveedores`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showProveedorModalSuccess('Proveedor agregado exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalProveedor');
+                        // Recargar el select de proveedores si el modal de pago está abierto
+                        if (document.getElementById('modalPagoProveedor').style.display === 'block') {
+                            loadProveedoresForSelect();
+                        }
+                    }, 1500);
+                } else {
+                    showProveedorModalError(result.error || 'Error al guardar el proveedor');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            } catch (error) {
+                showProveedorModalError('Error de conexión: ' + error.message);
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        }
+
+        async function savePagoProveedor(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const saveBtn = document.getElementById('savePagoProveedorBtn');
+            const originalText = saveBtn.textContent;
+            
+            const formData = new FormData(form);
+            const id_proveedor = formData.get('id_proveedor');
+            const es_estimacion = document.getElementById('pago_es_estimacion').checked;
+            
+            if (!id_proveedor) {
+                showPagoProveedorModalError('Debe seleccionar un proveedor');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
+            // Obtener nombre del proveedor del select
+            const selectProveedor = document.getElementById('pago_id_proveedor');
+            const nombreProveedor = selectProveedor.options[selectProveedor.selectedIndex].text.split(' - ')[0];
+            
+            // Convertir fechas de formato español a ISO
+            const fecha_pago_es = formData.get('fecha_pago');
+            const fecha_prevista_es = formData.get('fecha_prevista');
+            
+            // Validar fechas
+            if (fecha_pago_es && !validarFechaEspanol(fecha_pago_es)) {
+                showPagoProveedorModalError('La fecha de pago no es válida. Use formato DD/MM/YYYY');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
+            if (fecha_prevista_es && !validarFechaEspanol(fecha_prevista_es)) {
+                showPagoProveedorModalError('La fecha prevista no es válida. Use formato DD/MM/YYYY');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
+            const data = {
+                proveedor: nombreProveedor, // Por ahora usamos el nombre, luego podemos usar id_proveedor
+                concepto: formData.get('concepto'),
+                monto: formData.get('monto') ? parseFloat(formData.get('monto')) : null,
+                fecha_pago: fecha_pago_es ? fechaEspanolToISO(fecha_pago_es) : null,
+                fecha_prevista: fecha_prevista_es ? fechaEspanolToISO(fecha_prevista_es) : null,
+                metodo_pago: formData.get('metodo_pago') || null,
+                numero_factura: formData.get('numero_factura') || null,
+                estado: formData.get('estado') || 'pendiente',
+                es_estimacion: es_estimacion,
+                frecuencia_pago: formData.get('frecuencia_pago') || null,
+                monto_estimado: formData.get('monto_estimado') ? parseFloat(formData.get('monto_estimado')) : null,
+                observaciones: formData.get('observaciones') || null
+            };
+            
+            // Si es estimación y no hay monto, usar monto_estimado
+            if (es_estimacion && !data.monto && data.monto_estimado) {
+                data.monto = data.monto_estimado;
+            }
+            
+            // Limpiar valores vacíos
+            Object.keys(data).forEach(key => {
+                if (data[key] === '' || data[key] === null) {
+                    delete data[key];
+                }
+            });
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Guardando...';
+            hidePagoProveedorModalAlert();
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/facturacion/proveedores`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showPagoProveedorModalSuccess('Pago a proveedor registrado exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalPagoProveedor');
+                        loadFacturacion(); // Recargar la lista
+                    }, 1500);
+                } else {
+                    showPagoProveedorModalError(result.error || 'Error al guardar el pago');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            } catch (error) {
+                showPagoProveedorModalError('Error de conexión: ' + error.message);
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        }
+
+        function showProveedorModalError(message) {
+            const alert = document.getElementById('modalProveedorAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function showProveedorModalSuccess(message) {
+            const alert = document.getElementById('modalProveedorAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function hideProveedorModalAlert() {
+            const alert = document.getElementById('modalProveedorAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
+
+        function showPagoProveedorModalError(message) {
+            const alert = document.getElementById('modalPagoProveedorAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function showPagoProveedorModalSuccess(message) {
+            const alert = document.getElementById('modalPagoProveedorAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function hidePagoProveedorModalAlert() {
+            const alert = document.getElementById('modalPagoProveedorAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
+
+        // Función para cambiar entre pestañas de facturación
+        function switchFacturacionTab(tabName) {
+            // Ocultar todas las pestañas
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remover clase active de todos los botones
+            document.querySelectorAll('.tab').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Mostrar la pestaña seleccionada
+            const tabContent = document.getElementById(`tab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`);
+            
+            // Activar el botón correspondiente
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach((btn, index) => {
+                if ((tabName === 'cobros' && index === 0) || (tabName === 'pagos' && index === 1)) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            if (tabContent) {
+                tabContent.classList.add('active');
+            }
+        }
+
+        // Mostrar/ocultar campos de estimación
+        document.addEventListener('DOMContentLoaded', function() {
+            const esEstimacionCheckbox = document.getElementById('pago_es_estimacion');
+            const estimacionFields = document.getElementById('estimacionFields');
+            
+            if (esEstimacionCheckbox && estimacionFields) {
+                esEstimacionCheckbox.addEventListener('change', function() {
+                    estimacionFields.style.display = this.checked ? 'block' : 'none';
+                });
+            }
+        });
 
         async function loadPersonal() {
             const content = document.getElementById('moduleContent');
@@ -930,22 +1841,145 @@
                     activoCheckbox.checked = true;
                 }
             }
+            const formProveedor = document.getElementById('formProveedor');
+            if (formProveedor) {
+                formProveedor.reset();
+                const activoCheckbox = document.getElementById('prov_activo');
+                if (activoCheckbox) {
+                    activoCheckbox.checked = true;
+                }
+            }
+            const formPagoProveedor = document.getElementById('formPagoProveedor');
+            if (formPagoProveedor) {
+                formPagoProveedor.reset();
+                const esEstimacion = document.getElementById('pago_es_estimacion');
+                if (esEstimacion) {
+                    esEstimacion.checked = false;
+                    document.getElementById('estimacionFields').style.display = 'none';
+                }
+            }
             hideModalAlert();
+            hideProveedorModalAlert();
+            hidePagoProveedorModalAlert();
         }
 
         // Cerrar modal al hacer clic fuera
         window.onclick = function(event) {
             const modalResidente = document.getElementById('modalResidente');
             const modalViewResidente = document.getElementById('modalViewResidente');
+            const modalProveedor = document.getElementById('modalProveedor');
+            const modalPagoProveedor = document.getElementById('modalPagoProveedor');
             if (event.target == modalResidente) {
                 closeModal('modalResidente');
             }
             if (event.target == modalViewResidente) {
                 closeModal('modalViewResidente');
             }
+            if (event.target == modalProveedor) {
+                closeModal('modalProveedor');
+            }
+            if (event.target == modalPagoProveedor) {
+                closeModal('modalPagoProveedor');
+            }
         }
 
         let currentEditingResidenteId = null;
+
+        // Función auxiliar para formatear fechas a formato español (DD/MM/YYYY)
+        function formatearFechaEspanol(fechaString) {
+            if (!fechaString) return '';
+            try {
+                const fecha = new Date(fechaString);
+                if (isNaN(fecha.getTime())) return fechaString;
+                const dia = String(fecha.getDate()).padStart(2, '0');
+                const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+                const año = fecha.getFullYear();
+                return `${dia}/${mes}/${año}`;
+            } catch (e) {
+                return fechaString;
+            }
+        }
+
+        // Función auxiliar para convertir fecha española (DD/MM/YYYY) a formato ISO (YYYY-MM-DD)
+        function fechaEspanolToISO(fechaEspanol) {
+            if (!fechaEspanol) return '';
+            try {
+                const partes = fechaEspanol.split('/');
+                if (partes.length === 3) {
+                    const [dia, mes, año] = partes;
+                    return `${año}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+                }
+                return fechaEspanol;
+            } catch (e) {
+                return fechaEspanol;
+            }
+        }
+
+        // Función auxiliar para convertir fecha ISO (YYYY-MM-DD) a formato español (DD/MM/YYYY)
+        function fechaISOToEspanol(fechaISO) {
+            if (!fechaISO) return '';
+            try {
+                const partes = fechaISO.split('-');
+                if (partes.length === 3) {
+                    const [año, mes, dia] = partes;
+                    return `${dia}/${mes}/${año}`;
+                }
+                return fechaISO;
+            } catch (e) {
+                return fechaISO;
+            }
+        }
+
+        // Función para validar formato de fecha española (DD/MM/YYYY)
+        function validarFechaEspanol(fecha) {
+            if (!fecha) return true; // Permitir vacío
+            const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+            const match = fecha.match(regex);
+            if (!match) return false;
+            
+            const [, dia, mes, año] = match;
+            const diaNum = parseInt(dia, 10);
+            const mesNum = parseInt(mes, 10);
+            const añoNum = parseInt(año, 10);
+            
+            // Validar rango de fechas
+            if (mesNum < 1 || mesNum > 12) return false;
+            if (diaNum < 1 || diaNum > 31) return false;
+            if (añoNum < 1900 || añoNum > 2100) return false;
+            
+            // Validar días del mes
+            const fechaObj = new Date(añoNum, mesNum - 1, diaNum);
+            if (fechaObj.getDate() !== diaNum || fechaObj.getMonth() !== mesNum - 1 || fechaObj.getFullYear() !== añoNum) {
+                return false;
+            }
+            
+            return true;
+        }
+
+        // Función para formatear automáticamente mientras se escribe (DD/MM/YYYY)
+        function formatearFechaInput(input) {
+            let value = input.value.replace(/\D/g, ''); // Solo números
+            
+            if (value.length >= 2) {
+                value = value.substring(0, 2) + '/' + value.substring(2);
+            }
+            if (value.length >= 5) {
+                value = value.substring(0, 5) + '/' + value.substring(5, 9);
+            }
+            
+            input.value = value;
+            
+            // Validar y mostrar error si es necesario
+            if (value.length === 10) {
+                if (!validarFechaEspanol(value)) {
+                    input.style.borderColor = '#dc3545';
+                } else {
+                    input.style.borderColor = '#e0e0e0';
+                }
+            } else if (value.length > 0) {
+                input.style.borderColor = '#e0e0e0';
+            }
+        }
 
         async function viewResidente(idResidente) {
             const token = localStorage.getItem('violetas_token');
@@ -974,94 +2008,127 @@
                     
                     let html = `
                         <form id="formEditResidente" onsubmit="updateResidente(event, ${idResidente})">
-                            <div class="form-group">
-                                <label for="edit_id_residencia">Residencia *</label>
-                                <select id="edit_id_residencia" name="id_residencia" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
-                                    <option value="1" ${res.id_residencia === 1 ? 'selected' : ''}>Violetas 1</option>
-                                    <option value="2" ${res.id_residencia === 2 ? 'selected' : ''}>Violetas 2</option>
-                                </select>
-                            </div>
                             
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                <div class="form-group">
-                                    <label for="edit_nombre">Nombre *</label>
-                                    <input type="text" id="edit_nombre" name="nombre" value="${res.nombre || ''}" required>
+                            <!-- SECCIÓN: Información de Residencia -->
+                            <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+                                <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">🏠 Información de Residencia</h3>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div class="form-group">
+                                        <label for="edit_id_residencia">Residencia *</label>
+                                        <select id="edit_id_residencia" name="id_residencia" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                            <option value="1" ${res.id_residencia === 1 ? 'selected' : ''}>Violetas 1</option>
+                                            <option value="2" ${res.id_residencia === 2 ? 'selected' : ''}>Violetas 2</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_habitacion">Habitación *</label>
+                                        <input type="text" id="edit_habitacion" name="habitacion" value="${res.habitacion || ''}" required>
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label for="edit_apellido">Apellido *</label>
-                                    <input type="text" id="edit_apellido" name="apellido" value="${res.apellido || ''}" required>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                                    <div class="form-group">
+                                        <label for="edit_fecha_ingreso">Fecha de Ingreso</label>
+                                        <input type="text" id="edit_fecha_ingreso" name="fecha_ingreso" value="${res.fecha_ingreso ? fechaISOToEspanol(res.fecha_ingreso) : ''}" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_costo_habitacion">Costo de Habitación (€)</label>
+                                        <input type="number" id="edit_costo_habitacion" name="costo_habitacion" step="0.01" value="${res.costo_habitacion || ''}" placeholder="0.00">
+                                    </div>
                                 </div>
-                            </div>
-                            
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                <div class="form-group">
-                                    <label for="edit_habitacion">Habitación *</label>
-                                    <input type="text" id="edit_habitacion" name="habitacion" value="${res.habitacion || ''}" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="edit_documento">Documento de Identidad</label>
-                                    <input type="text" id="edit_documento" name="documento_identidad" value="${res.documento_identidad || ''}">
-                                </div>
-                            </div>
-                            
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                <div class="form-group">
-                                    <label for="edit_telefono">Teléfono</label>
-                                    <input type="tel" id="edit_telefono" name="telefono" value="${res.telefono || ''}">
-                                </div>
-                                <div class="form-group">
-                                    <label for="edit_fecha_nacimiento">Fecha de Nacimiento</label>
-                                    <input type="date" id="edit_fecha_nacimiento" name="fecha_nacimiento" value="${res.fecha_nacimiento || ''}">
-                                </div>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="edit_direccion">Dirección</label>
-                                <input type="text" id="edit_direccion" name="direccion" value="${res.direccion || ''}">
-                            </div>
-                            
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                <div class="form-group">
-                                    <label for="edit_contacto_emergencia">Contacto de Emergencia</label>
-                                    <input type="text" id="edit_contacto_emergencia" name="contacto_emergencia" value="${res.contacto_emergencia || ''}">
-                                </div>
-                                <div class="form-group">
-                                    <label for="edit_telefono_emergencia">Teléfono de Emergencia</label>
-                                    <input type="tel" id="edit_telefono_emergencia" name="telefono_emergencia" value="${res.telefono_emergencia || ''}">
+                                <div style="margin-top: 15px;">
+                                    <div class="form-group">
+                                        <label for="edit_metodo_pago_preferido">Método de Pago Preferido</label>
+                                        <select id="edit_metodo_pago_preferido" name="metodo_pago_preferido" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                            <option value="">Seleccione un método</option>
+                                            <option value="transferencia" ${res.metodo_pago_preferido === 'transferencia' ? 'selected' : ''}>Transferencia</option>
+                                            <option value="remesa" ${res.metodo_pago_preferido === 'remesa' ? 'selected' : ''}>Remesa</option>
+                                            <option value="metálico" ${res.metodo_pago_preferido === 'metálico' ? 'selected' : ''}>Metálico</option>
+                                            <option value="bizum" ${res.metodo_pago_preferido === 'bizum' ? 'selected' : ''}>Bizum</option>
+                                            <option value="otro" ${res.metodo_pago_preferido && !['transferencia', 'remesa', 'metálico', 'bizum'].includes(res.metodo_pago_preferido) ? 'selected' : ''}>Otro</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                <div class="form-group">
-                                    <label for="edit_fecha_ingreso">Fecha de Ingreso</label>
-                                    <input type="date" id="edit_fecha_ingreso" name="fecha_ingreso" value="${res.fecha_ingreso || ''}">
+                            <!-- SECCIÓN: Información Personal -->
+                            <div style="background: #fff5f5; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #f56565;">
+                                <h3 style="color: #f56565; margin-bottom: 15px; font-size: 18px;">👤 Información Personal</h3>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div class="form-group">
+                                        <label for="edit_nombre">Nombre *</label>
+                                        <input type="text" id="edit_nombre" name="nombre" value="${res.nombre || ''}" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_apellido">Apellido *</label>
+                                        <input type="text" id="edit_apellido" name="apellido" value="${res.apellido || ''}" required>
+                                    </div>
                                 </div>
-                                <div class="form-group">
-                                    <label for="edit_costo_habitacion">Costo de Habitación (€)</label>
-                                    <input type="number" id="edit_costo_habitacion" name="costo_habitacion" step="0.01" value="${res.costo_habitacion || ''}" placeholder="0.00">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                                    <div class="form-group">
+                                        <label for="edit_documento">Documento de Identidad</label>
+                                        <input type="text" id="edit_documento" name="documento_identidad" value="${res.documento_identidad || ''}">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_fecha_nacimiento">Fecha de Nacimiento</label>
+                                        <input type="text" id="edit_fecha_nacimiento" name="fecha_nacimiento" value="${res.fecha_nacimiento ? fechaISOToEspanol(res.fecha_nacimiento) : ''}" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                                    </div>
                                 </div>
                             </div>
                             
-                            <div class="form-group">
-                                <label for="edit_servicios_extra">Servicios Extra</label>
-                                <textarea id="edit_servicios_extra" name="servicios_extra" rows="3" placeholder="Ej: Lavandería, Peluquería, etc.">${res.servicios_extra || ''}</textarea>
+                            <!-- SECCIÓN: Información de Contacto -->
+                            <div style="background: #f0fff4; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #48bb78;">
+                                <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;">📞 Información de Contacto</h3>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div class="form-group">
+                                        <label for="edit_telefono">Teléfono</label>
+                                        <input type="tel" id="edit_telefono" name="telefono" value="${res.telefono || ''}">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_direccion">Dirección</label>
+                                        <input type="text" id="edit_direccion" name="direccion" value="${res.direccion || ''}">
+                                    </div>
+                                </div>
+                                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                                    <h4 style="color: #48bb78; margin-bottom: 10px; font-size: 14px; font-weight: 600;">Contacto de Emergencia</h4>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                        <div class="form-group">
+                                            <label for="edit_contacto_emergencia">Nombre del Contacto</label>
+                                            <input type="text" id="edit_contacto_emergencia" name="contacto_emergencia" value="${res.contacto_emergencia || ''}">
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="edit_telefono_emergencia">Teléfono de Emergencia</label>
+                                            <input type="tel" id="edit_telefono_emergencia" name="telefono_emergencia" value="${res.telefono_emergencia || ''}">
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             
-                            <div class="form-group">
-                                <label for="edit_medicaciones">Medicaciones</label>
-                                <textarea id="edit_medicaciones" name="medicaciones" rows="3" placeholder="Lista de medicaciones y horarios">${res.medicaciones || ''}</textarea>
+                            <!-- SECCIÓN: Información Médica y Servicios -->
+                            <div style="background: #fffaf0; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ed8936;">
+                                <h3 style="color: #ed8936; margin-bottom: 15px; font-size: 18px;">🏥 Información Médica y Servicios</h3>
+                                <div class="form-group">
+                                    <label for="edit_medicaciones">Medicaciones</label>
+                                    <textarea id="edit_medicaciones" name="medicaciones" rows="3" placeholder="Lista de medicaciones y horarios">${res.medicaciones || ''}</textarea>
+                                </div>
+                                <div class="form-group" style="margin-top: 15px;">
+                                    <label for="edit_servicios_extra">Servicios Extra</label>
+                                    <textarea id="edit_servicios_extra" name="servicios_extra" rows="3" placeholder="Ej: Lavandería, Peluquería, etc.">${res.servicios_extra || ''}</textarea>
+                                </div>
+                                <div class="form-group" style="margin-top: 15px;">
+                                    <label for="edit_peculiaridades">Peculiaridades / Notas Importantes</label>
+                                    <textarea id="edit_peculiaridades" name="peculiaridades" rows="3" placeholder="Información adicional relevante">${res.peculiaridades || ''}</textarea>
+                                </div>
                             </div>
                             
-                            <div class="form-group">
-                                <label for="edit_peculiaridades">Peculiaridades / Notas Importantes</label>
-                                <textarea id="edit_peculiaridades" name="peculiaridades" rows="3" placeholder="Información adicional relevante">${res.peculiaridades || ''}</textarea>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label>
-                                    <input type="checkbox" id="edit_activo" name="activo" ${res.activo ? 'checked' : ''} style="width: auto; margin-right: 8px;">
-                                    Activo
-                                </label>
+                            <!-- SECCIÓN: Estado -->
+                            <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #718096;">
+                                <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;">⚙️ Estado</h3>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="edit_activo" name="activo" ${res.activo ? 'checked' : ''} style="width: auto; margin-right: 8px;">
+                                        Residente Activo
+                                    </label>
+                                </div>
                             </div>
                             
                             <hr style="margin: 30px 0; border: none; border-top: 2px solid #e0e0e0;">
@@ -1138,7 +2205,7 @@
                                         <strong style="color: #667eea;">${doc.tipo_documento}</strong>
                                         <p style="margin: 5px 0; color: #333;">${doc.nombre_archivo} ${tamaño}</p>
                                         ${doc.descripcion ? `<p style="margin: 0; color: #666; font-size: 12px;">${doc.descripcion}</p>` : ''}
-                                        <p style="margin: 5px 0 0 0; color: #999; font-size: 11px;">${new Date(doc.fecha_subida).toLocaleDateString()}</p>
+                                        <p style="margin: 5px 0 0 0; color: #999; font-size: 11px;">${new Date(doc.fecha_subida).toLocaleDateString('es-ES')}</p>
                                     </div>
                                     <div style="display: flex; gap: 8px;">
                                         ${doc.url_descarga ? `<button onclick="window.open('${doc.url_descarga}', '_blank')" style="background: #667eea; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;">📥 Descargar</button>` : ''}
@@ -1264,6 +2331,25 @@
                 return;
             }
             
+            // Convertir fechas de formato español a ISO antes de enviar
+            const fecha_nacimiento_es = formData.get('fecha_nacimiento');
+            const fecha_ingreso_es = formData.get('fecha_ingreso');
+            
+            // Validar fechas antes de convertir
+            if (fecha_nacimiento_es && !validarFechaEspanol(fecha_nacimiento_es)) {
+                showEditModalError('La fecha de nacimiento no es válida. Use formato DD/MM/YYYY');
+                updateBtn.disabled = false;
+                updateBtn.textContent = originalText;
+                return;
+            }
+            
+            if (fecha_ingreso_es && !validarFechaEspanol(fecha_ingreso_es)) {
+                showEditModalError('La fecha de ingreso no es válida. Use formato DD/MM/YYYY');
+                updateBtn.disabled = false;
+                updateBtn.textContent = originalText;
+                return;
+            }
+            
             const data = {
                 id_residencia: parseInt(id_residencia),
                 nombre: formData.get('nombre'),
@@ -1271,12 +2357,13 @@
                 habitacion: formData.get('habitacion'),
                 documento_identidad: formData.get('documento_identidad') || null,
                 telefono: formData.get('telefono') || null,
-                fecha_nacimiento: formData.get('fecha_nacimiento') || null,
+                fecha_nacimiento: fecha_nacimiento_es ? fechaEspanolToISO(fecha_nacimiento_es) : null,
                 direccion: formData.get('direccion') || null,
                 contacto_emergencia: formData.get('contacto_emergencia') || null,
                 telefono_emergencia: formData.get('telefono_emergencia') || null,
-                fecha_ingreso: formData.get('fecha_ingreso') || null,
+                fecha_ingreso: fecha_ingreso_es ? fechaEspanolToISO(fecha_ingreso_es) : null,
                 costo_habitacion: formData.get('costo_habitacion') ? parseFloat(formData.get('costo_habitacion')) : null,
+                metodo_pago_preferido: formData.get('metodo_pago_preferido') || null,
                 servicios_extra: formData.get('servicios_extra') || null,
                 medicaciones: formData.get('medicaciones') || null,
                 peculiaridades: formData.get('peculiaridades') || null,
@@ -1369,6 +2456,25 @@
                 return;
             }
             
+            // Convertir fechas de formato español a ISO antes de enviar
+            const fecha_nacimiento_es = formData.get('fecha_nacimiento');
+            const fecha_ingreso_es = formData.get('fecha_ingreso');
+            
+            // Validar fechas antes de convertir
+            if (fecha_nacimiento_es && !validarFechaEspanol(fecha_nacimiento_es)) {
+                showModalError('La fecha de nacimiento no es válida. Use formato DD/MM/YYYY');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
+            if (fecha_ingreso_es && !validarFechaEspanol(fecha_ingreso_es)) {
+                showModalError('La fecha de ingreso no es válida. Use formato DD/MM/YYYY');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
             const data = {
                 id_residencia: parseInt(id_residencia),
                 nombre: formData.get('nombre'),
@@ -1376,12 +2482,13 @@
                 habitacion: formData.get('habitacion') || null,
                 documento_identidad: formData.get('documento_identidad') || null,
                 telefono: formData.get('telefono') || null,
-                fecha_nacimiento: formData.get('fecha_nacimiento') || null,
+                fecha_nacimiento: fecha_nacimiento_es ? fechaEspanolToISO(fecha_nacimiento_es) : null,
                 direccion: formData.get('direccion') || null,
                 contacto_emergencia: formData.get('contacto_emergencia') || null,
                 telefono_emergencia: formData.get('telefono_emergencia') || null,
-                fecha_ingreso: formData.get('fecha_ingreso') || null,
+                fecha_ingreso: fecha_ingreso_es ? fechaEspanolToISO(fecha_ingreso_es) : null,
                 costo_habitacion: formData.get('costo_habitacion') ? parseFloat(formData.get('costo_habitacion')) : null,
+                metodo_pago_preferido: formData.get('metodo_pago_preferido') || null,
                 servicios_extra: formData.get('servicios_extra') || null,
                 medicaciones: formData.get('medicaciones') || null,
                 peculiaridades: formData.get('peculiaridades') || null,

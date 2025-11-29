@@ -698,15 +698,16 @@ def generar_cobros_previstos():
                 try:
                     cursor.execute("""
                         INSERT INTO pago_residente (
-                            id_residente, id_residencia, monto, fecha_prevista,
+                            id_residente, id_residencia, monto, fecha_pago, fecha_prevista,
                             mes_pagado, concepto, metodo_pago, estado, es_cobro_previsto
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         RETURNING id_pago
                     """, (
                         id_residente,
                         g.id_residencia,
                         costo_habitacion,
+                        None,  # fecha_pago es NULL para cobros previstos
                         fecha_prevista.date(),
                         mes_pagado,
                         f"Pago mensual habitación - {nombre} {apellido}",
@@ -936,6 +937,220 @@ def crear_pago_proveedor():
             conn.rollback()
             app.logger.error(f"Error al crear pago a proveedor: {str(e)}")
             return jsonify({'error': 'Error al crear pago a proveedor'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+# ============================================================================
+# ENDPOINTS DE PROVEEDORES
+# ============================================================================
+
+@app.route('/api/v1/proveedores', methods=['GET'])
+def listar_proveedores():
+    """Lista los proveedores de la residencia del usuario."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT id_proveedor, nombre, nif_cif, direccion, telefono, email,
+                       contacto, tipo_servicio, activo, observaciones, fecha_creacion
+                FROM proveedor
+                WHERE id_residencia = %s
+                ORDER BY nombre
+            """, (g.id_residencia,))
+            
+            proveedores = cursor.fetchall()
+            
+            resultado = []
+            for prov in proveedores:
+                resultado.append({
+                    'id_proveedor': prov[0],
+                    'nombre': prov[1],
+                    'nif_cif': prov[2],
+                    'direccion': prov[3],
+                    'telefono': prov[4],
+                    'email': prov[5],
+                    'contacto': prov[6],
+                    'tipo_servicio': prov[7],
+                    'activo': prov[8],
+                    'observaciones': prov[9],
+                    'fecha_creacion': prov[10].isoformat() if prov[10] else None
+                })
+            
+            return jsonify({'proveedores': resultado, 'total': len(resultado)}), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al listar proveedores: {str(e)}")
+        return jsonify({'error': 'Error al obtener proveedores'}), 500
+
+
+@app.route('/api/v1/proveedores', methods=['POST'])
+def crear_proveedor():
+    """Crea un nuevo proveedor."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        nombre = data.get('nombre')
+        if not nombre:
+            return jsonify({'error': 'nombre es requerido'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                INSERT INTO proveedor (id_residencia, nombre, nif_cif, direccion, telefono,
+                                     email, contacto, tipo_servicio, activo, observaciones)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id_proveedor
+            """, (
+                g.id_residencia,
+                nombre,
+                data.get('nif_cif'),
+                data.get('direccion'),
+                data.get('telefono'),
+                data.get('email'),
+                data.get('contacto'),
+                data.get('tipo_servicio'),
+                data.get('activo', True),
+                data.get('observaciones')
+            ))
+            
+            id_proveedor = cursor.fetchone()[0]
+            conn.commit()
+            
+            return jsonify({
+                'id_proveedor': id_proveedor,
+                'mensaje': 'Proveedor creado exitosamente'
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al crear proveedor: {str(e)}")
+            return jsonify({'error': 'Error al crear proveedor'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/proveedores/<int:id_proveedor>', methods=['GET'])
+def obtener_proveedor(id_proveedor):
+    """Obtiene un proveedor por su ID."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT id_proveedor, nombre, nif_cif, direccion, telefono, email,
+                       contacto, tipo_servicio, activo, observaciones, fecha_creacion
+                FROM proveedor
+                WHERE id_proveedor = %s AND id_residencia = %s
+            """, (id_proveedor, g.id_residencia))
+            
+            prov = cursor.fetchone()
+            
+            if not prov:
+                return jsonify({'error': 'Proveedor no encontrado'}), 404
+            
+            return jsonify({
+                'id_proveedor': prov[0],
+                'nombre': prov[1],
+                'nif_cif': prov[2],
+                'direccion': prov[3],
+                'telefono': prov[4],
+                'email': prov[5],
+                'contacto': prov[6],
+                'tipo_servicio': prov[7],
+                'activo': prov[8],
+                'observaciones': prov[9],
+                'fecha_creacion': prov[10].isoformat() if prov[10] else None
+            }), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al obtener proveedor: {str(e)}")
+        return jsonify({'error': 'Error al obtener proveedor'}), 500
+
+
+@app.route('/api/v1/proveedores/<int:id_proveedor>', methods=['PUT'])
+def actualizar_proveedor(id_proveedor):
+    """Actualiza un proveedor."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el proveedor existe y pertenece a la residencia
+            cursor.execute("""
+                SELECT id_proveedor FROM proveedor
+                WHERE id_proveedor = %s AND id_residencia = %s
+            """, (id_proveedor, g.id_residencia))
+            
+            if not cursor.fetchone():
+                return jsonify({'error': 'Proveedor no encontrado'}), 404
+            
+            # Campos actualizables
+            campos_actualizables = [
+                'nombre', 'nif_cif', 'direccion', 'telefono', 'email',
+                'contacto', 'tipo_servicio', 'activo', 'observaciones'
+            ]
+            
+            updates = []
+            valores = []
+            
+            for campo in campos_actualizables:
+                if campo in data:
+                    updates.append(f"{campo} = %s")
+                    valores.append(data[campo])
+            
+            if not updates:
+                return jsonify({'error': 'No hay campos para actualizar'}), 400
+            
+            valores.extend([id_proveedor, g.id_residencia])
+            
+            query = f"""
+                UPDATE proveedor
+                SET {', '.join(updates)}
+                WHERE id_proveedor = %s AND id_residencia = %s
+                RETURNING id_proveedor
+            """
+            
+            cursor.execute(query, valores)
+            conn.commit()
+            
+            return jsonify({'mensaje': 'Proveedor actualizado exitosamente'}), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al actualizar proveedor: {str(e)}")
+            return jsonify({'error': 'Error al actualizar proveedor'}), 500
         finally:
             cursor.close()
             conn.close()
