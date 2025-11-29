@@ -41,6 +41,13 @@ def test_and_save_password(password):
         print(f"PostgreSQL: {version.split(',')[0]}")
         
         # Actualizar .env
+        # Preservar JWT_SECRET_KEY existente o usar uno del .env actual
+        existing_jwt_secret = os.getenv('JWT_SECRET_KEY', '')
+        if not existing_jwt_secret:
+            # Si no existe, generar uno nuevo o usar un placeholder
+            import secrets
+            existing_jwt_secret = secrets.token_urlsafe(32)
+        
         env_content = f"""# Variables de entorno para el backend Violetas
 
 # Base de datos PostgreSQL (Cloud SQL en GCP)
@@ -50,8 +57,8 @@ DB_USER=postgres
 DB_PASSWORD={password}
 DB_PORT=5432
 
-# JWT Secret Key
-JWT_SECRET_KEY=FaZ7O6pfUWaw0hcsUiELhCHr_pzwiv7sZtP1s8mPPjg
+# JWT Secret Key (obtenido de variables de entorno o generado)
+JWT_SECRET_KEY={existing_jwt_secret}
 """
         with open('.env', 'w', encoding='utf-8') as f:
             f.write(env_content)

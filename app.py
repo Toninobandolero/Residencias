@@ -202,7 +202,8 @@ def listar_residentes():
                 SELECT r.id_residente, r.id_residencia, r.nombre, r.apellido, r.documento_identidad, 
                        r.fecha_nacimiento, r.telefono, r.direccion, r.contacto_emergencia,
                        r.telefono_emergencia, r.activo, r.fecha_ingreso, r.habitacion,
-                       r.costo_habitacion, r.servicios_extra, r.medicaciones, r.peculiaridades, r.fecha_creacion,
+                       r.costo_habitacion, r.servicios_extra, r.medicaciones, r.peculiaridades, 
+                       r.metodo_pago_preferido, r.fecha_creacion,
                        res.nombre as nombre_residencia
                 FROM residente r
                 JOIN residencia res ON r.id_residencia = res.id_residencia
@@ -232,8 +233,9 @@ def listar_residentes():
                     'servicios_extra': res[14],
                     'medicaciones': res[15],
                     'peculiaridades': res[16],
-                    'fecha_creacion': res[17].isoformat() if res[17] else None,
-                    'nombre_residencia': res[18]
+                    'metodo_pago_preferido': res[17],
+                    'fecha_creacion': res[18].isoformat() if res[18] else None,
+                    'nombre_residencia': res[19]
                 })
             
             return jsonify({'residentes': resultado, 'total': len(resultado)}), 200
@@ -259,7 +261,8 @@ def obtener_residente(id_residente):
                 SELECT id_residente, id_residencia, nombre, apellido, documento_identidad,
                        fecha_nacimiento, telefono, direccion, contacto_emergencia,
                        telefono_emergencia, activo, fecha_ingreso, habitacion,
-                       costo_habitacion, servicios_extra, medicaciones, peculiaridades, fecha_creacion
+                       costo_habitacion, servicios_extra, medicaciones, peculiaridades, 
+                       metodo_pago_preferido, fecha_creacion
                 FROM residente
                 WHERE id_residente = %s
             """, (id_residente,))
@@ -287,7 +290,8 @@ def obtener_residente(id_residente):
                 'servicios_extra': res[14],
                 'medicaciones': res[15],
                 'peculiaridades': res[16],
-                'fecha_creacion': res[17].isoformat() if res[17] else None
+                'metodo_pago_preferido': res[17],
+                'fecha_creacion': res[18].isoformat() if res[18] else None
             }), 200
             
         finally:
@@ -337,8 +341,9 @@ def crear_residente():
                 INSERT INTO residente (id_residencia, nombre, apellido, documento_identidad,
                                      fecha_nacimiento, telefono, direccion, contacto_emergencia,
                                      telefono_emergencia, activo, fecha_ingreso, habitacion,
-                                     costo_habitacion, servicios_extra, medicaciones, peculiaridades)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                     costo_habitacion, servicios_extra, medicaciones, peculiaridades,
+                                     metodo_pago_preferido)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_residente, fecha_creacion
             """, (
                 id_residencia,
@@ -356,7 +361,8 @@ def crear_residente():
                 data.get('costo_habitacion'),
                 data.get('servicios_extra'),
                 data.get('medicaciones'),
-                data.get('peculiaridades')
+                data.get('peculiaridades'),
+                data.get('metodo_pago_preferido')
             ))
             
             resultado = cursor.fetchone()
@@ -422,7 +428,7 @@ def actualizar_residente(id_residente):
                 'id_residencia', 'nombre', 'apellido', 'documento_identidad', 'fecha_nacimiento',
                 'telefono', 'direccion', 'contacto_emergencia', 'telefono_emergencia',
                 'activo', 'fecha_ingreso', 'habitacion', 'costo_habitacion',
-                'servicios_extra', 'medicaciones', 'peculiaridades'
+                'servicios_extra', 'medicaciones', 'peculiaridades', 'metodo_pago_preferido'
             ]
             
             updates = []
@@ -519,7 +525,7 @@ def listar_cobros():
 
 @app.route('/api/v1/facturacion/cobros', methods=['POST'])
 def crear_cobro():
-    """Crea un nuevo pago de residente."""
+    """Crea un cobro previsto o registra un cobro realizado."""
     try:
         data = request.get_json()
         
@@ -528,10 +534,18 @@ def crear_cobro():
         
         id_residente = data.get('id_residente')
         monto = data.get('monto')
+        fecha_prevista = data.get('fecha_prevista')
         fecha_pago = data.get('fecha_pago')
+        es_cobro_previsto = data.get('es_cobro_previsto', False)
         
-        if not all([id_residente, monto, fecha_pago]):
-            return jsonify({'error': 'id_residente, monto y fecha_pago son requeridos'}), 400
+        if not id_residente or not monto:
+            return jsonify({'error': 'id_residente y monto son requeridos'}), 400
+        
+        if es_cobro_previsto and not fecha_prevista:
+            return jsonify({'error': 'fecha_prevista es requerida para cobros previstos'}), 400
+        
+        if not es_cobro_previsto and not fecha_pago:
+            return jsonify({'error': 'fecha_pago es requerida para cobros realizados'}), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -547,19 +561,22 @@ def crear_cobro():
                 return jsonify({'error': 'Residente no encontrado'}), 404
             
             cursor.execute("""
-                INSERT INTO pago_residente (id_residente, id_residencia, monto, fecha_pago,
-                                          mes_pagado, concepto, metodo_pago, estado)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO pago_residente (id_residente, id_residencia, monto, fecha_pago, fecha_prevista,
+                                          mes_pagado, concepto, metodo_pago, estado, es_cobro_previsto, observaciones)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_pago
             """, (
                 id_residente,
                 g.id_residencia,
                 monto,
-                fecha_pago,
+                fecha_pago if not es_cobro_previsto else None,
+                fecha_prevista if es_cobro_previsto else None,
                 data.get('mes_pagado'),
                 data.get('concepto'),
                 data.get('metodo_pago'),
-                data.get('estado', 'pendiente')
+                data.get('estado', 'pendiente' if es_cobro_previsto else 'cobrado'),
+                es_cobro_previsto,
+                data.get('observaciones')
             ))
             
             id_pago = cursor.fetchone()[0]
@@ -567,13 +584,358 @@ def crear_cobro():
             
             return jsonify({
                 'id_pago': id_pago,
-                'mensaje': 'Pago registrado exitosamente'
+                'mensaje': 'Cobro previsto registrado exitosamente' if es_cobro_previsto else 'Cobro registrado exitosamente'
             }), 201
             
         except Exception as e:
             conn.rollback()
-            app.logger.error(f"Error al crear pago: {str(e)}")
-            return jsonify({'error': 'Error al crear pago'}), 500
+            app.logger.error(f"Error al crear cobro: {str(e)}")
+            return jsonify({'error': 'Error al crear cobro'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/facturacion/cobros/generar-previstos', methods=['POST'])
+def generar_cobros_previstos():
+    """
+    Genera automáticamente cobros previstos para todos los residentes activos
+    que tengan costo_habitacion definido.
+    La fecha prevista se calcula según el metodo_pago_preferido:
+    - transferencia: días 1-5 del mes siguiente
+    - remesa: día 30 del mes siguiente
+    - otros: día 5 del mes siguiente (por defecto)
+    """
+    try:
+        data = request.get_json() or {}
+        mes_referencia = data.get('mes')  # Formato: 'YYYY-MM', opcional
+        año_referencia = data.get('año')  # Opcional
+        
+        # Si no se especifica mes, usar el mes siguiente
+        if mes_referencia:
+            try:
+                fecha_base = datetime.strptime(f"{mes_referencia}-01", "%Y-%m-%d")
+            except:
+                return jsonify({'error': 'Formato de mes inválido. Use YYYY-MM'}), 400
+        else:
+            # Mes siguiente por defecto
+            hoy = datetime.now()
+            if hoy.month == 12:
+                fecha_base = datetime(hoy.year + 1, 1, 1)
+            else:
+                fecha_base = datetime(hoy.year, hoy.month + 1, 1)
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Obtener todos los residentes activos con costo_habitacion
+            cursor.execute("""
+                SELECT id_residente, nombre, apellido, costo_habitacion, metodo_pago_preferido
+                FROM residente
+                WHERE id_residencia = %s 
+                  AND activo = TRUE 
+                  AND costo_habitacion IS NOT NULL 
+                  AND costo_habitacion > 0
+            """, (g.id_residencia,))
+            
+            residentes = cursor.fetchall()
+            
+            if not residentes:
+                return jsonify({
+                    'mensaje': 'No hay residentes activos con costo_habitacion definido',
+                    'cobros_generados': 0
+                }), 200
+            
+            cobros_generados = 0
+            cobros_duplicados = 0
+            errores = []
+            
+            for residente in residentes:
+                id_residente = residente[0]
+                nombre = residente[1]
+                apellido = residente[2]
+                costo_habitacion = float(residente[3])
+                metodo_pago = residente[4] or 'transferencia'  # Por defecto transferencia
+                
+                # Calcular fecha prevista según método de pago
+                if metodo_pago.lower() in ['transferencia', 'transfer']:
+                    # Días 1-5: usar día 3 como valor medio
+                    fecha_prevista = datetime(fecha_base.year, fecha_base.month, 3)
+                elif metodo_pago.lower() in ['remesa']:
+                    # Día 30 del mes
+                    # Calcular último día del mes
+                    if fecha_base.month == 12:
+                        siguiente_mes = datetime(fecha_base.year + 1, 1, 1)
+                    else:
+                        siguiente_mes = datetime(fecha_base.year, fecha_base.month + 1, 1)
+                    ultimo_dia = (siguiente_mes - timedelta(days=1)).day
+                    dia_remesa = min(30, ultimo_dia)
+                    fecha_prevista = datetime(fecha_base.year, fecha_base.month, dia_remesa)
+                else:
+                    # Otros métodos (metálico, bizum, etc.): día 5 por defecto
+                    fecha_prevista = datetime(fecha_base.year, fecha_base.month, 5)
+                
+                # Verificar si ya existe un cobro previsto para este residente en este mes
+                mes_pagado = fecha_prevista.strftime('%Y-%m')
+                cursor.execute("""
+                    SELECT id_pago FROM pago_residente
+                    WHERE id_residente = %s 
+                      AND id_residencia = %s
+                      AND es_cobro_previsto = TRUE
+                      AND mes_pagado = %s
+                """, (id_residente, g.id_residencia, mes_pagado))
+                
+                if cursor.fetchone():
+                    cobros_duplicados += 1
+                    continue
+                
+                # Crear el cobro previsto
+                try:
+                    cursor.execute("""
+                        INSERT INTO pago_residente (
+                            id_residente, id_residencia, monto, fecha_prevista,
+                            mes_pagado, concepto, metodo_pago, estado, es_cobro_previsto
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id_pago
+                    """, (
+                        id_residente,
+                        g.id_residencia,
+                        costo_habitacion,
+                        fecha_prevista.date(),
+                        mes_pagado,
+                        f"Pago mensual habitación - {nombre} {apellido}",
+                        metodo_pago,
+                        'pendiente',
+                        True
+                    ))
+                    
+                    cobros_generados += 1
+                    
+                except Exception as e:
+                    errores.append(f"Error al crear cobro para {nombre} {apellido}: {str(e)}")
+                    app.logger.error(f"Error al crear cobro previsto para residente {id_residente}: {str(e)}")
+            
+            conn.commit()
+            
+            resultado = {
+                'mensaje': f'Cobros previstos generados exitosamente',
+                'cobros_generados': cobros_generados,
+                'cobros_duplicados': cobros_duplicados,
+                'mes_referencia': fecha_base.strftime('%Y-%m'),
+                'total_residentes_procesados': len(residentes)
+            }
+            
+            if errores:
+                resultado['errores'] = errores
+            
+            return jsonify(resultado), 201
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al generar cobros previstos: {str(e)}")
+            return jsonify({'error': f'Error al generar cobros previstos: {str(e)}'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/facturacion/cobros/<int:id_pago>', methods=['PUT'])
+def actualizar_cobro(id_pago):
+    """Actualiza un cobro (cambiar estado, marcar como cobrado, etc.)."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el cobro existe y pertenece a la residencia
+            cursor.execute("""
+                SELECT id_pago FROM pago_residente
+                WHERE id_pago = %s AND id_residencia = %s
+            """, (id_pago, g.id_residencia))
+            
+            if not cursor.fetchone():
+                return jsonify({'error': 'Cobro no encontrado'}), 404
+            
+            # Campos actualizables
+            campos_actualizables = [
+                'estado', 'fecha_pago', 'fecha_prevista', 'monto', 'concepto',
+                'metodo_pago', 'mes_pagado', 'es_cobro_previsto', 'observaciones'
+            ]
+            
+            updates = []
+            valores = []
+            
+            for campo in campos_actualizables:
+                if campo in data:
+                    updates.append(f"{campo} = %s")
+                    valores.append(data[campo])
+            
+            if not updates:
+                return jsonify({'error': 'No hay campos para actualizar'}), 400
+            
+            valores.extend([id_pago, g.id_residencia])
+            
+            query = f"""
+                UPDATE pago_residente
+                SET {', '.join(updates)}
+                WHERE id_pago = %s AND id_residencia = %s
+                RETURNING id_pago
+            """
+            
+            cursor.execute(query, valores)
+            conn.commit()
+            
+            return jsonify({'mensaje': 'Cobro actualizado exitosamente'}), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al actualizar cobro: {str(e)}")
+            return jsonify({'error': 'Error al actualizar cobro'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/facturacion/proveedores', methods=['GET'])
+def listar_pagos_proveedores():
+    """Lista los pagos a proveedores de la residencia."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT id_pago, proveedor, concepto, monto, fecha_pago, fecha_prevista,
+                       metodo_pago, estado, numero_factura, es_estimacion, frecuencia_pago,
+                       monto_estimado, observaciones, fecha_creacion
+                FROM pago_proveedor
+                WHERE id_residencia = %s
+                ORDER BY COALESCE(fecha_prevista, fecha_pago) DESC
+            """, (g.id_residencia,))
+            
+            pagos = cursor.fetchall()
+            
+            resultado = []
+            for pago in pagos:
+                resultado.append({
+                    'id_pago': pago[0],
+                    'proveedor': pago[1],
+                    'concepto': pago[2],
+                    'monto': float(pago[3]),
+                    'fecha_pago': str(pago[4]) if pago[4] else None,
+                    'fecha_prevista': str(pago[5]) if pago[5] else None,
+                    'metodo_pago': pago[6],
+                    'estado': pago[7],
+                    'numero_factura': pago[8],
+                    'es_estimacion': pago[9],
+                    'frecuencia_pago': pago[10],
+                    'monto_estimado': float(pago[11]) if pago[11] else None,
+                    'observaciones': pago[12],
+                    'fecha_creacion': pago[13].isoformat() if pago[13] else None
+                })
+            
+            return jsonify({'pagos': resultado, 'total': len(resultado)}), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al listar pagos a proveedores: {str(e)}")
+        return jsonify({'error': 'Error al obtener pagos'}), 500
+
+
+@app.route('/api/v1/facturacion/proveedores', methods=['POST'])
+def crear_pago_proveedor():
+    """Crea un pago a proveedor o una estimación basada en historial."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        proveedor = data.get('proveedor')
+        concepto = data.get('concepto')
+        monto = data.get('monto')
+        es_estimacion = data.get('es_estimacion', False)
+        
+        if not proveedor or not concepto:
+            return jsonify({'error': 'proveedor y concepto son requeridos'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Si es estimación, calcular monto basado en historial si no se proporciona
+            if es_estimacion and not monto:
+                cursor.execute("""
+                    SELECT AVG(monto) as promedio, COUNT(*) as cantidad
+                    FROM historial_pago_proveedor
+                    WHERE id_residencia = %s AND proveedor = %s
+                """, (g.id_residencia, proveedor))
+                
+                hist = cursor.fetchone()
+                if hist and hist[1] > 0:
+                    monto = float(hist[0])
+                else:
+                    monto = data.get('monto_estimado', 0)
+            
+            if not monto or monto <= 0:
+                return jsonify({'error': 'monto es requerido'}), 400
+            
+            cursor.execute("""
+                INSERT INTO pago_proveedor (id_residencia, proveedor, concepto, monto, fecha_pago,
+                                          fecha_prevista, metodo_pago, estado, numero_factura,
+                                          es_estimacion, frecuencia_pago, monto_estimado, observaciones)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id_pago
+            """, (
+                g.id_residencia,
+                proveedor,
+                concepto,
+                monto if not es_estimacion else None,
+                data.get('fecha_pago') if not es_estimacion else None,
+                data.get('fecha_prevista'),
+                data.get('metodo_pago'),
+                data.get('estado', 'pendiente'),
+                data.get('numero_factura'),
+                es_estimacion,
+                data.get('frecuencia_pago'),
+                data.get('monto_estimado', monto) if es_estimacion else None,
+                data.get('observaciones')
+            ))
+            
+            id_pago = cursor.fetchone()[0]
+            conn.commit()
+            
+            return jsonify({
+                'id_pago': id_pago,
+                'mensaje': 'Estimación creada exitosamente' if es_estimacion else 'Pago a proveedor registrado exitosamente'
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al crear pago a proveedor: {str(e)}")
+            return jsonify({'error': 'Error al crear pago a proveedor'}), 500
         finally:
             cursor.close()
             conn.close()
@@ -643,21 +1005,23 @@ def listar_documentos_residente(id_residente):
         cursor = conn.cursor()
         
         try:
-            # Verificar que el residente existe
+            # Verificar que el residente existe y pertenece a la residencia del usuario
             cursor.execute("""
-                SELECT id_residente FROM residente WHERE id_residente = %s
-            """, (id_residente,))
+                SELECT id_residente, id_residencia FROM residente 
+                WHERE id_residente = %s AND id_residencia = %s
+            """, (id_residente, g.id_residencia))
             
-            if not cursor.fetchone():
-                return jsonify({'error': 'Residente no encontrado'}), 404
+            residente = cursor.fetchone()
+            if not residente:
+                return jsonify({'error': 'Residente no encontrado o no pertenece a tu residencia'}), 404
             
             cursor.execute("""
                 SELECT id_documento, tipo_documento, nombre_archivo, descripcion,
                        fecha_subida, fecha_creacion, url_archivo, tamaño_bytes, tipo_mime
                 FROM documento_residente
-                WHERE id_residente = %s
+                WHERE id_residente = %s AND id_residencia = %s
                 ORDER BY fecha_subida DESC
-            """, (id_residente,))
+            """, (id_residente, g.id_residencia))
             
             documentos = cursor.fetchall()
             
@@ -710,13 +1074,15 @@ def crear_documento_residente(id_residente):
             cursor = conn.cursor()
             
             try:
+                # Verificar que el residente existe y pertenece a la residencia del usuario
                 cursor.execute("""
-                    SELECT id_residente, id_residencia FROM residente WHERE id_residente = %s
-                """, (id_residente,))
+                    SELECT id_residente, id_residencia FROM residente 
+                    WHERE id_residente = %s AND id_residencia = %s
+                """, (id_residente, g.id_residencia))
                 
                 residente = cursor.fetchone()
                 if not residente:
-                    return jsonify({'error': 'Residente no encontrado'}), 404
+                    return jsonify({'error': 'Residente no encontrado o no pertenece a tu residencia'}), 404
                 
                 id_residencia = residente[1]
                 
@@ -759,14 +1125,15 @@ def crear_documento_residente(id_residente):
         cursor = conn.cursor()
         
         try:
-            # Verificar que el residente existe y obtener su residencia
+            # Verificar que el residente existe y pertenece a la residencia del usuario
             cursor.execute("""
-                SELECT id_residente, id_residencia FROM residente WHERE id_residente = %s
-            """, (id_residente,))
+                SELECT id_residente, id_residencia FROM residente 
+                WHERE id_residente = %s AND id_residencia = %s
+            """, (id_residente, g.id_residencia))
             
             residente = cursor.fetchone()
             if not residente:
-                return jsonify({'error': 'Residente no encontrado'}), 404
+                return jsonify({'error': 'Residente no encontrado o no pertenece a tu residencia'}), 404
             
             id_residencia = residente[1]
             
@@ -837,14 +1204,15 @@ def eliminar_documento(id_documento):
         cursor = conn.cursor()
         
         try:
-            # Obtener información del documento incluyendo url_archivo
+            # Obtener información del documento incluyendo url_archivo y verificar residencia
             cursor.execute("""
-                SELECT id_documento, url_archivo FROM documento_residente WHERE id_documento = %s
-            """, (id_documento,))
+                SELECT id_documento, url_archivo FROM documento_residente 
+                WHERE id_documento = %s AND id_residencia = %s
+            """, (id_documento, g.id_residencia))
             
             documento = cursor.fetchone()
             if not documento:
-                return jsonify({'error': 'Documento no encontrado'}), 404
+                return jsonify({'error': 'Documento no encontrado o no pertenece a tu residencia'}), 404
             
             url_archivo = documento[1]
             
@@ -855,10 +1223,11 @@ def eliminar_documento(id_documento):
                 except Exception as e:
                     app.logger.warning(f"No se pudo eliminar archivo de Cloud Storage: {str(e)}")
             
-            # Eliminar de base de datos
+            # Eliminar de base de datos (ya verificamos residencia arriba)
             cursor.execute("""
-                DELETE FROM documento_residente WHERE id_documento = %s
-            """, (id_documento,))
+                DELETE FROM documento_residente 
+                WHERE id_documento = %s AND id_residencia = %s
+            """, (id_documento, g.id_residencia))
             
             conn.commit()
             
@@ -885,13 +1254,15 @@ def descargar_documento(id_documento):
         cursor = conn.cursor()
         
         try:
+            # Verificar que el documento pertenece a la residencia del usuario
             cursor.execute("""
-                SELECT url_archivo FROM documento_residente WHERE id_documento = %s
-            """, (id_documento,))
+                SELECT url_archivo FROM documento_residente 
+                WHERE id_documento = %s AND id_residencia = %s
+            """, (id_documento, g.id_residencia))
             
             documento = cursor.fetchone()
             if not documento:
-                return jsonify({'error': 'Documento no encontrado'}), 404
+                return jsonify({'error': 'Documento no encontrado o no pertenece a tu residencia'}), 404
             
             url_archivo = documento[0]
             

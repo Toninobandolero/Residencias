@@ -382,8 +382,8 @@
                     <button class="module-btn" onclick="showModule('residentes')">
                         👥 Residentes
                     </button>
-                    <button class="module-btn" onclick="showModule('pagos')">
-                        💰 Pagos
+                    <button class="module-btn" onclick="showModule('facturacion')">
+                        💰 Facturación
                     </button>
                     <button class="module-btn" onclick="showModule('personal')">
                         👔 Personal
@@ -564,8 +564,13 @@
         function showDashboard(token) {
             document.getElementById('loginForm').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
-            document.getElementById('tokenValue').textContent = token;
-            document.getElementById('tokenDisplay').style.display = 'block';
+            // tokenValue solo existe cuando se muestra el módulo de token, así que verificamos primero
+            const tokenValueEl = document.getElementById('tokenValue');
+            if (tokenValueEl) {
+                tokenValueEl.textContent = token;
+            }
+            // tokenDisplay no existe en el HTML inicial, solo se crea dinámicamente
+            // No intentamos acceder a él aquí para evitar errores
         }
 
         function logout() {
@@ -624,8 +629,8 @@
                 `;
             } else if (module === 'residentes') {
                 loadResidentes();
-            } else if (module === 'pagos') {
-                loadPagos();
+            } else if (module === 'facturacion') {
+                loadFacturacion();
             } else if (module === 'personal') {
                 loadPersonal();
             }
@@ -697,66 +702,139 @@
             }
         }
 
-        async function loadPagos() {
+        async function loadFacturacion() {
             const content = document.getElementById('moduleContent');
             const token = localStorage.getItem('violetas_token');
             
-            content.innerHTML = '<div class="module-content"><p>Cargando pagos...</p></div>';
+            content.innerHTML = '<div class="module-content"><p>Cargando facturación...</p></div>';
             
             try {
-                const response = await fetch(`${API_URL}/api/v1/pagos-residentes`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
+                // Cargar cobros y pagos a proveedores
+                const [cobrosRes, proveedoresRes] = await Promise.all([
+                    fetch(`${API_URL}/api/v1/facturacion/cobros`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }),
+                    fetch(`${API_URL}/api/v1/facturacion/proveedores`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                ]);
                 
-                const data = await response.json();
+                const cobrosData = await cobrosRes.json();
+                const proveedoresData = await proveedoresRes.json();
                 
-                if (response.ok) {
+                if (cobrosRes.ok && proveedoresRes.ok) {
                     let html = `
                         <div class="module-content">
-                            <h3 style="color: #667eea; margin-bottom: 15px;">💰 Pagos de Residentes (${data.total})</h3>
-                            <button class="add-btn" onclick="alert('Función de agregar pago próximamente')">+ Registrar Pago</button>
+                            <h3 style="color: #667eea; margin-bottom: 20px;">💰 Facturación</h3>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                                <button class="add-btn" onclick="openModalCobro()">+ Cobro Previsto</button>
+                                <button class="add-btn" onclick="openModalProveedor()">+ Pago Proveedor</button>
+                            </div>
+                            
+                            <div style="margin-bottom: 30px;">
+                                <h4 style="color: #667eea; margin-bottom: 10px;">📋 Cobros Previstos (${cobrosData.total || 0})</h4>
                     `;
                     
-                    if (data.pagos && data.pagos.length > 0) {
+                    if (cobrosData.cobros && cobrosData.cobros.length > 0) {
                         html += `
                             <table class="data-table">
                                 <thead>
                                     <tr>
                                         <th>Residente</th>
                                         <th>Monto</th>
-                                        <th>Fecha</th>
+                                        <th>Fecha Prevista</th>
                                         <th>Estado</th>
+                                        <th>Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                         `;
                         
-                        data.pagos.forEach(pago => {
+                        cobrosData.cobros.forEach(cobro => {
+                            const estadoColor = cobro.estado === 'cobrado' ? '#28a745' : 
+                                               cobro.estado === 'pendiente' ? '#ffc107' : '#6c757d';
                             html += `
                                 <tr>
-                                    <td>${pago.residente}</td>
-                                    <td>€${parseFloat(pago.monto).toFixed(2)}</td>
-                                    <td>${pago.fecha_pago}</td>
-                                    <td>${pago.estado}</td>
+                                    <td>${cobro.residente}</td>
+                                    <td>€${parseFloat(cobro.monto).toFixed(2)}</td>
+                                    <td>${cobro.fecha_prevista || cobro.fecha_pago || '-'}</td>
+                                    <td><span style="color: ${estadoColor}; font-weight: 600;">${cobro.estado}</span></td>
+                                    <td>
+                                        <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'cobrado')" style="padding: 4px 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Cobrado</button>
+                                    </td>
                                 </tr>
                             `;
                         });
                         
                         html += '</tbody></table>';
                     } else {
-                        html += '<p>No hay pagos registrados.</p>';
+                        html += '<p>No hay cobros previstos.</p>';
                     }
                     
-                    html += '</div>';
+                    html += `
+                            </div>
+                            
+                            <div>
+                                <h4 style="color: #667eea; margin-bottom: 10px;">🏢 Pagos a Proveedores (${proveedoresData.total || 0})</h4>
+                    `;
+                    
+                    if (proveedoresData.pagos && proveedoresData.pagos.length > 0) {
+                        html += `
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Proveedor</th>
+                                        <th>Concepto</th>
+                                        <th>Monto</th>
+                                        <th>Fecha Prevista</th>
+                                        <th>Estado</th>
+                                        <th>Tipo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                        proveedoresData.pagos.forEach(pago => {
+                            const tipo = pago.es_estimacion ? '📊 Estimación' : '💰 Real';
+                            html += `
+                                <tr>
+                                    <td>${pago.proveedor}</td>
+                                    <td>${pago.concepto}</td>
+                                    <td>€${parseFloat(pago.monto || pago.monto_estimado || 0).toFixed(2)}</td>
+                                    <td>${pago.fecha_prevista || pago.fecha_pago || '-'}</td>
+                                    <td>${pago.estado}</td>
+                                    <td>${tipo}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += '</tbody></table>';
+                    } else {
+                        html += '<p>No hay pagos a proveedores registrados.</p>';
+                    }
+                    
+                    html += '</div></div>';
                     content.innerHTML = html;
                 } else {
-                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: ${data.error}</p></div>`;
+                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error al cargar facturación</p></div>`;
                 }
             } catch (error) {
                 content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}</p></div>`;
             }
+        }
+        
+        function cambiarEstadoCobro(idPago, nuevoEstado) {
+            // Implementar cambio de estado
+            console.log(`Cambiar cobro ${idPago} a ${nuevoEstado}`);
+        }
+        
+        function openModalCobro() {
+            alert('Modal de cobro previsto - próximamente');
+        }
+        
+        function openModalProveedor() {
+            alert('Modal de pago a proveedor - próximamente');
         }
 
         async function loadPersonal() {
