@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Violetas - Sistema de Gestión</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -382,6 +383,21 @@
 
         .tab-content.active {
             display: block;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
         }
 
         .module-content {
@@ -1134,7 +1150,14 @@
             const content = document.getElementById('moduleContent');
             const token = localStorage.getItem('violetas_token');
             
-            content.innerHTML = '<div class="module-content"><p>Cargando residentes...</p></div>';
+            content.innerHTML = `
+                <div class="module-content">
+                    <div style="text-align: center; padding: 40px;">
+                        <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                        <p style="margin-top: 15px; color: #666;">Cargando residentes...</p>
+                    </div>
+                </div>
+            `;
             
             try {
                 const response = await fetch(`${API_URL}/api/v1/residentes`, {
@@ -1200,7 +1223,14 @@
             const content = document.getElementById('moduleContent');
             const token = localStorage.getItem('violetas_token');
             
-            content.innerHTML = '<div class="module-content"><p>Cargando facturación...</p></div>';
+            content.innerHTML = `
+                <div class="module-content">
+                    <div style="text-align: center; padding: 40px;">
+                        <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                        <p style="margin-top: 15px; color: #666;">Cargando facturación...</p>
+                    </div>
+                </div>
+            `;
             
             try {
                 // Cargar cobros y pagos a proveedores
@@ -1349,6 +1379,14 @@
                     
                     html += `
                                     </div>
+                                    
+                                    <!-- Gráfico de Estimación Mensual e Histórico -->
+                                    <div style="margin-bottom: 30px; margin-top: 30px;">
+                                        <h4 style="color: #667eea; margin-bottom: 15px;">📊 Estimación Mensual e Histórico de Cobros</h4>
+                                        <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                            <canvas id="cobrosChart" style="max-height: 400px;"></canvas>
+                                        </div>
+                                    </div>
                                 </div>
                                 
                                 <!-- Pestaña de Pagos a Proveedores -->
@@ -1403,6 +1441,9 @@
                         </div>
                     `;
                     content.innerHTML = html;
+                    
+                    // Cargar y mostrar gráfico de cobros
+                    await loadCobrosChart();
                 } else {
                     content.innerHTML = `<div class="module-content"><p style="color: red;">Error al cargar facturación</p></div>`;
                 }
@@ -1708,6 +1749,164 @@
             }
         }
 
+        let cobrosChart = null;
+
+        async function loadCobrosChart() {
+            const token = localStorage.getItem('violetas_token');
+            const canvas = document.getElementById('cobrosChart');
+            
+            if (!canvas) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/facturacion/cobros/estadisticas`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Destruir gráfico anterior si existe
+                    if (cobrosChart) {
+                        cobrosChart.destroy();
+                    }
+                    
+                    // Preparar datos para el gráfico
+                    const historico = data.historico || [];
+                    const estimaciones = data.estimaciones || [];
+                    
+                    // Combinar todos los meses (histórico + estimaciones)
+                    const todosMeses = new Set();
+                    historico.forEach(h => todosMeses.add(h.mes));
+                    estimaciones.forEach(e => todosMeses.add(e.mes));
+                    
+                    const mesesOrdenados = Array.from(todosMeses).sort();
+                    
+                    // Crear mapas para acceso rápido
+                    const historicoMap = {};
+                    historico.forEach(h => {
+                        historicoMap[h.mes] = h.total;
+                    });
+                    
+                    const estimacionesMap = {};
+                    estimaciones.forEach(e => {
+                        estimacionesMap[e.mes] = e.total;
+                    });
+                    
+                    // Preparar datos para Chart.js
+                    const labels = mesesOrdenados.map(mes => {
+                        const [año, mesNum] = mes.split('-');
+                        const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+                        return `${meses[parseInt(mesNum) - 1]} ${año}`;
+                    });
+                    
+                    const datosHistoricos = mesesOrdenados.map(mes => historicoMap[mes] || 0);
+                    const datosEstimaciones = mesesOrdenados.map(mes => estimacionesMap[mes] || 0);
+                    
+                    // Crear el gráfico
+                    const ctx = canvas.getContext('2d');
+                    cobrosChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Cobros Realizados (Histórico)',
+                                    data: datosHistoricos,
+                                    borderColor: '#28a745',
+                                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                                    borderWidth: 2,
+                                    fill: true,
+                                    tension: 0.4,
+                                    pointRadius: 4,
+                                    pointHoverRadius: 6
+                                },
+                                {
+                                    label: 'Cobros Previstos (Estimación)',
+                                    data: datosEstimaciones,
+                                    borderColor: '#ffc107',
+                                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    fill: true,
+                                    tension: 0.4,
+                                    pointRadius: 4,
+                                    pointHoverRadius: 6
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top',
+                                    labels: {
+                                        usePointStyle: true,
+                                        padding: 15,
+                                        font: {
+                                            size: 12
+                                        }
+                                    }
+                                },
+                                tooltip: {
+                                    mode: 'index',
+                                    intersect: false,
+                                    callbacks: {
+                                        label: function(context) {
+                                            let label = context.dataset.label || '';
+                                            if (label) {
+                                                label += ': ';
+                                            }
+                                            label += '€' + context.parsed.y.toFixed(2);
+                                            return label;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: function(value) {
+                                            return '€' + value.toFixed(0);
+                                        },
+                                        font: {
+                                            size: 11
+                                        }
+                                    },
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.05)'
+                                    }
+                                },
+                                x: {
+                                    ticks: {
+                                        font: {
+                                            size: 11
+                                        }
+                                    },
+                                    grid: {
+                                        display: false
+                                    }
+                                }
+                            },
+                            interaction: {
+                                mode: 'nearest',
+                                axis: 'x',
+                                intersect: false
+                            }
+                        }
+                    });
+                } else {
+                    console.error('Error al cargar estadísticas:', data.error);
+                }
+            } catch (error) {
+                console.error('Error al cargar gráfico de cobros:', error);
+            }
+        }
+
         // Función para cambiar entre pestañas de facturación
         function switchFacturacionTab(tabName) {
             // Ocultar todas las pestañas
@@ -1752,7 +1951,14 @@
             const content = document.getElementById('moduleContent');
             const token = localStorage.getItem('violetas_token');
             
-            content.innerHTML = '<div class="module-content"><p>Cargando personal...</p></div>';
+            content.innerHTML = `
+                <div class="module-content">
+                    <div style="text-align: center; padding: 40px;">
+                        <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                        <p style="margin-top: 15px; color: #666;">Cargando personal...</p>
+                    </div>
+                </div>
+            `;
             
             try {
                 const response = await fetch(`${API_URL}/api/v1/personal`, {

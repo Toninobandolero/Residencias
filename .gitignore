@@ -63,3 +63,7 @@ Thumbs.db
 # Archivos de plan (si no quieres versionarlos)
 *.plan.md
 
+# Backups de base de datos
+backups/
+*.sql.backup
+

@@ -13,6 +13,11 @@ from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from db_connector import get_db_connection
 from storage_manager import upload_document, get_document_url, delete_document
+from validators import (
+    validate_residente_data, validate_cobro_data, validate_monto,
+    validate_residencia_id, validate_estado, validate_metodo_pago,
+    validate_text, validate_email, validate_phone
+)
 import mimetypes
 
 # Cargar variables de entorno desde .env
@@ -314,19 +319,14 @@ def crear_residente():
         if not data:
             return jsonify({'error': 'Datos JSON requeridos'}), 400
         
+        # Validar datos con el módulo de validación
+        is_valid, errors = validate_residente_data(data, is_update=False)
+        if not is_valid:
+            return jsonify({'error': 'Errores de validación', 'detalles': errors}), 400
+        
         nombre = data.get('nombre')
         apellido = data.get('apellido')
         id_residencia = data.get('id_residencia')
-        
-        if not nombre or not apellido:
-            return jsonify({'error': 'Nombre y apellido son requeridos'}), 400
-        
-        # Validar que id_residencia sea 1 o 2 (Violetas 1 o Violetas 2)
-        if id_residencia is None:
-            return jsonify({'error': 'id_residencia es requerido'}), 400
-        
-        if id_residencia not in [1, 2]:
-            return jsonify({'error': 'id_residencia debe ser 1 (Violetas 1) o 2 (Violetas 2)'}), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -396,6 +396,11 @@ def actualizar_residente(id_residente):
         if not data:
             return jsonify({'error': 'Datos JSON requeridos'}), 400
         
+        # Validar datos con el módulo de validación
+        is_valid, errors = validate_residente_data(data, is_update=True)
+        if not is_valid:
+            return jsonify({'error': 'Errores de validación', 'detalles': errors}), 400
+        
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -403,8 +408,9 @@ def actualizar_residente(id_residente):
             # Si se está cambiando la residencia, validar que sea 1 o 2
             nueva_residencia = data.get('id_residencia')
             if nueva_residencia is not None:
-                if nueva_residencia not in [1, 2]:
-                    return jsonify({'error': 'id_residencia debe ser 1 (Violetas 1) o 2 (Violetas 2)'}), 400
+                valid, error = validate_residencia_id(nueva_residencia)
+                if not valid:
+                    return jsonify({'error': error}), 400
                 # Verificar que la residencia existe
                 cursor.execute("SELECT id_residencia FROM residencia WHERE id_residencia = %s", (nueva_residencia,))
                 if not cursor.fetchone():
@@ -532,20 +538,16 @@ def crear_cobro():
         if not data:
             return jsonify({'error': 'Datos JSON requeridos'}), 400
         
+        # Validar datos con el módulo de validación
+        is_valid, errors = validate_cobro_data(data, is_update=False)
+        if not is_valid:
+            return jsonify({'error': 'Errores de validación', 'detalles': errors}), 400
+        
         id_residente = data.get('id_residente')
         monto = data.get('monto')
         fecha_prevista = data.get('fecha_prevista')
         fecha_pago = data.get('fecha_pago')
         es_cobro_previsto = data.get('es_cobro_previsto', False)
-        
-        if not id_residente or not monto:
-            return jsonify({'error': 'id_residente y monto son requeridos'}), 400
-        
-        if es_cobro_previsto and not fecha_prevista:
-            return jsonify({'error': 'fecha_prevista es requerida para cobros previstos'}), 400
-        
-        if not es_cobro_previsto and not fecha_pago:
-            return jsonify({'error': 'fecha_pago es requerida para cobros realizados'}), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -750,6 +752,81 @@ def generar_cobros_previstos():
         return jsonify({'error': 'Error interno del servidor'}), 500
 
 
+@app.route('/api/v1/facturacion/cobros/estadisticas', methods=['GET'])
+def estadisticas_cobros():
+    """Obtiene estadísticas mensuales de cobros (histórico y estimaciones)."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Obtener cobros históricos (cobrados) agrupados por mes
+            cursor.execute("""
+                SELECT 
+                    TO_CHAR(COALESCE(fecha_pago, fecha_prevista), 'YYYY-MM') as mes,
+                    SUM(monto) as total_cobrado,
+                    COUNT(*) as cantidad
+                FROM pago_residente
+                WHERE id_residencia = %s 
+                  AND estado = 'cobrado'
+                  AND fecha_pago IS NOT NULL
+                GROUP BY TO_CHAR(COALESCE(fecha_pago, fecha_prevista), 'YYYY-MM')
+                ORDER BY mes DESC
+                LIMIT 12
+            """, (g.id_residencia,))
+            
+            historico = cursor.fetchall()
+            
+            # Obtener estimaciones futuras (cobros previstos pendientes) agrupados por mes
+            cursor.execute("""
+                SELECT 
+                    TO_CHAR(fecha_prevista, 'YYYY-MM') as mes,
+                    SUM(monto) as total_previsto,
+                    COUNT(*) as cantidad
+                FROM pago_residente
+                WHERE id_residencia = %s 
+                  AND es_cobro_previsto = TRUE
+                  AND estado = 'pendiente'
+                  AND fecha_prevista IS NOT NULL
+                GROUP BY TO_CHAR(fecha_prevista, 'YYYY-MM')
+                ORDER BY mes ASC
+                LIMIT 6
+            """, (g.id_residencia,))
+            
+            estimaciones = cursor.fetchall()
+            
+            # Formatear datos históricos
+            historico_data = []
+            for row in historico:
+                historico_data.append({
+                    'mes': row[0],
+                    'total': float(row[1]),
+                    'cantidad': row[2]
+                })
+            
+            # Formatear estimaciones
+            estimaciones_data = []
+            for row in estimaciones:
+                estimaciones_data.append({
+                    'mes': row[0],
+                    'total': float(row[1]),
+                    'cantidad': row[2]
+                })
+            
+            return jsonify({
+                'historico': historico_data,
+                'estimaciones': estimaciones_data
+            }), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al obtener estadísticas: {str(e)}")
+        return jsonify({'error': 'Error al obtener estadísticas'}), 500
+
+
 @app.route('/api/v1/facturacion/cobros/<int:id_pago>', methods=['PUT'])
 def actualizar_cobro(id_pago):
     """Actualiza un cobro (cambiar estado, marcar como cobrado, etc.)."""
@@ -771,6 +848,22 @@ def actualizar_cobro(id_pago):
             
             if not cursor.fetchone():
                 return jsonify({'error': 'Cobro no encontrado'}), 404
+            
+            # Validar datos si se proporcionan
+            if 'estado' in data:
+                valid, error = validate_estado(data.get('estado'))
+                if not valid:
+                    return jsonify({'error': error}), 400
+            
+            if 'monto' in data and data.get('monto') is not None:
+                valid, error = validate_monto(data.get('monto'), 'Monto', required=False)
+                if not valid:
+                    return jsonify({'error': error}), 400
+            
+            if 'metodo_pago' in data and data.get('metodo_pago'):
+                valid, error = validate_metodo_pago(data.get('metodo_pago'), required=False)
+                if not valid:
+                    return jsonify({'error': error}), 400
             
             # Campos actualizables
             campos_actualizables = [
@@ -879,8 +972,19 @@ def crear_pago_proveedor():
         monto = data.get('monto')
         es_estimacion = data.get('es_estimacion', False)
         
-        if not proveedor or not concepto:
-            return jsonify({'error': 'proveedor y concepto son requeridos'}), 400
+        # Validaciones básicas
+        valid, error = validate_text(proveedor, 'Proveedor', min_length=2, max_length=255, required=True)
+        if not valid:
+            return jsonify({'error': error}), 400
+        
+        valid, error = validate_text(concepto, 'Concepto', min_length=3, max_length=500, required=True)
+        if not valid:
+            return jsonify({'error': error}), 400
+        
+        if monto is not None:
+            valid, error = validate_monto(monto, 'Monto', required=False)
+            if not valid:
+                return jsonify({'error': error}), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -1005,8 +1109,21 @@ def crear_proveedor():
             return jsonify({'error': 'Datos JSON requeridos'}), 400
         
         nombre = data.get('nombre')
-        if not nombre:
-            return jsonify({'error': 'nombre es requerido'}), 400
+        valid, error = validate_text(nombre, 'Nombre del proveedor', min_length=2, max_length=255, required=True)
+        if not valid:
+            return jsonify({'error': error}), 400
+        
+        # Validar email si se proporciona
+        if 'email' in data and data.get('email'):
+            valid, error = validate_email(data.get('email'))
+            if not valid:
+                return jsonify({'error': error}), 400
+        
+        # Validar teléfono si se proporciona
+        if 'telefono' in data and data.get('telefono'):
+            valid, error = validate_phone(data.get('telefono'), 'Teléfono', required=False)
+            if not valid:
+                return jsonify({'error': error}), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
