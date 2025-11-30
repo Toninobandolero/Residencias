@@ -203,7 +203,7 @@ def validate_residente_data(data, is_update=False):
             errors.append(error)
     
     if 'fecha_ingreso' in data and data.get('fecha_ingreso'):
-        valid, error = validate_date(data.get('fecha_ingreso'), 'Fecha de ingreso', required=False, allow_future=True)
+        valid, error = validate_date(data.get('fecha_ingreso'), 'Fecha de ingreso', required=False, allow_future=False)
         if not valid:
             errors.append(error)
     
@@ -233,20 +233,22 @@ def validate_cobro_data(data, is_update=False):
             errors.append(error)
         
         es_cobro_previsto = data.get('es_cobro_previsto', False)
-        if es_cobro_previsto:
-            if 'fecha_prevista' not in data or not data.get('fecha_prevista'):
-                errors.append("fecha_prevista es requerida para cobros previstos")
-            else:
-                valid, error = validate_date(data.get('fecha_prevista'), 'Fecha prevista', required=True, allow_future=True)
-                if not valid:
-                    errors.append(error)
-        else:
-            if 'fecha_pago' not in data or not data.get('fecha_pago'):
-                errors.append("fecha_pago es requerida para cobros realizados")
-            else:
-                valid, error = validate_date(data.get('fecha_pago'), 'Fecha de pago', required=True, allow_future=False)
-                if not valid:
-                    errors.append(error)
+        # Fecha prevista es opcional, pero si se proporciona debe ser válida
+        if 'fecha_prevista' in data and data.get('fecha_prevista'):
+            valid, error = validate_date(data.get('fecha_prevista'), 'Fecha prevista', required=False, allow_future=True)
+            if not valid:
+                errors.append(error)
+        # Fecha de pago es opcional, pero si se proporciona debe ser válida
+        if 'fecha_pago' in data and data.get('fecha_pago'):
+            valid, error = validate_date(data.get('fecha_pago'), 'Fecha de pago', required=False, allow_future=False)
+            if not valid:
+                errors.append(error)
+        
+        # Validar concepto si se proporciona
+        if 'concepto' in data and data.get('concepto'):
+            valid, error = validate_text(data.get('concepto'), 'Concepto', min_length=1, max_length=500, required=False)
+            if not valid:
+                errors.append(error)
     
     # Validaciones opcionales
     if 'estado' in data and data.get('estado'):

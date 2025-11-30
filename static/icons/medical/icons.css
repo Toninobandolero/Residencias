@@ -1,0 +1,126 @@
+/**
+ * Estilos CSS para iconos médicos
+ * Uso: <i class="icon-medical icon-stethoscope"></i>
+ */
+
+.icon-medical {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  vertical-align: middle;
+}
+
+/* Iconos individuales */
+.icon-stethoscope {
+  background-image: url('stethoscope.svg');
+}
+
+.icon-medical-cross {
+  background-image: url('medical-cross.svg');
+}
+
+.icon-pill {
+  background-image: url('pill.svg');
+}
+
+.icon-heart-pulse {
+  background-image: url('heart-pulse.svg');
+}
+
+.icon-hospital {
+  background-image: url('hospital.svg');
+}
+
+.icon-user-medical {
+  background-image: url('user-medical.svg');
+}
+
+.icon-calendar-medical {
+  background-image: url('calendar-medical.svg');
+}
+
+.icon-clipboard-medical {
+  background-image: url('clipboard-medical.svg');
+}
+
+.icon-syringe {
+  background-image: url('syringe.svg');
+}
+
+.icon-file-medical {
+  background-image: url('file-medical.svg');
+}
+
+.icon-activity {
+  background-image: url('activity.svg');
+}
+
+.icon-alert-circle {
+  background-image: url('alert-circle.svg');
+}
+
+.icon-check-circle {
+  background-image: url('check-circle.svg');
+}
+
+.icon-users {
+  background-image: url('users.svg');
+}
+
+.icon-home {
+  background-image: url('home.svg');
+}
+
+.icon-bed {
+  background-image: url('bed.svg');
+}
+
+.icon-package {
+  background-image: url('package.svg');
+}
+
+/* Tamaños */
+.icon-medical.icon-sm {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-medical.icon-md {
+  width: 24px;
+  height: 24px;
+}
+
+.icon-medical.icon-lg {
+  width: 32px;
+  height: 32px;
+}
+
+.icon-medical.icon-xl {
+  width: 48px;
+  height: 48px;
+}
+
+/* Colores (heredan del texto, pero puedes usar estas clases) */
+.icon-medical.icon-primary {
+  color: #667eea;
+}
+
+.icon-medical.icon-success {
+  color: #28a745;
+}
+
+.icon-medical.icon-danger {
+  color: #dc3545;
+}
+
+.icon-medical.icon-warning {
+  color: #ffc107;
+}
+
+.icon-medical.icon-info {
+  color: #17a2b8;
+}
+

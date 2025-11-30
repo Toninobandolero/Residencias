@@ -11,12 +11,17 @@ def get_db_connection():
     """
     Obtiene una conexión a la base de datos PostgreSQL.
     
+    Soporta dos modos:
+    1. Conexión directa (DB_USE_PROXY=false o no definido): Usa DB_HOST directamente
+    2. Conexión vía Cloud SQL Proxy (DB_USE_PROXY=true): Usa 127.0.0.1 (proxy local)
+    
     Variables de entorno requeridas:
-    - DB_HOST: Host de la base de datos (Cloud SQL endpoint)
     - DB_NAME: Nombre de la base de datos
     - DB_USER: Usuario de la base de datos
     - DB_PASSWORD: Contraseña de la base de datos
+    - DB_HOST: Host de la base de datos (ignorado si DB_USE_PROXY=true)
     - DB_PORT: Puerto (default: 5432)
+    - DB_USE_PROXY: 'true' para usar Cloud SQL Proxy, 'false' o no definido para conexión directa
     
     Returns:
         psycopg2.connection: Objeto de conexión a PostgreSQL
@@ -26,11 +31,19 @@ def get_db_connection():
         ValueError: Si faltan variables de entorno requeridas
     """
     # Obtener variables de entorno
-    db_host = os.getenv('DB_HOST')
+    use_proxy = os.getenv('DB_USE_PROXY', 'false').lower() == 'true'
+    
+    # Si se usa proxy, siempre conectar a localhost
+    if use_proxy:
+        db_host = '127.0.0.1'
+        db_port = os.getenv('DB_PORT', '5432')
+    else:
+        db_host = os.getenv('DB_HOST')
+        db_port = os.getenv('DB_PORT', '5432')
+    
     db_name = os.getenv('DB_NAME')
     db_user = os.getenv('DB_USER')
     db_password = os.getenv('DB_PASSWORD')
-    db_port = os.getenv('DB_PORT', '5432')
     
     # Validar que todas las variables requeridas estén presentes
     if not all([db_host, db_name, db_user, db_password]):

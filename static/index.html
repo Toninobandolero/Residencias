@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Violetas - Sistema de Gestión</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Flatpickr para calendarios con formato español -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
     <style>
         * {
             margin: 0;
@@ -96,6 +100,10 @@
         .user-icon-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .user-icon-btn img {
+            filter: brightness(0) invert(1);
         }
 
         .user-menu {
@@ -334,11 +342,18 @@
             font-weight: 600;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .module-btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .module-btn img {
+            filter: brightness(0) invert(1);
         }
 
         .tabs-container {
@@ -531,17 +546,17 @@
     <div class="container">
         <!-- Header para login -->
         <div class="logo" id="loginHeader">
-            <h1>🏥 Violetas Sistema de Gestión de Residencias</h1>
+            <h1>Violetas Sistema de Gestión de Residencias</h1>
         </div>
 
         <!-- Header para dashboard con menú de usuario -->
         <div class="header" id="dashboardHeader" style="display: none;">
             <div class="header-logo">
-                <h1>🏥 Violetas Sistema de Gestión de Residencias</h1>
+                <h1>Violetas Sistema de Gestión de Residencias</h1>
             </div>
             <div class="user-menu-container">
                 <button class="user-icon-btn" onclick="toggleUserMenu()" title="Menú de usuario">
-                    👤
+                    <img src="/static/icons/medical/user-medical.svg" alt="Usuario" style="width: 24px; height: 24px;">
                 </button>
                 <div class="user-menu" id="userMenu">
                     <div class="user-menu-info" id="userMenuInfo">
@@ -551,10 +566,10 @@
                         <div class="user-menu-info-item"><strong>Expira:</strong> -</div>
                     </div>
                     <button class="user-menu-item" onclick="showConfiguracion()">
-                        ⚙️ Configuración
+                        <img src="/static/icons/medical/settings.svg" alt="Configuración" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Configuración
                     </button>
                     <button class="user-menu-item logout" onclick="logout()">
-                        🚪 Cerrar Sesión
+                        <img src="/static/icons/medical/log-out.svg" alt="Cerrar Sesión" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Cerrar Sesión
                     </button>
                 </div>
             </div>
@@ -584,20 +599,17 @@
             <div class="user-info" id="userInfo" style="display: none;"></div>
             
             <div style="margin-top: 20px;">
-                <h3 style="color: #667eea; margin-bottom: 15px;">📋 Módulos del Sistema</h3>
+                <h3 style="color: #667eea; margin-bottom: 15px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Módulos" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;"> Módulos del Sistema</h3>
                 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
                     <button class="module-btn" onclick="showModule('residentes')">
-                        👥 Residentes
+                        <img src="/static/icons/medical/users.svg" alt="Residentes" style="width: 20px; height: 20px; margin-right: 8px;"> Residentes
                     </button>
                     <button class="module-btn" onclick="showModule('facturacion')">
-                        💰 Facturación
+                        <img src="/static/icons/medical/money.svg" alt="Facturación" style="width: 20px; height: 20px; margin-right: 8px;"> Facturación
                     </button>
                     <button class="module-btn" onclick="showModule('personal')">
-                        👔 Personal
-                    </button>
-                    <button class="module-btn" onclick="showModule('token')">
-                        🔑 Token JWT
+                        <img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 20px; height: 20px; margin-right: 8px;"> Personal
                     </button>
                 </div>
             </div>
@@ -610,7 +622,7 @@
     <div id="modalViewResidente" class="modal">
         <div class="modal-content" style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
-                <h2>👤 Detalle del Residente</h2>
+                <h2><img src="/static/icons/medical/user-medical.svg" alt="Usuario" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Detalle del Residente</h2>
                 <button class="close-modal" onclick="closeModal('modalViewResidente')">&times;</button>
             </div>
             <div id="viewResidenteContent">
@@ -623,14 +635,14 @@
     <div id="modalResidente" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>➕ Agregar Residente</h2>
+                <h2><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Residente</h2>
                 <button class="close-modal" onclick="closeModal('modalResidente')">&times;</button>
             </div>
             <form id="formResidente" onsubmit="saveResidente(event)">
                 
                 <!-- SECCIÓN: Información de Residencia -->
                 <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
-                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">🏠 Información de Residencia</h3>
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/home.svg" alt="Residencia" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información de Residencia</h3>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <div class="form-group">
                             <label for="res_id_residencia">Residencia *</label>
@@ -642,13 +654,15 @@
                         </div>
                         <div class="form-group">
                             <label for="res_habitacion">Habitación *</label>
-                            <input type="text" id="res_habitacion" name="habitacion" required placeholder="Ej: 101, A-12">
+                            <select id="res_habitacion" name="habitacion" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                <option value="">Seleccione una habitación</option>
+                            </select>
                         </div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                         <div class="form-group">
                             <label for="res_fecha_ingreso">Fecha de Ingreso</label>
-                            <input type="text" id="res_fecha_ingreso" name="fecha_ingreso" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                            <input type="text" id="res_fecha_ingreso" name="fecha_ingreso" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)" readonly style="cursor: pointer; background-color: white;">
                         </div>
                         <div class="form-group">
                             <label for="res_costo_habitacion">Costo de Habitación (€)</label>
@@ -672,7 +686,7 @@
                 
                 <!-- SECCIÓN: Información Personal -->
                 <div style="background: #fff5f5; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #f56565;">
-                    <h3 style="color: #f56565; margin-bottom: 15px; font-size: 18px;">👤 Información Personal</h3>
+                    <h3 style="color: #f56565; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/user-medical.svg" alt="Usuario" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información Personal</h3>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <div class="form-group">
                             <label for="res_nombre">Nombre *</label>
@@ -690,14 +704,18 @@
                         </div>
                         <div class="form-group">
                             <label for="res_fecha_nacimiento">Fecha de Nacimiento</label>
-                            <input type="text" id="res_fecha_nacimiento" name="fecha_nacimiento" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                            <input type="text" id="res_fecha_nacimiento" name="fecha_nacimiento" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this); actualizarEdad('res_fecha_nacimiento', 'res_edad')" readonly style="cursor: pointer; background-color: white;">
+                        </div>
+                        <div class="form-group">
+                            <label for="res_edad">Edad</label>
+                            <input type="text" id="res_edad" name="edad" readonly style="background-color: #f5f5f5; color: #666; cursor: not-allowed;" placeholder="Se calculará automáticamente">
                         </div>
                     </div>
                 </div>
                 
                 <!-- SECCIÓN: Información de Contacto -->
                 <div style="background: #f0fff4; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #48bb78;">
-                    <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;">📞 Información de Contacto</h3>
+                    <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/phone.svg" alt="Contacto" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información de Contacto</h3>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <div class="form-group">
                             <label for="res_telefono">Teléfono</label>
@@ -725,31 +743,115 @@
                 
                 <!-- SECCIÓN: Información Médica y Servicios -->
                 <div style="background: #fffaf0; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ed8936;">
-                    <h3 style="color: #ed8936; margin-bottom: 15px; font-size: 18px;">🏥 Información Médica y Servicios</h3>
-                    <div class="form-group">
+                    <h3 style="color: #ed8936; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Información Médica" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información Médica y Servicios</h3>
+                    
+                    <!-- Datos Médicos Esenciales -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div class="form-group">
+                            <label for="res_grupo_sanguineo">Grupo Sanguíneo</label>
+                            <select id="res_grupo_sanguineo" name="grupo_sanguineo" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                <option value="">Seleccione</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O-</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="res_nivel_dependencia">Nivel de Dependencia</label>
+                            <select id="res_nivel_dependencia" name="nivel_dependencia" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                <option value="">Seleccione</option>
+                                <option value="Autónomo">Autónomo</option>
+                                <option value="Dependencia leve">Dependencia leve</option>
+                                <option value="Dependencia moderada">Dependencia moderada</option>
+                                <option value="Dependencia severa">Dependencia severa</option>
+                                <option value="Gran dependencia">Gran dependencia</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div class="form-group">
+                            <label for="res_alergias">Alergias</label>
+                            <textarea id="res_alergias" name="alergias" rows="2" placeholder="Ej: Penicilina, Lácteos, Polen"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="res_diagnosticos">Enfermedades Crónicas / Diagnósticos</label>
+                            <textarea id="res_diagnosticos" name="diagnosticos" rows="2" placeholder="Ej: Diabetes tipo 2, Hipertensión, Artritis"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div class="form-group">
+                            <label for="res_restricciones_dieteticas">Restricciones Dietéticas</label>
+                            <textarea id="res_restricciones_dieteticas" name="restricciones_dieteticas" rows="2" placeholder="Ej: Sin sal, Textura triturada, Sin gluten"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="res_movilidad">Movilidad / Ayudas Técnicas</label>
+                            <select id="res_movilidad" name="movilidad" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                <option value="">Seleccione</option>
+                                <option value="Deambulación autónoma">Deambulación autónoma</option>
+                                <option value="Bastón">Bastón</option>
+                                <option value="Andador">Andador</option>
+                                <option value="Silla de ruedas">Silla de ruedas</option>
+                                <option value="Cama">Cama</option>
+                                <option value="Otro">Otro</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div class="form-group">
+                            <label for="res_medico_referencia">Médico de Referencia</label>
+                            <input type="text" id="res_medico_referencia" name="medico_referencia" placeholder="Nombre del médico o centro de salud">
+                        </div>
+                        <div class="form-group">
+                            <label for="res_telefono_medico">Teléfono Médico</label>
+                            <input type="text" id="res_telefono_medico" name="telefono_medico" placeholder="Teléfono del médico o centro">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="margin-top: 15px;">
                         <label for="res_medicaciones">Medicaciones</label>
                         <textarea id="res_medicaciones" name="medicaciones" rows="3" placeholder="Lista de medicaciones y horarios"></textarea>
                     </div>
+                    
                     <div class="form-group" style="margin-top: 15px;">
                         <label for="res_servicios_extra">Servicios Extra</label>
-                        <textarea id="res_servicios_extra" name="servicios_extra" rows="3" placeholder="Ej: Lavandería, Peluquería, etc."></textarea>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px;">
+                            <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
+                                <input type="checkbox" name="servicio_extra" value="Peluquería" style="width: auto; margin-right: 8px;">
+                                Peluquería
+                            </label>
+                            <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
+                                <input type="checkbox" name="servicio_extra" value="Podólogo" style="width: auto; margin-right: 8px;">
+                                Podólogo
+                            </label>
+                            <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
+                                <input type="checkbox" name="servicio_extra" value="Fisio" style="width: auto; margin-right: 8px;">
+                                Fisio
+                            </label>
+                            <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
+                                <input type="checkbox" name="servicio_extra" value="Farmacia" style="width: auto; margin-right: 8px;">
+                                Farmacia
+                            </label>
+                        </div>
+                        <input type="text" id="res_servicios_extra_otros" name="servicios_extra_otros" placeholder="Otros servicios (separados por comas, ej: Lavandería, Masajes)" style="margin-top: 5px;">
+                        <input type="hidden" id="res_servicios_extra" name="servicios_extra" value="">
                     </div>
+                    
                     <div class="form-group" style="margin-top: 15px;">
                         <label for="res_peculiaridades">Peculiaridades / Notas Importantes</label>
                         <textarea id="res_peculiaridades" name="peculiaridades" rows="3" placeholder="Información adicional relevante"></textarea>
                     </div>
                 </div>
                 
-                <!-- SECCIÓN: Estado -->
-                <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #718096;">
-                    <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;">⚙️ Estado</h3>
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="res_activo" name="activo" checked style="width: auto; margin-right: 8px;">
-                            Residente Activo
-                        </label>
-                    </div>
-                </div>
+                <!-- Los nuevos residentes siempre son activos -->
+                <input type="hidden" id="res_activo" name="activo" value="true">
                 <div id="modalAlert" class="alert" style="display: none;"></div>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
                     <button type="submit" id="saveResidenteBtn" style="flex: 1;">Guardar</button>
@@ -763,14 +865,14 @@
     <div id="modalProveedor" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>➕ Agregar Proveedor</h2>
+                <h2><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Proveedor</h2>
                 <button class="close-modal" onclick="closeModal('modalProveedor')">&times;</button>
             </div>
             <form id="formProveedor" onsubmit="saveProveedor(event)">
                 
                 <!-- SECCIÓN: Información Básica -->
                 <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
-                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">📋 Información Básica</h3>
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Información" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información Básica</h3>
                     <div class="form-group">
                         <label for="prov_nombre">Nombre del Proveedor *</label>
                         <input type="text" id="prov_nombre" name="nombre" required placeholder="Ej: Empresa de Limpieza SL">
@@ -798,7 +900,7 @@
                 
                 <!-- SECCIÓN: Información de Contacto -->
                 <div style="background: #f0fff4; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #48bb78;">
-                    <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;">📞 Información de Contacto</h3>
+                    <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/phone.svg" alt="Contacto" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información de Contacto</h3>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <div class="form-group">
                             <label for="prov_telefono">Teléfono</label>
@@ -825,7 +927,7 @@
                 
                 <!-- SECCIÓN: Estado y Observaciones -->
                 <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #718096;">
-                    <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;">⚙️ Estado y Observaciones</h3>
+                    <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/settings.svg" alt="Estado" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Estado y Observaciones</h3>
                     <div class="form-group">
                         <label>
                             <input type="checkbox" id="prov_activo" name="activo" checked style="width: auto; margin-right: 8px;">
@@ -847,11 +949,112 @@
         </div>
     </div>
 
+    <!-- Modal para agregar cobro manual -->
+    <div id="modalCobro" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalCobroTitulo"><img src="/static/icons/medical/money.svg" alt="Cobro" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Cobro</h2>
+                <button class="close-modal" onclick="closeModal('modalCobro')">&times;</button>
+            </div>
+            <form id="formCobro" onsubmit="saveCobro(event)">
+                <input type="hidden" id="cobro_id_pago" name="id_pago" value="">
+                <!-- SECCIÓN: Información del Cobro -->
+                <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">💳 Información del Cobro</h3>
+                    <div class="form-group">
+                        <label for="cobro_id_residente">Residente *</label>
+                        <select id="cobro_id_residente" name="id_residente" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                            <option value="">Cargando residentes...</option>
+                        </select>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="cobro_monto">Monto (€) *</label>
+                            <input type="number" id="cobro_monto" name="monto" step="0.01" required placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label for="cobro_metodo_pago">Tipo de Pago</label>
+                            <select id="cobro_metodo_pago" name="metodo_pago" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                <option value="">Seleccione un método</option>
+                                <option value="transferencia">Transferencia</option>
+                                <option value="remesa">Remesa</option>
+                                <option value="metálico">Metálico</option>
+                                <option value="bizum">Bizum</option>
+                                <option value="otro">Otro</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="cobro_concepto">Concepto *</label>
+                        <input type="text" id="cobro_concepto" name="concepto" required placeholder="Ej: Pago mensual habitación, Servicio extra, etc.">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="cobro_fecha_prevista">Fecha Prevista</label>
+                            <input type="text" id="cobro_fecha_prevista" name="fecha_prevista" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)" readonly style="cursor: pointer; background-color: white;">
+                        </div>
+                        <div class="form-group">
+                            <label for="cobro_fecha_pago">Fecha de Pago </label>
+                            <input type="text" id="cobro_fecha_pago" name="fecha_pago" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)" readonly style="cursor: pointer; background-color: white;">
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="cobro_observaciones">Observaciones</label>
+                        <textarea id="cobro_observaciones" name="observaciones" rows="3" placeholder="Notas adicionales sobre el cobro"></textarea>
+                    </div>
+                    <p style="margin-top: 10px; font-size: 12px; color: #666;">
+                        💡 <strong>Nota:</strong> Si no tiene fecha de pago, será un cobro previsto. Si tiene fecha de pago, será un cobro completado.
+                    </p>
+                </div>
+                
+                <div id="modalCobroAlert" class="alert" style="display: none;"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="saveCobroBtn" style="flex: 1;">Guardar</button>
+                    <button type="button" onclick="closeModal('modalCobro')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para dar de baja a un residente -->
+    <div id="modalBajaResidente" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2><img src="/static/icons/medical/user-x.svg" alt="Dar de baja" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Dar de Baja a Residente</h2>
+                <button class="close-modal" onclick="closeModal('modalBajaResidente')">&times;</button>
+            </div>
+            <form id="formBajaResidente" onsubmit="confirmarBajaResidente(event)">
+                <input type="hidden" id="baja_id_residente" name="id_residente">
+                <div class="form-group">
+                    <label for="baja_motivo">Motivo de la Baja *</label>
+                    <select id="baja_motivo" name="motivo_baja" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                        <option value="">Seleccione un motivo</option>
+                        <option value="Fallecimiento">Fallecimiento</option>
+                        <option value="Traslado a hospital">Traslado a hospital</option>
+                        <option value="Traslado a otra residencia">Traslado a otra residencia</option>
+                        <option value="Alta médica">Alta médica</option>
+                        <option value="Solicitud familiar">Solicitud familiar</option>
+                        <option value="Otro">Otro</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-top: 15px;">
+                    <label for="baja_observaciones">Observaciones (opcional)</label>
+                    <textarea id="baja_observaciones" name="observaciones" rows="3" placeholder="Información adicional sobre la baja"></textarea>
+                </div>
+                <div id="modalBajaAlert" class="alert" style="display: none;"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="confirmarBajaBtn" style="flex: 1; background: #dc3545;">Confirmar Baja</button>
+                    <button type="button" onclick="closeModal('modalBajaResidente')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal para agregar pago a proveedor -->
     <div id="modalPagoProveedor" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>💰 Agregar Pago a Proveedor</h2>
+                <h2><img src="/static/icons/medical/money.svg" alt="Pago" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Pago a Proveedor</h2>
                 <button class="close-modal" onclick="closeModal('modalPagoProveedor')">&times;</button>
             </div>
             <form id="formPagoProveedor" onsubmit="savePagoProveedor(event)">
@@ -862,7 +1065,7 @@
                     <div class="form-group">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                             <label for="pago_id_proveedor">Proveedor *</label>
-                            <button type="button" onclick="openModal('modalProveedor')" style="padding: 6px 12px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">+ Nuevo Proveedor</button>
+                            <button type="button" id="btnNuevoProveedor" style="padding: 4px 10px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; white-space: nowrap;">+ Nuevo Proveedor</button>
                         </div>
                         <select id="pago_id_proveedor" name="id_proveedor" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
                             <option value="">Cargando proveedores...</option>
@@ -881,11 +1084,11 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                         <div class="form-group">
                             <label for="pago_fecha_pago">Fecha de Pago</label>
-                            <input type="text" id="pago_fecha_pago" name="fecha_pago" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                            <input type="text" id="pago_fecha_pago" name="fecha_pago" placeholder="DD/MM/YYYY" maxlength="10" readonly style="cursor: pointer; background-color: white;">
                         </div>
                         <div class="form-group">
                             <label for="pago_fecha_prevista">Fecha Prevista</label>
-                            <input type="text" id="pago_fecha_prevista" name="fecha_prevista" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                            <input type="text" id="pago_fecha_prevista" name="fecha_prevista" placeholder="DD/MM/YYYY" maxlength="10" readonly style="cursor: pointer; background-color: white;">
                         </div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
@@ -907,51 +1110,16 @@
                     </div>
                 </div>
                 
-                <!-- SECCIÓN: Tipo de Pago -->
-                <div style="background: #fffaf0; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ed8936;">
-                    <h3 style="color: #ed8936; margin-bottom: 15px; font-size: 18px;">📊 Tipo de Pago</h3>
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="pago_es_estimacion" name="es_estimacion" style="width: auto; margin-right: 8px;">
-                            Es una Estimación (no es un pago real)
-                        </label>
-                    </div>
-                    <div id="estimacionFields" style="display: none; margin-top: 15px;">
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div class="form-group">
-                                <label for="pago_frecuencia_pago">Frecuencia de Pago</label>
-                                <select id="pago_frecuencia_pago" name="frecuencia_pago" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
-                                    <option value="">Seleccione frecuencia</option>
-                                    <option value="mensual">Mensual</option>
-                                    <option value="trimestral">Trimestral</option>
-                                    <option value="semestral">Semestral</option>
-                                    <option value="anual">Anual</option>
-                                    <option value="puntual">Puntual</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="pago_monto_estimado">Monto Estimado (€)</label>
-                                <input type="number" id="pago_monto_estimado" name="monto_estimado" step="0.01" placeholder="0.00">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- SECCIÓN: Estado y Observaciones -->
+                <!-- SECCIÓN: Observaciones -->
                 <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #718096;">
-                    <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;">⚙️ Estado y Observaciones</h3>
+                    <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/settings.svg" alt="Observaciones" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Observaciones</h3>
                     <div class="form-group">
-                        <label for="pago_estado">Estado</label>
-                        <select id="pago_estado" name="estado" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
-                            <option value="pendiente">Pendiente</option>
-                            <option value="pagado">Pagado</option>
-                            <option value="cancelado">Cancelado</option>
-                        </select>
-                    </div>
-                    <div class="form-group" style="margin-top: 15px;">
                         <label for="pago_observaciones">Observaciones</label>
                         <textarea id="pago_observaciones" name="observaciones" rows="3" placeholder="Notas adicionales sobre el pago"></textarea>
                     </div>
+                    <p style="margin-top: 10px; font-size: 12px; color: #666;">
+                        💡 <strong>Nota:</strong> Si tiene fecha de pago, será un pago completado. Si tiene fecha prevista, será un pago pendiente.
+                    </p>
                 </div>
                 
                 <div id="modalPagoProveedorAlert" class="alert" style="display: none;"></div>
@@ -966,6 +1134,27 @@
     <script>
         const API_URL = window.location.origin;
         let currentToken = null;
+        
+        // Función helper para insertar iconos SVG inline
+        function getIconSVG(iconName, size = 20, color = 'currentColor') {
+            const icons = {
+                'hospital': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="12" x2="9" y2="12.01"/><line x1="9" y1="15" x2="9" y2="15.01"/><line x1="9" y1="18" x2="9" y2="18.01"/></svg>`,
+                'user': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+                'users': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+                'user-medical': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11v6"/><path d="M19 14h6"/></svg>`,
+                'money': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+                'clipboard': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="M12 11h4"/><path d="M12 15h4"/><path d="M14 13v4"/></svg>`,
+                'plus': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+                'check': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+                'alert': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+                'activity': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`,
+                'package': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+                'file': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>`,
+                'settings': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+                'log-out': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: ${size}px; height: ${size}px; display: inline-block; vertical-align: middle;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`
+            };
+            return icons[iconName] || '';
+        }
 
         // Verificar si hay token guardado
         window.addEventListener('DOMContentLoaded', () => {
@@ -1093,6 +1282,8 @@
             }
         });
 
+        // Función eliminada - módulo Token JWT ya no se usa
+        /*
         function copyToken() {
             const tokenValue = document.getElementById('tokenValue').textContent;
             navigator.clipboard.writeText(tokenValue).then(() => {
@@ -1104,6 +1295,7 @@
                 }, 2000);
             });
         }
+        */
 
         function showError(message) {
             const alert = document.getElementById('alert');
@@ -1127,17 +1319,7 @@
             const content = document.getElementById('moduleContent');
             const token = localStorage.getItem('violetas_token');
             
-            if (module === 'token') {
-                content.innerHTML = `
-                    <div class="module-content">
-                        <h3 style="color: #667eea; margin-bottom: 15px;">🔑 Token JWT</h3>
-                        <div class="token-display">
-                            <div class="token-value" id="tokenValue">${token}</div>
-                            <button class="copy-btn" onclick="copyToken()" style="margin-top: 10px;">Copiar Token</button>
-                        </div>
-                    </div>
-                `;
-            } else if (module === 'residentes') {
+            if (module === 'residentes') {
                 loadResidentes();
             } else if (module === 'facturacion') {
                 loadFacturacion();
@@ -1166,56 +1348,159 @@
                     }
                 });
                 
-                const data = await response.json();
+                // Verificar el tipo de contenido antes de parsear
+                const contentType = response.headers.get('content-type');
+                let data;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    console.error('Respuesta no es JSON:', text);
+                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: La respuesta del servidor no es válida. Status: ${response.status}</p></div>`;
+                    return;
+                }
                 
                 if (response.ok) {
+                    // Separar residentes activos e inactivos
+                    const residentesActivos = (data.residentes || []).filter(r => r.activo);
+                    const residentesInactivos = (data.residentes || []).filter(r => !r.activo);
+                    
                     let html = `
                         <div class="module-content">
-                            <h3 style="color: #667eea; margin-bottom: 15px;">👥 Residentes (${data.total})</h3>
-                            <button class="add-btn" onclick="openModal('modalResidente')">+ Agregar Residente</button>
+                            <h3 style="color: #667eea; margin-bottom: 15px;"><img src="/static/icons/medical/users.svg" alt="Residentes" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Residentes Activos (${residentesActivos.length})</h3>
+                            <button class="add-btn" onclick="openModal('modalResidente')" style="display: inline-flex; align-items: center; gap: 6px;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Residente</button>
                     `;
                     
-                    if (data.residentes && data.residentes.length > 0) {
+                    // Tabla de residentes activos
+                    if (residentesActivos.length > 0) {
                         html += `
-                            <table class="data-table">
+                            <table class="data-table" style="margin-top: 20px;">
                                 <thead>
                                     <tr>
                                         <th>Residencia</th>
-                                        <th>Nombre</th>
                                         <th>Habitación</th>
-                                        <th>Documento</th>
-                                        <th>Teléfono</th>
-                                        <th>Estado</th>
+                                        <th>Nombre</th>
+                                        <th>Contacto de Emergencia</th>
+                                        <th>Teléfono de Emergencia</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                         `;
                         
-                        data.residentes.forEach(res => {
+                        residentesActivos.forEach(res => {
                             html += `
                                 <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
                                     <td>${res.nombre_residencia || (res.id_residencia === 1 ? 'Violetas 1' : res.id_residencia === 2 ? 'Violetas 2' : `Residencia ${res.id_residencia}`)}</td>
-                                    <td>${res.nombre} ${res.apellido}</td>
                                     <td>${res.habitacion || '-'}</td>
-                                    <td>${res.documento_identidad || '-'}</td>
-                                    <td>${res.telefono || '-'}</td>
-                                    <td>${res.activo ? '✅ Activo' : '❌ Inactivo'}</td>
+                                    <td>${res.nombre} ${res.apellido}</td>
+                                    <td>${res.contacto_emergencia || '-'}</td>
+                                    <td>${res.telefono_emergencia || '-'}</td>
                                 </tr>
                             `;
                         });
                         
-                        html += '</tbody></table>';
+                        html += `
+                            </tbody>
+                            <tfoot>
+                                <tr style="background: #f8f9fa; font-weight: 600;">
+                                    <td colspan="5" style="padding: 15px; text-align: right; color: #667eea; border-top: 2px solid #e0e0e0;">
+                                        Total de Residentes Activos: ${residentesActivos.length}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>`;
                     } else {
-                        html += '<p>No hay residentes registrados.</p>';
+                        html += '<p style="margin-top: 20px;">No hay residentes activos registrados.</p>';
                     }
+                    
+                    // Lista de residentes inactivos (usuarios de baja)
+                    if (residentesInactivos.length > 0) {
+                        html += `
+                            <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
+                                <h3 style="color: #dc3545; margin-bottom: 15px;"><img src="/static/icons/medical/user-x.svg" alt="Bajas" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Usuarios de Baja (${residentesInactivos.length})</h3>
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Residencia</th>
+                                            <th>Habitación</th>
+                                            <th>Nombre</th>
+                                            <th>Motivo de Baja</th>
+                                            <th>Fecha de Baja</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                        `;
+                        
+                        residentesInactivos.forEach(res => {
+                            const fechaBaja = res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : '-';
+                            html += `
+                                <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
+                                    <td>${res.nombre_residencia || (res.id_residencia === 1 ? 'Violetas 1' : res.id_residencia === 2 ? 'Violetas 2' : `Residencia ${res.id_residencia}`)}</td>
+                                    <td>${res.habitacion || '-'}</td>
+                                    <td>${res.nombre} ${res.apellido}</td>
+                                    <td>${res.motivo_baja || '-'}</td>
+                                    <td>${fechaBaja}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += `
+                            </tbody>
+                            <tfoot>
+                                <tr style="background: #f8f9fa; font-weight: 600;">
+                                    <td colspan="5" style="padding: 15px; text-align: right; color: #dc3545; border-top: 2px solid #e0e0e0;">
+                                        Total de Usuarios de Baja: ${residentesInactivos.length}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table></div>`;
+                    }
+                    
+                    // Calcular residentes activos por residencia
+                    const residentesVioletas1 = residentesActivos.filter(r => r.id_residencia === 1).length;
+                    const residentesVioletas2 = residentesActivos.filter(r => r.id_residencia === 2).length;
+                    const totalResidentes = residentesActivos.length + residentesInactivos.length;
+                    
+                    html += `
+                        <div style="margin-top: 40px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white;">
+                            <h3 style="color: white; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/users.svg" alt="Total" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px; filter: brightness(0) invert(1);"> Resumen Total</h3>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
+                                <div style="background: rgba(255, 255, 255, 0.2); padding: 15px; border-radius: 8px;">
+                                    <div style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">${residentesVioletas1}</div>
+                                    <div style="font-size: 13px; opacity: 0.9;">Violetas 1 Activos</div>
+                                </div>
+                                <div style="background: rgba(255, 255, 255, 0.2); padding: 15px; border-radius: 8px;">
+                                    <div style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">${residentesVioletas2}</div>
+                                    <div style="font-size: 13px; opacity: 0.9;">Violetas 2 Activos</div>
+                                </div>
+                                <div style="background: rgba(255, 255, 255, 0.2); padding: 15px; border-radius: 8px;">
+                                    <div style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">${residentesInactivos.length}</div>
+                                    <div style="font-size: 13px; opacity: 0.9;">Usuarios de Baja</div>
+                                </div>
+                                <div style="background: rgba(255, 255, 255, 0.3); padding: 15px; border-radius: 8px; border: 2px solid rgba(255, 255, 255, 0.5);">
+                                    <div style="font-size: 32px; font-weight: bold; margin-bottom: 5px;">${totalResidentes}</div>
+                                    <div style="font-size: 14px; opacity: 0.9; font-weight: 600;">Total de Residentes</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
                     
                     html += '</div>';
                     content.innerHTML = html;
                 } else {
-                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: ${data.error}</p></div>`;
+                    // Manejar errores de autenticación
+                    if (response.status === 401) {
+                        content.innerHTML = `<div class="module-content"><p style="color: red;">Error: Sesión expirada. Por favor, <a href="javascript:location.reload()">recarga la página</a> para iniciar sesión nuevamente.</p></div>`;
+                        localStorage.removeItem('violetas_token');
+                    } else {
+                        content.innerHTML = `<div class="module-content"><p style="color: red;">Error (${response.status}): ${data.error || 'Error desconocido'}</p></div>`;
+                    }
+                    console.error('Error al cargar residentes:', response.status, data);
                 }
             } catch (error) {
-                content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}</p></div>`;
+                console.error('Error de conexión al cargar residentes:', error);
+                content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}. Verifica que el servidor esté corriendo.</p></div>`;
             }
         }
 
@@ -1238,13 +1523,47 @@
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
-                let cobrosData = await cobrosRes.json();
+                // Verificar el tipo de contenido antes de parsear
+                const cobrosContentType = cobrosRes.headers.get('content-type');
+                let cobrosData;
                 
-                // Si no hay cobros previstos, intentar generarlos automáticamente
-                const tieneCobrosPrevistos = cobrosData.cobros && cobrosData.cobros.length > 0 && 
-                                            cobrosData.cobros.some(c => c && c.es_cobro_previsto === true);
+                if (cobrosContentType && cobrosContentType.includes('application/json')) {
+                    cobrosData = await cobrosRes.json();
+                } else {
+                    const text = await cobrosRes.text();
+                    console.error('Respuesta de cobros no es JSON:', text);
+                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: La respuesta del servidor no es válida. Status: ${cobrosRes.status}</p></div>`;
+                    return;
+                }
                 
-                if (cobrosRes.ok && !tieneCobrosPrevistos) {
+                // Verificar si hay residentes que necesitan cobros previstos
+                // Lógica: Si un residente NO tiene cobro completado en el mes actual,
+                // debe tener un cobro previsto
+                const mesActual = new Date().toISOString().slice(0, 7); // YYYY-MM
+                const tieneCobrosPrevistos = cobrosRes.ok && cobrosData.cobros && cobrosData.cobros.length > 0 && 
+                                            cobrosData.cobros.some(c => {
+                                                if (!c || !c.es_cobro_previsto) return false;
+                                                const mesCobro = c.mes_pagado || (c.fecha_prevista ? c.fecha_prevista.slice(0, 7) : null);
+                                                return mesCobro === mesActual;
+                                            });
+                
+                // Verificar si hay cobros con conceptos antiguos o si no hay cobros previstos
+                const tieneConceptosAntiguos = cobrosData.cobros && cobrosData.cobros.some(c => {
+                    const esPrevisto = c.es_cobro_previsto === true || 
+                                      c.es_cobro_previsto === 'true' || 
+                                      c.es_cobro_previsto === 'True' ||
+                                      c.es_cobro_previsto === 1;
+                    if (!esPrevisto) return false;
+                    const estado = (c.estado || '').toLowerCase().trim();
+                    const esPendiente = estado === 'pendiente' || estado === '' || !c.estado;
+                    if (!esPendiente) return false;
+                    // Verificar si tiene concepto antiguo
+                    const concepto = (c.concepto || '').toLowerCase();
+                    return concepto.includes('mensual habitación') || concepto.includes('pepe') || concepto.includes('maría');
+                });
+                
+                // Si no hay cobros previstos o hay conceptos antiguos, regenerar
+                if (cobrosRes.ok && (!tieneCobrosPrevistos || tieneConceptosAntiguos)) {
                     try {
                         console.log('Generando cobros previstos automáticamente...');
                         const generarRes = await fetch(`${API_URL}/api/v1/facturacion/cobros/generar-previstos`, {
@@ -1256,17 +1575,23 @@
                             body: JSON.stringify({})
                         });
                         
-                        const generarData = await generarRes.json();
-                        
-                        if (generarRes.ok) {
-                            console.log(`✅ Cobros generados: ${generarData.cobros_generados || 0}`);
-                            // Recargar los cobros después de generarlos
-                            cobrosRes = await fetch(`${API_URL}/api/v1/facturacion/cobros`, {
-                                headers: { 'Authorization': `Bearer ${token}` }
-                            });
-                            cobrosData = await cobrosRes.json();
-                        } else {
-                            console.warn('⚠️ No se pudieron generar cobros previstos:', generarData.error || 'Error desconocido');
+                        const generarContentType = generarRes.headers.get('content-type');
+                        if (generarContentType && generarContentType.includes('application/json')) {
+                            const generarData = await generarRes.json();
+                            
+                            if (generarRes.ok) {
+                                console.log(`✅ Cobros generados: ${generarData.cobros_generados || 0}, eliminados: ${generarData.cobros_eliminados || 0}`);
+                                // Recargar los cobros después de generarlos
+                                cobrosRes = await fetch(`${API_URL}/api/v1/facturacion/cobros`, {
+                                    headers: { 'Authorization': `Bearer ${token}` }
+                                });
+                                const reloadContentType = cobrosRes.headers.get('content-type');
+                                if (reloadContentType && reloadContentType.includes('application/json')) {
+                                    cobrosData = await cobrosRes.json();
+                                }
+                            } else {
+                                console.warn('⚠️ No se pudieron generar cobros previstos:', generarData.error || 'Error desconocido');
+                            }
                         }
                     } catch (e) {
                         console.error('❌ Error al generar cobros previstos automáticamente:', e);
@@ -1277,28 +1602,112 @@
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
-                const proveedoresData = await proveedoresRes.json();
+                // Verificar el tipo de contenido antes de parsear
+                const proveedoresContentType = proveedoresRes.headers.get('content-type');
+                let proveedoresData;
+                
+                if (proveedoresContentType && proveedoresContentType.includes('application/json')) {
+                    proveedoresData = await proveedoresRes.json();
+                } else {
+                    const text = await proveedoresRes.text();
+                    console.error('Respuesta de proveedores no es JSON:', text);
+                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: La respuesta del servidor no es válida. Status: ${proveedoresRes.status}</p></div>`;
+                    return;
+                }
                 
                 if (cobrosRes.ok && proveedoresRes.ok) {
                     // Filtrar cobros previstos: pendientes y completados
-                    const todosCobrosPrevistos = cobrosData.cobros ? cobrosData.cobros.filter(c => c.es_cobro_previsto) : [];
-                    const cobrosPrevistos = todosCobrosPrevistos.filter(c => c.estado === 'pendiente');
-                    const cobrosCompletados = todosCobrosPrevistos.filter(c => c.estado === 'cobrado');
+                    // Asegurar que es_cobro_previsto sea tratado como booleano
+                    const todosCobrosPrevistos = cobrosData.cobros ? cobrosData.cobros.filter(c => {
+                        // Aceptar true, 'true', True, 1, etc.
+                        const esPrevisto = c.es_cobro_previsto === true || 
+                                          c.es_cobro_previsto === 'true' || 
+                                          c.es_cobro_previsto === 'True' ||
+                                          c.es_cobro_previsto === 1;
+                        return esPrevisto;
+                    }) : [];
+                    
+                    // Filtrar por estado (aceptar variaciones)
+                    // Cobros previstos pendientes: estado 'pendiente' o NULL/vacío
+                    // Mostrar TODOS los pendientes (desde fecha_ingreso del residente)
+                    const cobrosPrevistos = todosCobrosPrevistos.filter(c => {
+                        const estado = (c.estado || '').toLowerCase().trim();
+                        const esPendiente = estado === 'pendiente' || estado === '' || !c.estado;
+                        return esPendiente;
+                    });
+                    
+                    // Debug: mostrar información de todos los cobros previstos
+                    console.log('🔍 Debug cobros previstos:', {
+                        totalCobros: cobrosData.cobros?.length || 0,
+                        todosPrevistos: todosCobrosPrevistos.length,
+                        pendientes: cobrosPrevistos.length,
+                        detalle: todosCobrosPrevistos.map(c => ({
+                            id: c.id_pago,
+                            residente: c.residente,
+                            estado: c.estado,
+                            es_cobro_previsto: c.es_cobro_previsto,
+                            metodo_pago: c.metodo_pago,
+                            fecha_prevista: c.fecha_prevista,
+                            mes_pagado: c.mes_pagado
+                        }))
+                    });
+                    // Obtener últimos cobros completados (mensual y extra) de cada residente
+                    let cobrosCompletados = [];
+                    try {
+                        const ultimosRes = await fetch(`${API_URL}/api/v1/facturacion/cobros/ultimos-completados`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        const ultimosContentType = ultimosRes.headers.get('content-type');
+                        if (ultimosContentType && ultimosContentType.includes('application/json')) {
+                            const ultimosData = await ultimosRes.json();
+                            if (ultimosRes.ok && ultimosData.cobros) {
+                                cobrosCompletados = ultimosData.cobros;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Error al obtener últimos cobros completados:', e);
+                    }
+                    
+                    // Debug: mostrar información detallada de todos los cobros
+                    console.log('🔍 Debug completo de cobros:', {
+                        totalCobros: cobrosData.cobros?.length || 0,
+                        todosPrevistos: todosCobrosPrevistos.length,
+                        pendientes: cobrosPrevistos.length,
+                        completados: cobrosCompletados.length,
+                        todosLosPrevistos: todosCobrosPrevistos.map(c => ({
+                            id: c.id_pago,
+                            residente: c.residente,
+                            estado: c.estado,
+                            es_previsto: c.es_cobro_previsto,
+                            metodo_pago: c.metodo_pago,
+                            fecha_prevista: c.fecha_prevista,
+                            fecha_pago: c.fecha_pago,
+                            mes_pagado: c.mes_pagado
+                        })),
+                        pendientesDetalle: cobrosPrevistos.map(c => ({
+                            id: c.id_pago,
+                            residente: c.residente,
+                            estado: c.estado
+                        }))
+                    });
                     
                     let html = `
                         <div class="module-content">
-                            <h3 style="color: #667eea; margin-bottom: 20px;">💰 Facturación</h3>
+                            <h3 style="color: #667eea; margin-bottom: 20px;"><img src="/static/icons/medical/money.svg" alt="Facturación" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Facturación</h3>
                             
                             <div class="tabs-container">
                                 <div class="tabs">
-                                    <button class="tab active" onclick="switchFacturacionTab('cobros')">💵 Cobros</button>
-                                    <button class="tab" onclick="switchFacturacionTab('pagos')">🏢 Pagos a Proveedores</button>
+                                    <button class="tab active" onclick="switchFacturacionTab('cobros')"><img src="/static/icons/medical/money.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros</button>
+                                    <button class="tab" onclick="switchFacturacionTab('pagos')"><img src="/static/icons/medical/package.svg" alt="Pagos" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Pagos a Proveedores</button>
                                 </div>
                                 
                                 <!-- Pestaña de Cobros -->
                                 <div id="tabCobros" class="tab-content active">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                        <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros Previstos (${cobrosPrevistos.length})</h4>
+                                        <button class="add-btn" onclick="openModal('modalCobro')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Cobro</button>
+                                    </div>
                                     <div style="margin-bottom: 30px;">
-                                        <h4 style="color: #667eea; margin-bottom: 10px;">📋 Cobros Previstos (${cobrosPrevistos.length})</h4>
                     `;
                     
                     if (cobrosPrevistos.length > 0) {
@@ -1308,6 +1717,8 @@
                                     <tr>
                                         <th>Residente</th>
                                         <th>Monto</th>
+                                        <th>Concepto</th>
+                                        <th>Tipo Pago</th>
                                         <th>Fecha Prevista</th>
                                         <th>Estado</th>
                                         <th>Acciones</th>
@@ -1318,13 +1729,17 @@
                         
                         cobrosPrevistos.forEach(cobro => {
                             const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
+                            const concepto = cobro.concepto || '-';
+                            const tipoPago = cobro.metodo_pago || '-';
                             html += `
-                                <tr>
+                                <tr style="cursor: pointer;" onclick="editarCobro(${cobro.id_pago})" title="Haz clic para editar">
                                     <td style="color: #333;">${cobro.residente}</td>
                                     <td style="color: #333;">€${parseFloat(cobro.monto).toFixed(2)}</td>
+                                    <td style="color: #333;">${concepto}</td>
+                                    <td style="color: #333;">${tipoPago}</td>
                                     <td style="color: #333;">${fechaPrevista}</td>
                                     <td><span style="color: #ffc107; font-weight: 600;">Pendiente</span></td>
-                                    <td>
+                                    <td onclick="event.stopPropagation();">
                                         <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'cobrado')" style="padding: 4px 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Marcar como Cobrado</button>
                                     </td>
                                 </tr>
@@ -1340,7 +1755,7 @@
                                     </div>
                                     
                                     <div style="margin-bottom: 30px;">
-                                        <h4 style="color: #667eea; margin-bottom: 10px;">✅ Cobros Completados (${cobrosCompletados.length})</h4>
+                                        <h4 style="color: #667eea; margin-bottom: 10px;"><img src="/static/icons/medical/check-circle.svg" alt="Completados" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros Completados (${cobrosCompletados.length})</h4>
                     `;
                     
                     if (cobrosCompletados.length > 0) {
@@ -1350,9 +1765,12 @@
                                     <tr>
                                         <th>Residente</th>
                                         <th>Monto</th>
+                                        <th>Concepto</th>
+                                        <th>Tipo Pago</th>
                                         <th>Fecha Prevista</th>
                                         <th>Fecha de Pago</th>
                                         <th>Estado</th>
+                                        <th>Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1361,13 +1779,20 @@
                         cobrosCompletados.forEach(cobro => {
                             const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
                             const fechaPago = cobro.fecha_pago ? fechaISOToEspanol(cobro.fecha_pago) : '-';
+                            const concepto = cobro.concepto || 'Pago mensual habitación';
+                            const tipoPago = cobro.metodo_pago || '-';
                             html += `
                                 <tr>
                                     <td style="color: #333;">${cobro.residente}</td>
                                     <td style="color: #333;">€${parseFloat(cobro.monto).toFixed(2)}</td>
+                                    <td style="color: #333;">${concepto}</td>
+                                    <td style="color: #333;">${tipoPago}</td>
                                     <td style="color: #333;">${fechaPrevista}</td>
                                     <td style="color: #333;">${fechaPago}</td>
-                                    <td><span style="color: #28a745; font-weight: 600;">✅ Cobrado</span></td>
+                                    <td><span style="color: #28a745; font-weight: 600;"><img src="/static/icons/medical/check-circle.svg" alt="Cobrado" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;"> Cobrado</span></td>
+                                    <td>
+                                        <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'pendiente')" style="padding: 4px 8px; background: #ffc107; color: #333; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Revertir</button>
+                                    </td>
                                 </tr>
                             `;
                         });
@@ -1382,7 +1807,7 @@
                                     
                                     <!-- Gráfico de Estimación Mensual e Histórico -->
                                     <div style="margin-bottom: 30px; margin-top: 30px;">
-                                        <h4 style="color: #667eea; margin-bottom: 15px;">📊 Estimación Mensual e Histórico de Cobros</h4>
+                                        <h4 style="color: #667eea; margin-bottom: 15px;"><img src="/static/icons/medical/activity.svg" alt="Gráfico" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Estimación Mensual e Histórico de Cobros</h4>
                                         <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                                             <canvas id="cobrosChart" style="max-height: 400px;"></canvas>
                                         </div>
@@ -1392,7 +1817,7 @@
                                 <!-- Pestaña de Pagos a Proveedores -->
                                 <div id="tabPagos" class="tab-content">
                                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                                        <h4 style="color: #667eea; margin: 0;">🏢 Pagos a Proveedores (${proveedoresData.total || 0})</h4>
+                                        <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/package.svg" alt="Proveedores" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Pagos a Proveedores (${proveedoresData.total || 0})</h4>
                                         <div style="display: flex; gap: 10px;">
                                             <button class="add-btn" onclick="openModal('modalProveedor')" style="padding: 8px 16px; font-size: 14px; background: #6c757d;">+ Proveedor</button>
                                             <button class="add-btn" onclick="openModalProveedor()" style="padding: 8px 16px; font-size: 14px;">+ Pago Proveedor</button>
@@ -1417,7 +1842,8 @@
                         `;
                         
                         proveedoresData.pagos.forEach(pago => {
-                            const tipo = pago.es_estimacion ? '📊 Estimación' : '💰 Real';
+                            const estadoPago = (pago.estado || 'pendiente').toLowerCase();
+                            const tipo = estadoPago === 'pagado' ? '<img src="/static/icons/medical/check-circle.svg" alt="Pagado" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;"> Pagado' : '<img src="/static/icons/medical/clock.svg" alt="Pendiente" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;"> Pendiente';
                             html += `
                                 <tr>
                                     <td>${pago.proveedor}</td>
@@ -1445,17 +1871,39 @@
                     // Cargar y mostrar gráfico de cobros
                     await loadCobrosChart();
                 } else {
-                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error al cargar facturación</p></div>`;
+                    // Manejar errores específicos
+                    let errorMsg = 'Error al cargar facturación.';
+                    if (cobrosRes.status === 401 || proveedoresRes.status === 401) {
+                        errorMsg = 'Sesión expirada. Por favor, <a href="javascript:location.reload()">recarga la página</a> para iniciar sesión nuevamente.';
+                        localStorage.removeItem('violetas_token');
+                    } else {
+                        if (!cobrosRes.ok) {
+                            errorMsg += ` Error al cargar cobros (${cobrosRes.status}): ${cobrosData?.error || 'Error desconocido'}.`;
+                        }
+                        if (!proveedoresRes.ok) {
+                            errorMsg += ` Error al cargar proveedores (${proveedoresRes.status}): ${proveedoresData?.error || 'Error desconocido'}.`;
+                        }
+                    }
+                    content.innerHTML = `<div class="module-content"><p style="color: red;">${errorMsg}</p></div>`;
+                    console.error('Error al cargar facturación:', {
+                        cobros: { status: cobrosRes.status, data: cobrosData },
+                        proveedores: { status: proveedoresRes.status, data: proveedoresData }
+                    });
                 }
             } catch (error) {
-                content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}</p></div>`;
+                console.error('Error de conexión al cargar facturación:', error);
+                content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}. Verifica que el servidor esté corriendo.</p></div>`;
             }
         }
         
         async function cambiarEstadoCobro(idPago, nuevoEstado) {
             const token = localStorage.getItem('violetas_token');
             
-            if (!confirm(`¿Está seguro de marcar este cobro como "${nuevoEstado}"?`)) {
+            const mensaje = nuevoEstado === 'cobrado' 
+                ? '¿Está seguro de marcar este cobro como cobrado?'
+                : '¿Está seguro de revertir este cobro a pendiente?';
+            
+            if (!confirm(mensaje)) {
                 return;
             }
             
@@ -1470,6 +1918,9 @@
                     const hoy = new Date();
                     const fechaHoy = hoy.toISOString().split('T')[0]; // Formato YYYY-MM-DD
                     data.fecha_pago = fechaHoy;
+                } else if (nuevoEstado === 'pendiente') {
+                    // Si se revierte a pendiente, limpiar fecha de pago
+                    data.fecha_pago = null;
                 }
                 
                 const response = await fetch(`${API_URL}/api/v1/facturacion/cobros/${idPago}`, {
@@ -1494,10 +1945,521 @@
             }
         }
         
+        // Variables para flatpickr de cobros
+        let flatpickrCobroPrevista = null;
+        let flatpickrCobroPago = null;
+        
+        // Variables para flatpickr de pagos a proveedores
+        let flatpickrPagoProveedorFechaPago = null;
+        let flatpickrPagoProveedorFechaPrevista = null;
+        
+        async function loadResidentesForCobro(residenteSeleccionadoId = null) {
+            const token = localStorage.getItem('violetas_token');
+            const select = document.getElementById('cobro_id_residente');
+            
+            if (!select) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residentes`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.residentes) {
+                    select.innerHTML = '<option value="">Seleccione un residente</option>';
+                    data.residentes.forEach(res => {
+                        // Mostrar si está activo O si es el residente seleccionado (incluso si está inactivo)
+                        if (res.activo || (residenteSeleccionadoId && res.id_residente == residenteSeleccionadoId)) {
+                            const option = document.createElement('option');
+                            option.value = res.id_residente;
+                            option.textContent = `${res.nombre} ${res.apellido}${!res.activo ? ' (Inactivo)' : ''}`;
+                            
+                            // Marcar como seleccionado si coincide
+                            if (residenteSeleccionadoId && res.id_residente == residenteSeleccionadoId) {
+                                option.selected = true;
+                            }
+                            
+                            select.appendChild(option);
+                        }
+                    });
+                    
+                    // Forzar el valor del select si se proporcionó un ID
+                    if (residenteSeleccionadoId) {
+                        select.value = residenteSeleccionadoId;
+                    }
+                } else {
+                    select.innerHTML = '<option value="">Error al cargar residentes</option>';
+                }
+            } catch (error) {
+                console.error('Error al cargar residentes:', error);
+                select.innerHTML = '<option value="">Error al cargar residentes</option>';
+            }
+        }
+        
+        function initializeCobroDatePickers() {
+            const fechaPrevistaInput = document.getElementById('cobro_fecha_prevista');
+            const fechaPagoInput = document.getElementById('cobro_fecha_pago');
+            
+            // Destruir instancias anteriores
+            if (flatpickrCobroPrevista) {
+                flatpickrCobroPrevista.destroy();
+            }
+            if (flatpickrCobroPago) {
+                flatpickrCobroPago.destroy();
+            }
+            
+            // Verificar si estamos editando (hay id_pago)
+            const idPagoOculto = document.getElementById('cobro_id_pago');
+            const esEdicion = idPagoOculto && idPagoOculto.value;
+            
+            // Inicializar flatpickr para fecha prevista
+            if (fechaPrevistaInput) {
+                // NO establecer fecha prevista por defecto
+                // Solo se establece si el usuario la selecciona manualmente
+                
+                flatpickrCobroPrevista = flatpickr(fechaPrevistaInput, {
+                    dateFormat: "d/m/Y",
+                    locale: "es",
+                    allowInput: true,
+                    clickOpens: true,
+                    defaultDate: fechaPrevistaInput.value || null,
+                    onChange: function(selectedDates, dateStr, instance) {
+                        if (dateStr) {
+                            const partes = dateStr.split('/');
+                            if (partes.length === 3) {
+                                const dia = partes[0].padStart(2, '0');
+                                const mes = partes[1].padStart(2, '0');
+                                const año = partes[2];
+                                instance.input.value = `${dia}/${mes}/${año}`;
+                            }
+                        }
+                        // Si se selecciona una fecha prevista, borrar la fecha de pago automáticamente
+                        if (dateStr && fechaPagoInput && flatpickrCobroPago) {
+                            fechaPagoInput.value = '';
+                            flatpickrCobroPago.clear();
+                        }
+                    }
+                });
+            }
+            
+            // Inicializar flatpickr para fecha de pago
+            if (fechaPagoInput) {
+                // Si no tiene valor y no estamos editando, establecerlo a hoy por defecto
+                if (!fechaPagoInput.value && !esEdicion) {
+                    const hoy = new Date();
+                    const dia = String(hoy.getDate()).padStart(2, '0');
+                    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+                    const año = hoy.getFullYear();
+                    fechaPagoInput.value = `${dia}/${mes}/${año}`;
+                }
+                
+                flatpickrCobroPago = flatpickr(fechaPagoInput, {
+                    dateFormat: "d/m/Y",
+                    locale: "es",
+                    allowInput: true,
+                    clickOpens: true,
+                    maxDate: "today",
+                    defaultDate: fechaPagoInput.value || new Date(),
+                    onChange: function(selectedDates, dateStr, instance) {
+                        if (dateStr) {
+                            const partes = dateStr.split('/');
+                            if (partes.length === 3) {
+                                const dia = partes[0].padStart(2, '0');
+                                const mes = partes[1].padStart(2, '0');
+                                const año = partes[2];
+                                instance.input.value = `${dia}/${mes}/${año}`;
+                            }
+                        }
+                        // Si se selecciona una fecha de pago, borrar la fecha prevista automáticamente
+                        if (dateStr && fechaPrevistaInput && flatpickrCobroPrevista) {
+                            fechaPrevistaInput.value = '';
+                            flatpickrCobroPrevista.clear();
+                        }
+                    }
+                });
+            }
+        }
+        
+        async function saveCobro(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const saveBtn = document.getElementById('saveCobroBtn');
+            const originalText = saveBtn.textContent;
+            
+            const formData = new FormData(form);
+            const id_residente = formData.get('id_residente');
+            
+            if (!id_residente) {
+                showCobroModalError('Debe seleccionar un residente');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
+            // Convertir fechas de formato español a ISO
+            const fecha_pago_es = formData.get('fecha_pago');
+            let fecha_prevista_es = formData.get('fecha_prevista');
+            
+            // Si no hay fecha prevista, establecerla a hoy por defecto
+            if (!fecha_prevista_es) {
+                const hoy = new Date();
+                const dia = String(hoy.getDate()).padStart(2, '0');
+                const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+                const año = hoy.getFullYear();
+                fecha_prevista_es = `${dia}/${mes}/${año}`;
+                // Actualizar el campo en el formulario
+                document.getElementById('cobro_fecha_prevista').value = fecha_prevista_es;
+            }
+            
+            // Determinar si es cobro previsto: si NO tiene fecha_pago, es previsto
+            const es_cobro_previsto = !fecha_pago_es || fecha_pago_es.trim() === '';
+            
+            // Validar fechas
+            if (fecha_pago_es && !validarFechaEspanol(fecha_pago_es)) {
+                showCobroModalError('La fecha de pago no es válida. Use formato DD/MM/YYYY');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
+            if (fecha_prevista_es && !validarFechaEspanol(fecha_prevista_es)) {
+                showCobroModalError('La fecha prevista no es válida. Use formato DD/MM/YYYY');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
+            // Calcular mes_pagado desde fecha_prevista o fecha_pago
+            let mes_pagado = null;
+            if (fecha_prevista_es) {
+                const partes = fecha_prevista_es.split('/');
+                if (partes.length === 3) {
+                    mes_pagado = `${partes[2]}-${partes[1]}`;
+                }
+            } else if (fecha_pago_es) {
+                const partes = fecha_pago_es.split('/');
+                if (partes.length === 3) {
+                    mes_pagado = `${partes[2]}-${partes[1]}`;
+                }
+            }
+            
+            const data = {
+                id_residente: parseInt(id_residente),
+                monto: formData.get('monto') ? parseFloat(formData.get('monto')) : null,
+                concepto: formData.get('concepto') || null,
+                metodo_pago: formData.get('metodo_pago') || null,
+                fecha_pago: fecha_pago_es ? fechaEspanolToISO(fecha_pago_es) : null,
+                fecha_prevista: fecha_prevista_es ? fechaEspanolToISO(fecha_prevista_es) : null,
+                mes_pagado: mes_pagado,
+                es_cobro_previsto: es_cobro_previsto,  // Automático: true si no hay fecha_pago
+                estado: fecha_pago_es ? 'cobrado' : 'pendiente',
+                observaciones: formData.get('observaciones') || null
+            };
+            
+            // Limpiar valores vacíos
+            Object.keys(data).forEach(key => {
+                if (data[key] === '' || data[key] === null) {
+                    delete data[key];
+                }
+            });
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Guardando...';
+            hideCobroModalAlert();
+            
+            try {
+                const idPago = document.getElementById('cobro_id_pago').value;
+                const url = idPago 
+                    ? `${API_URL}/api/v1/facturacion/cobros/${idPago}`
+                    : `${API_URL}/api/v1/facturacion/cobros`;
+                const method = idPago ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showCobroModalSuccess(idPago ? 'Cobro actualizado exitosamente' : 'Cobro registrado exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalCobro');
+                        loadFacturacion(); // Recargar la lista
+                    }, 1500);
+                } else {
+                    showCobroModalError(result.error || 'Error al guardar el cobro');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            } catch (error) {
+                showCobroModalError('Error de conexión: ' + error.message);
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        }
+        
+        async function editarCobro(idPago) {
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/facturacion/cobros/${idPago}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const cobro = await response.json();
+                
+                if (response.ok) {
+                    // Guardar el id_residente antes de cargar los residentes
+                    const idResidenteSeleccionado = cobro.id_residente;
+                    
+                    // Cargar residentes pasando el ID seleccionado para asegurar que se seleccione
+                    await loadResidentesForCobro(idResidenteSeleccionado);
+                    
+                    // Llenar el formulario con los datos del cobro
+                    document.getElementById('cobro_id_pago').value = cobro.id_pago;
+                    
+                    // Asegurar que el valor esté establecido (redundancia por seguridad)
+                    const selectResidente = document.getElementById('cobro_id_residente');
+                    if (selectResidente) {
+                        selectResidente.value = idResidenteSeleccionado;
+                    }
+                    
+                    document.getElementById('cobro_monto').value = cobro.monto;
+                    document.getElementById('cobro_concepto').value = cobro.concepto || '';
+                    document.getElementById('cobro_metodo_pago').value = cobro.metodo_pago || '';
+                    document.getElementById('cobro_observaciones').value = cobro.observaciones || '';
+                    
+                    // Convertir fechas de ISO a formato español
+                    if (cobro.fecha_prevista) {
+                        document.getElementById('cobro_fecha_prevista').value = fechaISOToEspanol(cobro.fecha_prevista);
+                    } else {
+                        // Si no hay fecha prevista, establecerla a hoy
+                        const hoy = new Date();
+                        const dia = String(hoy.getDate()).padStart(2, '0');
+                        const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+                        const año = hoy.getFullYear();
+                        document.getElementById('cobro_fecha_prevista').value = `${dia}/${mes}/${año}`;
+                    }
+                    if (cobro.fecha_pago) {
+                        document.getElementById('cobro_fecha_pago').value = fechaISOToEspanol(cobro.fecha_pago);
+                    }
+                    
+                    // Cambiar título del modal
+                    document.getElementById('modalCobroTitulo').innerHTML = '<img src="/static/icons/medical/money.svg" alt="Cobro" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Cobro';
+                    
+                    // Abrir modal primero
+                    document.getElementById('modalCobro').style.display = 'block';
+                    
+                    // Inicializar date pickers
+                    initializeCobroDatePickers();
+                } else {
+                    alert('Error al cargar el cobro: ' + (cobro.error || 'Error desconocido'));
+                }
+            } catch (error) {
+                alert('Error de conexión: ' + error.message);
+            }
+        }
+        
+        function showCobroModalError(message) {
+            const alert = document.getElementById('modalCobroAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function showCobroModalSuccess(message) {
+            const alert = document.getElementById('modalCobroAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function hideCobroModalAlert() {
+            const alert = document.getElementById('modalCobroAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
+        
         async function openModalProveedor() {
             // Cargar proveedores antes de abrir el modal
             await loadProveedoresForSelect();
             openModal('modalPagoProveedor');
+            // Inicializar date pickers
+            initializePagoProveedorDatePickers();
+        }
+        
+        function initializePagoProveedorDatePickers() {
+            const fechaPagoInput = document.getElementById('pago_fecha_pago');
+            const fechaPrevistaInput = document.getElementById('pago_fecha_prevista');
+            
+            // Destruir instancias anteriores
+            if (flatpickrPagoProveedorFechaPago) {
+                flatpickrPagoProveedorFechaPago.destroy();
+            }
+            if (flatpickrPagoProveedorFechaPrevista) {
+                flatpickrPagoProveedorFechaPrevista.destroy();
+            }
+            
+            // Inicializar flatpickr para fecha de pago
+            if (fechaPagoInput) {
+                // Establecer fecha de hoy por defecto si no tiene valor
+                if (!fechaPagoInput.value) {
+                    const hoy = new Date();
+                    const dia = String(hoy.getDate()).padStart(2, '0');
+                    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+                    const año = hoy.getFullYear();
+                    fechaPagoInput.value = `${dia}/${mes}/${año}`;
+                }
+                
+                flatpickrPagoProveedorFechaPago = flatpickr(fechaPagoInput, {
+                    dateFormat: "d/m/Y",
+                    locale: "es",
+                    allowInput: true,
+                    clickOpens: true,
+                    maxDate: "today",
+                    defaultDate: "today",
+                    onChange: function(selectedDates, dateStr, instance) {
+                        if (dateStr) {
+                            const partes = dateStr.split('/');
+                            if (partes.length === 3) {
+                                const dia = partes[0].padStart(2, '0');
+                                const mes = partes[1].padStart(2, '0');
+                                const año = partes[2];
+                                instance.input.value = `${dia}/${mes}/${año}`;
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Inicializar flatpickr para fecha prevista
+            if (fechaPrevistaInput) {
+                flatpickrPagoProveedorFechaPrevista = flatpickr(fechaPrevistaInput, {
+                    dateFormat: "d/m/Y",
+                    locale: "es",
+                    allowInput: true,
+                    clickOpens: true,
+                    onChange: function(selectedDates, dateStr, instance) {
+                        if (dateStr) {
+                            const partes = dateStr.split('/');
+                            if (partes.length === 3) {
+                                const dia = partes[0].padStart(2, '0');
+                                const mes = partes[1].padStart(2, '0');
+                                const año = partes[2];
+                                instance.input.value = `${dia}/${mes}/${año}`;
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Función para abrir el modal de dar de baja
+        function abrirModalBaja(idResidente) {
+            document.getElementById('baja_id_residente').value = idResidente;
+            document.getElementById('baja_motivo').value = '';
+            document.getElementById('baja_observaciones').value = '';
+            document.getElementById('modalBajaAlert').style.display = 'none';
+            openModal('modalBajaResidente');
+        }
+        
+        // Función para confirmar la baja de un residente
+        async function confirmarBajaResidente(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const confirmarBtn = document.getElementById('confirmarBajaBtn');
+            const originalText = confirmarBtn.textContent;
+            
+            const formData = new FormData(form);
+            const idResidente = formData.get('id_residente');
+            const motivoBaja = formData.get('motivo_baja');
+            const observaciones = formData.get('observaciones');
+            
+            if (!motivoBaja) {
+                showBajaModalError('Debe seleccionar un motivo de baja');
+                return;
+            }
+            
+            confirmarBtn.disabled = true;
+            confirmarBtn.textContent = 'Procesando...';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residentes/${idResidente}/baja`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        motivo_baja: motivoBaja,
+                        observaciones: observaciones || null
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showBajaModalSuccess('Residente dado de baja exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalBajaResidente');
+                        closeModal('modalViewResidente');
+                        loadResidentes(); // Recargar la lista
+                    }, 1500);
+                } else {
+                    showBajaModalError(result.error || 'Error al dar de baja al residente');
+                    confirmarBtn.disabled = false;
+                    confirmarBtn.textContent = originalText;
+                }
+            } catch (error) {
+                showBajaModalError('Error de conexión: ' + error.message);
+                confirmarBtn.disabled = false;
+                confirmarBtn.textContent = originalText;
+            }
+        }
+        
+        // Funciones para mostrar/ocultar alertas en el modal de baja
+        function showBajaModalError(message) {
+            const alert = document.getElementById('modalBajaAlert');
+            alert.className = 'alert error';
+            alert.textContent = message;
+            alert.style.display = 'block';
+        }
+        
+        function showBajaModalSuccess(message) {
+            const alert = document.getElementById('modalBajaAlert');
+            alert.className = 'alert success';
+            alert.textContent = message;
+            alert.style.display = 'block';
+        }
+        
+        function hideBajaModalAlert() {
+            document.getElementById('modalBajaAlert').style.display = 'none';
+        }
+        
+        function openModalProveedorNuevo() {
+            // Abrir modal de nuevo proveedor
+            event.stopPropagation();
+            event.preventDefault();
+            openModal('modalProveedor');
         }
 
         async function loadProveedoresForSelect() {
@@ -1513,7 +2475,16 @@
                     }
                 });
                 
-                const data = await response.json();
+                const contentType = response.headers.get('content-type');
+                let data;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    console.error('Respuesta de proveedores no es JSON');
+                    select.innerHTML = '<option value="">Error al cargar proveedores</option>';
+                    return;
+                }
                 
                 if (response.ok && data.proveedores) {
                     select.innerHTML = '<option value="">Seleccione un proveedor</option>';
@@ -1522,9 +2493,12 @@
                     });
                 } else {
                     select.innerHTML = '<option value="">No hay proveedores disponibles</option>';
+                    if (!response.ok) {
+                        console.error('Error al cargar proveedores:', response.status, data.error);
+                    }
                 }
             } catch (error) {
-                console.error('Error al cargar proveedores:', error);
+                console.error('Error de conexión al cargar proveedores:', error);
                 select.innerHTML = '<option value="">Error al cargar proveedores</option>';
             }
         }
@@ -1577,11 +2551,18 @@
                 
                 if (response.ok) {
                     showProveedorModalSuccess('Proveedor agregado exitosamente');
+                    // Guardar si el modal de pago estaba abierto antes de abrir el de proveedor
+                    const modalPagoEstabaAbierto = sessionStorage.getItem('modalPagoAbierto') === 'true';
+                    
                     setTimeout(() => {
                         closeModal('modalProveedor');
-                        // Recargar el select de proveedores si el modal de pago está abierto
-                        if (document.getElementById('modalPagoProveedor').style.display === 'block') {
-                            loadProveedoresForSelect();
+                        // Si el modal de pago estaba abierto, volver a abrirlo y recargar proveedores
+                        if (modalPagoEstabaAbierto) {
+                            setTimeout(async () => {
+                                await loadProveedoresForSelect();
+                                openModal('modalPagoProveedor');
+                                sessionStorage.removeItem('modalPagoAbierto');
+                            }, 100);
                         }
                     }, 1500);
                 } else {
@@ -1606,7 +2587,6 @@
             
             const formData = new FormData(form);
             const id_proveedor = formData.get('id_proveedor');
-            const es_estimacion = document.getElementById('pago_es_estimacion').checked;
             
             if (!id_proveedor) {
                 showPagoProveedorModalError('Debe seleccionar un proveedor');
@@ -1638,6 +2618,15 @@
                 return;
             }
             
+            // Calcular estado automáticamente basado en las fechas
+            // Si tiene fecha_pago → pagado, si tiene fecha_prevista → pendiente
+            let estado = 'pendiente';
+            if (fecha_pago_es) {
+                estado = 'pagado';
+            } else if (fecha_prevista_es) {
+                estado = 'pendiente';
+            }
+            
             const data = {
                 proveedor: nombreProveedor, // Por ahora usamos el nombre, luego podemos usar id_proveedor
                 concepto: formData.get('concepto'),
@@ -1646,17 +2635,9 @@
                 fecha_prevista: fecha_prevista_es ? fechaEspanolToISO(fecha_prevista_es) : null,
                 metodo_pago: formData.get('metodo_pago') || null,
                 numero_factura: formData.get('numero_factura') || null,
-                estado: formData.get('estado') || 'pendiente',
-                es_estimacion: es_estimacion,
-                frecuencia_pago: formData.get('frecuencia_pago') || null,
-                monto_estimado: formData.get('monto_estimado') ? parseFloat(formData.get('monto_estimado')) : null,
+                estado: estado, // Calculado automáticamente
                 observaciones: formData.get('observaciones') || null
             };
-            
-            // Si es estimación y no hay monto, usar monto_estimado
-            if (es_estimacion && !data.monto && data.monto_estimado) {
-                data.monto = data.monto_estimado;
-            }
             
             // Limpiar valores vacíos
             Object.keys(data).forEach(key => {
@@ -1935,16 +2916,28 @@
             }
         }
 
-        // Mostrar/ocultar campos de estimación
+        // Event listeners para el DOM
         document.addEventListener('DOMContentLoaded', function() {
-            const esEstimacionCheckbox = document.getElementById('pago_es_estimacion');
-            const estimacionFields = document.getElementById('estimacionFields');
             
-            if (esEstimacionCheckbox && estimacionFields) {
-                esEstimacionCheckbox.addEventListener('change', function() {
-                    estimacionFields.style.display = this.checked ? 'block' : 'none';
-                });
-            }
+            // Event delegation para el botón de nuevo proveedor (funciona incluso si se carga dinámicamente)
+            document.addEventListener('click', function(e) {
+                if (e.target && e.target.id === 'btnNuevoProveedor') {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    // Guardar que el modal de pago estaba abierto
+                    const modalPago = document.getElementById('modalPagoProveedor');
+                    if (modalPago && modalPago.style.display === 'block') {
+                        sessionStorage.setItem('modalPagoAbierto', 'true');
+                    }
+                    // Cerrar el modal de pago a proveedor primero
+                    closeModal('modalPagoProveedor');
+                    // Abrir el modal de nuevo proveedor después de un pequeño delay
+                    setTimeout(() => {
+                        openModal('modalProveedor');
+                    }, 100);
+                    return false;
+                }
+            });
         });
 
         async function loadPersonal() {
@@ -1967,13 +2960,24 @@
                     }
                 });
                 
-                const data = await response.json();
+                // Verificar el tipo de contenido antes de parsear
+                const contentType = response.headers.get('content-type');
+                let data;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    console.error('Respuesta no es JSON:', text);
+                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: La respuesta del servidor no es válida. Status: ${response.status}</p></div>`;
+                    return;
+                }
                 
                 if (response.ok) {
                     let html = `
                         <div class="module-content">
-                            <h3 style="color: #667eea; margin-bottom: 15px;">👔 Personal (${data.total})</h3>
-                            <button class="add-btn" onclick="alert('Función de agregar personal próximamente')">+ Agregar Personal</button>
+                            <h3 style="color: #667eea; margin-bottom: 15px;"><img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Personal (${data.total || 0})</h3>
+                            <button class="add-btn" onclick="alert('Función de agregar personal próximamente')" style="display: inline-flex; align-items: center; gap: 6px;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Personal</button>
                     `;
                     
                     if (data.personal && data.personal.length > 0) {
@@ -1996,7 +3000,7 @@
                                     <td>${p.nombre} ${p.apellido}</td>
                                     <td>${p.cargo || '-'}</td>
                                     <td>${p.telefono || '-'}</td>
-                                    <td>${p.activo ? '✅ Activo' : '❌ Inactivo'}</td>
+                                    <td>${p.activo ? '<img src="/static/icons/medical/check-circle.svg" alt="Activo" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;"> Activo' : '<img src="/static/icons/medical/alert-circle.svg" alt="Inactivo" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;"> Inactivo'}</td>
                                 </tr>
                             `;
                         });
@@ -2009,42 +3013,189 @@
                     html += '</div>';
                     content.innerHTML = html;
                 } else {
-                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: ${data.error}</p></div>`;
+                    // Manejar errores de autenticación
+                    if (response.status === 401) {
+                        content.innerHTML = `<div class="module-content"><p style="color: red;">Error: Sesión expirada. Por favor, <a href="javascript:location.reload()">recarga la página</a> para iniciar sesión nuevamente.</p></div>`;
+                        localStorage.removeItem('violetas_token');
+                    } else {
+                        content.innerHTML = `<div class="module-content"><p style="color: red;">Error (${response.status}): ${data.error || 'Error desconocido'}</p></div>`;
+                    }
+                    console.error('Error al cargar personal:', response.status, data);
                 }
             } catch (error) {
-                content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}</p></div>`;
+                console.error('Error de conexión al cargar personal:', error);
+                content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}. Verifica que el servidor esté corriendo.</p></div>`;
             }
         }
 
-        function openModal(modalId) {
+        // Variables para almacenar instancias de flatpickr
+        let flatpickrIngreso = null;
+        let flatpickrNacimiento = null;
+        let flatpickrEditIngreso = null;
+        let flatpickrEditNacimiento = null;
+
+        async function openModal(modalId) {
             document.getElementById(modalId).style.display = 'block';
+            
+            // Si es el modal de agregar cobro, cargar residentes (solo si no estamos editando)
+            if (modalId === 'modalCobro') {
+                const idPagoOculto = document.getElementById('cobro_id_pago');
+                // Solo cargar residentes si no hay id_pago (no estamos editando)
+                if (!idPagoOculto || !idPagoOculto.value) {
+                    loadResidentesForCobro();
+                    initializeCobroDatePickers();
+                }
+            }
+            
+            // Si es el modal de pago a proveedor, inicializar date pickers
+            if (modalId === 'modalPagoProveedor') {
+                initializePagoProveedorDatePickers();
+            }
             
             // Si es el modal de agregar residente, establecer residencia por defecto según el token
             if (modalId === 'modalResidente') {
                 const token = localStorage.getItem('violetas_token');
+                const selectResidencia = document.getElementById('res_id_residencia');
+                const selectHabitacion = document.getElementById('res_habitacion');
+                
                 if (token) {
                     try {
                         const payload = JSON.parse(atob(token.split('.')[1]));
                         const residenciaId = payload.id_residencia;
-                        const selectResidencia = document.getElementById('res_id_residencia');
                         if (selectResidencia) {
                             selectResidencia.value = residenciaId; // Establecer como valor por defecto
+                            // Actualizar habitaciones según la residencia
+                            await actualizarHabitaciones(residenciaId, 'res_habitacion');
                         }
                     } catch (e) {
                         console.error('Error al obtener residencia del token:', e);
                     }
+                }
+                
+                // Añadir event listener para cuando cambie la residencia
+                if (selectResidencia) {
+                    selectResidencia.addEventListener('change', async function() {
+                        await actualizarHabitaciones(this.value, 'res_habitacion');
+                    });
+                }
+                
+                // Inicializar calendarios con flatpickr
+                const fechaIngresoInput = document.getElementById('res_fecha_ingreso');
+                const fechaNacimientoInput = document.getElementById('res_fecha_nacimiento');
+                
+                // Destruir instancias anteriores si existen
+                if (flatpickrIngreso) {
+                    flatpickrIngreso.destroy();
+                }
+                if (flatpickrNacimiento) {
+                    flatpickrNacimiento.destroy();
+                }
+                
+                // Inicializar flatpickr para fecha de ingreso
+                if (fechaIngresoInput) {
+                    // Establecer fecha de hoy por defecto
+                    const hoy = new Date();
+                    const dia = String(hoy.getDate()).padStart(2, '0');
+                    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+                    const año = hoy.getFullYear();
+                    const fechaHoy = `${dia}/${mes}/${año}`;
+                    
+                    if (!fechaIngresoInput.value) {
+                        fechaIngresoInput.value = fechaHoy;
+                    }
+                    
+                    flatpickrIngreso = flatpickr(fechaIngresoInput, {
+                        dateFormat: "d/m/Y",
+                        locale: "es",
+                        allowInput: true,
+                        clickOpens: true,
+                        maxDate: "today", // La fecha de ingreso no puede ser mayor que hoy
+                        onChange: function(selectedDates, dateStr, instance) {
+                            // Asegurar formato DD/MM/YYYY
+                            if (dateStr) {
+                                const partes = dateStr.split('/');
+                                if (partes.length === 3) {
+                                    const dia = partes[0].padStart(2, '0');
+                                    const mes = partes[1].padStart(2, '0');
+                                    const año = partes[2];
+                                    instance.input.value = `${dia}/${mes}/${año}`;
+                                }
+                            }
+                        }
+                    });
+                }
+                
+                // Inicializar flatpickr para fecha de nacimiento
+                if (fechaNacimientoInput) {
+                    flatpickrNacimiento = flatpickr(fechaNacimientoInput, {
+                        dateFormat: "d/m/Y",
+                        locale: "es",
+                        allowInput: true,
+                        clickOpens: true,
+                        maxDate: "today", // No permitir fechas futuras
+                        onChange: function(selectedDates, dateStr, instance) {
+                            // Asegurar formato DD/MM/YYYY
+                            if (dateStr) {
+                                const partes = dateStr.split('/');
+                                if (partes.length === 3) {
+                                    const dia = partes[0].padStart(2, '0');
+                                    const mes = partes[1].padStart(2, '0');
+                                    const año = partes[2];
+                                    instance.input.value = `${dia}/${mes}/${año}`;
+                                }
+                            }
+                            // Actualizar edad cuando cambia la fecha
+                            actualizarEdad('res_fecha_nacimiento', 'res_edad');
+                        }
+                    });
                 }
             }
         }
 
         function closeModal(modalId) {
             document.getElementById(modalId).style.display = 'none';
+            
+            // Restaurar título del modal de ver residente
+            if (modalId === 'modalViewResidente') {
+                const modalTitle = document.querySelector('#modalViewResidente .modal-header h2');
+                if (modalTitle) {
+                    modalTitle.innerHTML = '<img src="/static/icons/medical/user-medical.svg" alt="Usuario" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Detalle del Residente';
+                }
+            }
             const form = document.getElementById('formResidente');
             if (form) {
                 form.reset();
                 const activoCheckbox = document.getElementById('res_activo');
                 if (activoCheckbox) {
                     activoCheckbox.checked = true;
+                }
+                
+                // Destruir instancias de flatpickr
+                if (flatpickrIngreso) {
+                    flatpickrIngreso.destroy();
+                    flatpickrIngreso = null;
+                }
+                if (flatpickrNacimiento) {
+                    flatpickrNacimiento.destroy();
+                    flatpickrNacimiento = null;
+                }
+                if (flatpickrEditIngreso) {
+                    flatpickrEditIngreso.destroy();
+                    flatpickrEditIngreso = null;
+                }
+                if (flatpickrEditNacimiento) {
+                    flatpickrEditNacimiento.destroy();
+                    flatpickrEditNacimiento = null;
+                }
+                
+                // Establecer fecha de ingreso como hoy después del reset
+                const fechaIngresoInput = document.getElementById('res_fecha_ingreso');
+                if (fechaIngresoInput) {
+                    const hoy = new Date();
+                    const dia = String(hoy.getDate()).padStart(2, '0');
+                    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+                    const año = hoy.getFullYear();
+                    fechaIngresoInput.value = `${dia}/${mes}/${año}`;
                 }
             }
             const formProveedor = document.getElementById('formProveedor');
@@ -2058,14 +3209,40 @@
             const formPagoProveedor = document.getElementById('formPagoProveedor');
             if (formPagoProveedor) {
                 formPagoProveedor.reset();
-                const esEstimacion = document.getElementById('pago_es_estimacion');
-                if (esEstimacion) {
-                    esEstimacion.checked = false;
-                    document.getElementById('estimacionFields').style.display = 'none';
+                // Destruir flatpickr de pagos a proveedores
+                if (flatpickrPagoProveedorFechaPago) {
+                    flatpickrPagoProveedorFechaPago.destroy();
+                    flatpickrPagoProveedorFechaPago = null;
+                }
+                if (flatpickrPagoProveedorFechaPrevista) {
+                    flatpickrPagoProveedorFechaPrevista.destroy();
+                    flatpickrPagoProveedorFechaPrevista = null;
+                }
+            }
+            const formCobro = document.getElementById('formCobro');
+            if (formCobro) {
+                formCobro.reset();
+                // Limpiar id_pago oculto
+                document.getElementById('cobro_id_pago').value = '';
+                // Restaurar título del modal
+                document.getElementById('modalCobroTitulo').innerHTML = '<img src="/static/icons/medical/money.svg" alt="Cobro" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Cobro';
+                const esPrevisto = document.getElementById('cobro_es_previsto');
+                if (esPrevisto) {
+                    esPrevisto.checked = true;
+                }
+                // Destruir flatpickr de cobros
+                if (flatpickrCobroPrevista) {
+                    flatpickrCobroPrevista.destroy();
+                    flatpickrCobroPrevista = null;
+                }
+                if (flatpickrCobroPago) {
+                    flatpickrCobroPago.destroy();
+                    flatpickrCobroPago = null;
                 }
             }
             hideModalAlert();
             hideProveedorModalAlert();
+            hideCobroModalAlert();
             hidePagoProveedorModalAlert();
         }
 
@@ -2133,6 +3310,145 @@
                 return fechaISO;
             } catch (e) {
                 return fechaISO;
+            }
+        }
+
+        // Función para actualizar las opciones de habitación según la residencia
+        async function actualizarHabitaciones(residenciaId, selectHabitacionId, habitacionSeleccionada = null) {
+            const selectHabitacion = document.getElementById(selectHabitacionId);
+            if (!selectHabitacion) return;
+            
+            // Limpiar opciones existentes excepto la primera
+            selectHabitacion.innerHTML = '<option value="">Cargando habitaciones...</option>';
+            selectHabitacion.disabled = true;
+            
+            if (!residenciaId) {
+                selectHabitacion.innerHTML = '<option value="">Seleccione una residencia primero</option>';
+                selectHabitacion.disabled = false;
+                return;
+            }
+            
+            // Determinar número de habitaciones según la residencia
+            let numHabitaciones = 0;
+            if (residenciaId === '1' || residenciaId === 1) {
+                numHabitaciones = 8; // Violetas 1 tiene 8 habitaciones
+            } else if (residenciaId === '2' || residenciaId === 2) {
+                numHabitaciones = 20; // Violetas 2 tiene 20 habitaciones
+            } else {
+                selectHabitacion.innerHTML = '<option value="">Residencia no válida</option>';
+                selectHabitacion.disabled = false;
+                return;
+            }
+            
+            // Obtener habitaciones ocupadas del backend
+            const token = localStorage.getItem('violetas_token');
+            let habitacionesOcupadas = [];
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residencias/${residenciaId}/habitaciones-ocupadas`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    habitacionesOcupadas = data.habitaciones_ocupadas || [];
+                }
+            } catch (error) {
+                console.error('Error al obtener habitaciones ocupadas:', error);
+            }
+            
+            // Limpiar y reconstruir el select
+            selectHabitacion.innerHTML = '<option value="">Seleccione una habitación</option>';
+            
+            // Añadir opciones de habitaciones disponibles
+            for (let i = 1; i <= numHabitaciones; i++) {
+                const habitacionStr = i.toString();
+                const estaOcupada = habitacionesOcupadas.includes(habitacionStr);
+                
+                // Si está ocupada pero es la habitación seleccionada (al editar), incluirla
+                const esHabitacionSeleccionada = habitacionSeleccionada && habitacionSeleccionada === habitacionStr;
+                
+                if (!estaOcupada || esHabitacionSeleccionada) {
+                    const option = document.createElement('option');
+                    option.value = habitacionStr;
+                    option.textContent = `Habitación ${i}${estaOcupada && esHabitacionSeleccionada ? ' (actual)' : ''}`;
+                    if (esHabitacionSeleccionada) {
+                        option.selected = true;
+                    }
+                    selectHabitacion.appendChild(option);
+                }
+            }
+            
+            selectHabitacion.disabled = false;
+        }
+        
+        // Función para calcular la edad desde una fecha en formato DD/MM/YYYY
+        function calcularEdad(fechaEspanol) {
+            if (!fechaEspanol || fechaEspanol.length !== 10) return '';
+            
+            try {
+                const partes = fechaEspanol.split('/');
+                if (partes.length !== 3) return '';
+                
+                const dia = parseInt(partes[0], 10);
+                const mes = parseInt(partes[1], 10) - 1; // Los meses en JS van de 0-11
+                const año = parseInt(partes[2], 10);
+                
+                if (isNaN(dia) || isNaN(mes) || isNaN(año)) return '';
+                
+                const fechaNacimiento = new Date(año, mes, dia);
+                const hoy = new Date();
+                
+                // Verificar que la fecha es válida
+                if (fechaNacimiento.getDate() !== dia || fechaNacimiento.getMonth() !== mes || fechaNacimiento.getFullYear() !== año) {
+                    return '';
+                }
+                
+                // Verificar que la fecha no sea futura
+                if (fechaNacimiento > hoy) return '';
+                
+                let edad = hoy.getFullYear() - fechaNacimiento.getFullYear();
+                const mesActual = hoy.getMonth();
+                const diaActual = hoy.getDate();
+                const mesNacimiento = fechaNacimiento.getMonth();
+                const diaNacimiento = fechaNacimiento.getDate();
+                
+                // Ajustar si aún no ha cumplido años este año
+                if (mesActual < mesNacimiento || (mesActual === mesNacimiento && diaActual < diaNacimiento)) {
+                    edad--;
+                }
+                
+                return edad >= 0 ? edad + ' años' : '';
+            } catch (e) {
+                return '';
+            }
+        }
+        
+        // Función para calcular la edad desde una fecha ISO (YYYY-MM-DD)
+        function calcularEdadDesdeISO(fechaISO) {
+            if (!fechaISO) return '';
+            const fechaEspanol = fechaISOToEspanol(fechaISO);
+            return calcularEdad(fechaEspanol);
+        }
+        
+        // Función para actualizar el campo de edad cuando cambia la fecha de nacimiento
+        function actualizarEdad(inputFechaId, inputEdadId) {
+            const inputFecha = document.getElementById(inputFechaId);
+            const inputEdad = document.getElementById(inputEdadId);
+            
+            if (!inputFecha || !inputEdad) return;
+            
+            const fechaEspanol = inputFecha.value.trim();
+            const edad = calcularEdad(fechaEspanol);
+            
+            if (edad) {
+                inputEdad.value = edad;
+                inputEdad.style.color = '#333';
+            } else {
+                inputEdad.value = '';
+                inputEdad.placeholder = 'Se calculará automáticamente';
             }
         }
 
@@ -2206,6 +3522,13 @@
                 if (response.ok) {
                     currentEditingResidenteId = idResidente;
                     
+                    // Actualizar el título del modal con el nombre del residente
+                    const modalTitle = document.querySelector('#modalViewResidente .modal-header h2');
+                    if (modalTitle) {
+                        const nombreCompleto = `${res.nombre || ''} ${res.apellido || ''}`.trim();
+                        modalTitle.innerHTML = `<img src="/static/icons/medical/user-medical.svg" alt="Usuario" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Detalle del Residente${nombreCompleto ? ': ' + nombreCompleto : ''}`;
+                    }
+                    
                     // Obtener nombre de residencia
                     const tokenPayload = JSON.parse(atob(token.split('.')[1]));
                     const residenciaNombre = tokenPayload.id_residencia === 1 ? 'Violetas 1' : 
@@ -2217,7 +3540,7 @@
                             
                             <!-- SECCIÓN: Información de Residencia -->
                             <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
-                                <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">🏠 Información de Residencia</h3>
+                                <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/home.svg" alt="Residencia" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información de Residencia</h3>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                                     <div class="form-group">
                                         <label for="edit_id_residencia">Residencia *</label>
@@ -2228,13 +3551,15 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="edit_habitacion">Habitación *</label>
-                                        <input type="text" id="edit_habitacion" name="habitacion" value="${res.habitacion || ''}" required>
+                                        <select id="edit_habitacion" name="habitacion" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                            <option value="">Seleccione una habitación</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                                     <div class="form-group">
                                         <label for="edit_fecha_ingreso">Fecha de Ingreso</label>
-                                        <input type="text" id="edit_fecha_ingreso" name="fecha_ingreso" value="${res.fecha_ingreso ? fechaISOToEspanol(res.fecha_ingreso) : ''}" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                                        <input type="text" id="edit_fecha_ingreso" name="fecha_ingreso" value="${res.fecha_ingreso ? fechaISOToEspanol(res.fecha_ingreso) : ''}" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)" readonly style="cursor: pointer; background-color: white;">
                                     </div>
                                     <div class="form-group">
                                         <label for="edit_costo_habitacion">Costo de Habitación (€)</label>
@@ -2258,7 +3583,7 @@
                             
                             <!-- SECCIÓN: Información Personal -->
                             <div style="background: #fff5f5; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #f56565;">
-                                <h3 style="color: #f56565; margin-bottom: 15px; font-size: 18px;">👤 Información Personal</h3>
+                                <h3 style="color: #f56565; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/user-medical.svg" alt="Usuario" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información Personal</h3>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                                     <div class="form-group">
                                         <label for="edit_nombre">Nombre *</label>
@@ -2276,14 +3601,18 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="edit_fecha_nacimiento">Fecha de Nacimiento</label>
-                                        <input type="text" id="edit_fecha_nacimiento" name="fecha_nacimiento" value="${res.fecha_nacimiento ? fechaISOToEspanol(res.fecha_nacimiento) : ''}" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)">
+                                        <input type="text" id="edit_fecha_nacimiento" name="fecha_nacimiento" value="${res.fecha_nacimiento ? fechaISOToEspanol(res.fecha_nacimiento) : ''}" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this); actualizarEdad('edit_fecha_nacimiento', 'edit_edad')" readonly style="cursor: pointer; background-color: white;">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_edad">Edad</label>
+                                        <input type="text" id="edit_edad" name="edad" readonly style="background-color: #f5f5f5; color: #666; cursor: not-allowed;" placeholder="Se calculará automáticamente" value="${res.fecha_nacimiento ? calcularEdadDesdeISO(res.fecha_nacimiento) : ''}">
                                     </div>
                                 </div>
                             </div>
                             
                             <!-- SECCIÓN: Información de Contacto -->
                             <div style="background: #f0fff4; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #48bb78;">
-                                <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;">📞 Información de Contacto</h3>
+                                <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/phone.svg" alt="Contacto" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información de Contacto</h3>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                                     <div class="form-group">
                                         <label for="edit_telefono">Teléfono</label>
@@ -2311,15 +3640,107 @@
                             
                             <!-- SECCIÓN: Información Médica y Servicios -->
                             <div style="background: #fffaf0; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ed8936;">
-                                <h3 style="color: #ed8936; margin-bottom: 15px; font-size: 18px;">🏥 Información Médica y Servicios</h3>
-                                <div class="form-group">
+                                <h3 style="color: #ed8936; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Información Médica" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información Médica y Servicios</h3>
+                                
+                                <!-- Datos Médicos Esenciales -->
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                                    <div class="form-group">
+                                        <label for="edit_grupo_sanguineo">Grupo Sanguíneo</label>
+                                        <select id="edit_grupo_sanguineo" name="grupo_sanguineo" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                            <option value="">Seleccione</option>
+                                            <option value="A+" ${res.grupo_sanguineo === 'A+' ? 'selected' : ''}>A+</option>
+                                            <option value="A-" ${res.grupo_sanguineo === 'A-' ? 'selected' : ''}>A-</option>
+                                            <option value="B+" ${res.grupo_sanguineo === 'B+' ? 'selected' : ''}>B+</option>
+                                            <option value="B-" ${res.grupo_sanguineo === 'B-' ? 'selected' : ''}>B-</option>
+                                            <option value="AB+" ${res.grupo_sanguineo === 'AB+' ? 'selected' : ''}>AB+</option>
+                                            <option value="AB-" ${res.grupo_sanguineo === 'AB-' ? 'selected' : ''}>AB-</option>
+                                            <option value="O+" ${res.grupo_sanguineo === 'O+' ? 'selected' : ''}>O+</option>
+                                            <option value="O-" ${res.grupo_sanguineo === 'O-' ? 'selected' : ''}>O-</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_nivel_dependencia">Nivel de Dependencia</label>
+                                        <select id="edit_nivel_dependencia" name="nivel_dependencia" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                            <option value="">Seleccione</option>
+                                            <option value="Autónomo" ${res.nivel_dependencia === 'Autónomo' ? 'selected' : ''}>Autónomo</option>
+                                            <option value="Dependencia leve" ${res.nivel_dependencia === 'Dependencia leve' ? 'selected' : ''}>Dependencia leve</option>
+                                            <option value="Dependencia moderada" ${res.nivel_dependencia === 'Dependencia moderada' ? 'selected' : ''}>Dependencia moderada</option>
+                                            <option value="Dependencia severa" ${res.nivel_dependencia === 'Dependencia severa' ? 'selected' : ''}>Dependencia severa</option>
+                                            <option value="Gran dependencia" ${res.nivel_dependencia === 'Gran dependencia' ? 'selected' : ''}>Gran dependencia</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                                    <div class="form-group">
+                                        <label for="edit_alergias">Alergias</label>
+                                        <textarea id="edit_alergias" name="alergias" rows="2" placeholder="Ej: Penicilina, Lácteos, Polen">${res.alergias || ''}</textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_diagnosticos">Enfermedades Crónicas / Diagnósticos</label>
+                                        <textarea id="edit_diagnosticos" name="diagnosticos" rows="2" placeholder="Ej: Diabetes tipo 2, Hipertensión, Artritis">${res.diagnosticos || ''}</textarea>
+                                    </div>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                                    <div class="form-group">
+                                        <label for="edit_restricciones_dieteticas">Restricciones Dietéticas</label>
+                                        <textarea id="edit_restricciones_dieteticas" name="restricciones_dieteticas" rows="2" placeholder="Ej: Sin sal, Textura triturada, Sin gluten">${res.restricciones_dieteticas || ''}</textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_movilidad">Movilidad / Ayudas Técnicas</label>
+                                        <select id="edit_movilidad" name="movilidad" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                                            <option value="">Seleccione</option>
+                                            <option value="Deambulación autónoma" ${res.movilidad === 'Deambulación autónoma' ? 'selected' : ''}>Deambulación autónoma</option>
+                                            <option value="Bastón" ${res.movilidad === 'Bastón' ? 'selected' : ''}>Bastón</option>
+                                            <option value="Andador" ${res.movilidad === 'Andador' ? 'selected' : ''}>Andador</option>
+                                            <option value="Silla de ruedas" ${res.movilidad === 'Silla de ruedas' ? 'selected' : ''}>Silla de ruedas</option>
+                                            <option value="Cama" ${res.movilidad === 'Cama' ? 'selected' : ''}>Cama</option>
+                                            <option value="Otro" ${res.movilidad && !['Deambulación autónoma', 'Bastón', 'Andador', 'Silla de ruedas', 'Cama'].includes(res.movilidad) ? 'selected' : ''}>Otro</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                                    <div class="form-group">
+                                        <label for="edit_medico_referencia">Médico de Referencia</label>
+                                        <input type="text" id="edit_medico_referencia" name="medico_referencia" value="${res.medico_referencia || ''}" placeholder="Nombre del médico o centro de salud">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="edit_telefono_medico">Teléfono Médico</label>
+                                        <input type="text" id="edit_telefono_medico" name="telefono_medico" value="${res.telefono_medico || ''}" placeholder="Teléfono del médico o centro">
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group" style="margin-top: 15px;">
                                     <label for="edit_medicaciones">Medicaciones</label>
                                     <textarea id="edit_medicaciones" name="medicaciones" rows="3" placeholder="Lista de medicaciones y horarios">${res.medicaciones || ''}</textarea>
                                 </div>
+                                
                                 <div class="form-group" style="margin-top: 15px;">
                                     <label for="edit_servicios_extra">Servicios Extra</label>
-                                    <textarea id="edit_servicios_extra" name="servicios_extra" rows="3" placeholder="Ej: Lavandería, Peluquería, etc.">${res.servicios_extra || ''}</textarea>
+                                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px;">
+                                        <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
+                                            <input type="checkbox" class="edit_servicio_extra" value="Peluquería" style="width: auto; margin-right: 8px;">
+                                            Peluquería
+                                        </label>
+                                        <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
+                                            <input type="checkbox" class="edit_servicio_extra" value="Podólogo" style="width: auto; margin-right: 8px;">
+                                            Podólogo
+                                        </label>
+                                        <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
+                                            <input type="checkbox" class="edit_servicio_extra" value="Fisio" style="width: auto; margin-right: 8px;">
+                                            Fisio
+                                        </label>
+                                        <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
+                                            <input type="checkbox" class="edit_servicio_extra" value="Farmacia" style="width: auto; margin-right: 8px;">
+                                            Farmacia
+                                        </label>
+                                    </div>
+                                    <input type="text" id="edit_servicios_extra_otros" name="servicios_extra_otros" placeholder="Otros servicios (separados por comas, ej: Lavandería, Masajes)" style="margin-top: 5px;">
+                                    <input type="hidden" id="edit_servicios_extra" name="servicios_extra" value="${res.servicios_extra || ''}">
                                 </div>
+                                
                                 <div class="form-group" style="margin-top: 15px;">
                                     <label for="edit_peculiaridades">Peculiaridades / Notas Importantes</label>
                                     <textarea id="edit_peculiaridades" name="peculiaridades" rows="3" placeholder="Información adicional relevante">${res.peculiaridades || ''}</textarea>
@@ -2328,19 +3749,31 @@
                             
                             <!-- SECCIÓN: Estado -->
                             <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #718096;">
-                                <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;">⚙️ Estado</h3>
-                                <div class="form-group">
-                                    <label>
-                                        <input type="checkbox" id="edit_activo" name="activo" ${res.activo ? 'checked' : ''} style="width: auto; margin-right: 8px;">
-                                        Residente Activo
-                                    </label>
-                                </div>
+                                <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/settings.svg" alt="Estado" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Estado</h3>
+                                ${res.activo ? `
+                                    <div class="form-group">
+                                        <p style="color: #28a745; font-weight: 600; margin-bottom: 15px;">
+                                            <img src="/static/icons/medical/check-circle.svg" alt="Activo" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Residente Activo
+                                        </p>
+                                        <button type="button" onclick="abrirModalBaja(${res.id_residente})" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                                            <img src="/static/icons/medical/user-x.svg" alt="Dar de baja" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Dar de Baja
+                                        </button>
+                                    </div>
+                                ` : `
+                                    <div class="form-group">
+                                        <p style="color: #dc3545; font-weight: 600; margin-bottom: 10px;">
+                                            <img src="/static/icons/medical/user-x.svg" alt="Inactivo" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Usuario de Baja
+                                        </p>
+                                        <p style="color: #666; margin-bottom: 5px;"><strong>Motivo:</strong> ${res.motivo_baja || 'No especificado'}</p>
+                                        <p style="color: #666;"><strong>Fecha de baja:</strong> ${res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : 'No especificada'}</p>
+                                    </div>
+                                `}
                             </div>
                             
                             <hr style="margin: 30px 0; border: none; border-top: 2px solid #e0e0e0;">
                             
                             <div class="form-group">
-                                <h3 style="color: #667eea; margin-bottom: 15px;">📄 Documentación</h3>
+                                <h3 style="color: #667eea; margin-bottom: 15px;"><img src="/static/icons/medical/file-medical.svg" alt="Documentación" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Documentación</h3>
                                 
                                 <div id="documentosList" style="margin-bottom: 20px;">
                                     <p style="color: #666;">Cargando documentos...</p>
@@ -2375,6 +3808,106 @@
                     `;
                     
                     content.innerHTML = html;
+                    
+                    // Cargar habitaciones según la residencia actual y establecer la habitación seleccionada
+                    const editSelectResidencia = document.getElementById('edit_id_residencia');
+                    const editSelectHabitacion = document.getElementById('edit_habitacion');
+                    if (editSelectResidencia && editSelectHabitacion) {
+                        // Cargar habitaciones para la residencia actual
+                        await actualizarHabitaciones(res.id_residencia, 'edit_habitacion', res.habitacion);
+                        
+                        // Añadir event listener para cuando cambie la residencia
+                        editSelectResidencia.addEventListener('change', async function() {
+                            await actualizarHabitaciones(this.value, 'edit_habitacion');
+                        });
+                    }
+                    
+                    // Inicializar calendarios con flatpickr en el modal de edición
+                    const editFechaIngresoInput = document.getElementById('edit_fecha_ingreso');
+                    const editFechaNacimientoInput = document.getElementById('edit_fecha_nacimiento');
+                    
+                    // Destruir instancias anteriores si existen
+                    if (flatpickrEditIngreso) {
+                        flatpickrEditIngreso.destroy();
+                    }
+                    if (flatpickrEditNacimiento) {
+                        flatpickrEditNacimiento.destroy();
+                    }
+                    
+                    // Inicializar flatpickr para fecha de ingreso (edición)
+                    if (editFechaIngresoInput) {
+                        flatpickrEditIngreso = flatpickr(editFechaIngresoInput, {
+                            dateFormat: "d/m/Y",
+                            locale: "es",
+                            allowInput: true,
+                            clickOpens: true,
+                            maxDate: "today", // La fecha de ingreso no puede ser mayor que hoy
+                            onChange: function(selectedDates, dateStr, instance) {
+                                // Asegurar formato DD/MM/YYYY
+                                if (dateStr) {
+                                    const partes = dateStr.split('/');
+                                    if (partes.length === 3) {
+                                        const dia = partes[0].padStart(2, '0');
+                                        const mes = partes[1].padStart(2, '0');
+                                        const año = partes[2];
+                                        instance.input.value = `${dia}/${mes}/${año}`;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Inicializar flatpickr para fecha de nacimiento (edición)
+                    if (editFechaNacimientoInput) {
+                        flatpickrEditNacimiento = flatpickr(editFechaNacimientoInput, {
+                            dateFormat: "d/m/Y",
+                            locale: "es",
+                            allowInput: true,
+                            clickOpens: true,
+                            maxDate: "today", // No permitir fechas futuras
+                            onChange: function(selectedDates, dateStr, instance) {
+                                // Asegurar formato DD/MM/YYYY
+                                if (dateStr) {
+                                    const partes = dateStr.split('/');
+                                    if (partes.length === 3) {
+                                        const dia = partes[0].padStart(2, '0');
+                                        const mes = partes[1].padStart(2, '0');
+                                        const año = partes[2];
+                                        instance.input.value = `${dia}/${mes}/${año}`;
+                                    }
+                                }
+                                // Actualizar edad cuando cambia la fecha
+                                actualizarEdad('edit_fecha_nacimiento', 'edit_edad');
+                            }
+                        });
+                    }
+                    
+                    // Cargar servicios extra al editar
+                    if (res.servicios_extra) {
+                        const serviciosArray = res.servicios_extra.split(',').map(s => s.trim());
+                        const serviciosPredefinidos = ['Peluquería', 'Podólogo', 'Fisio', 'Farmacia'];
+                        const serviciosOtros = [];
+                        
+                        serviciosArray.forEach(servicio => {
+                            if (serviciosPredefinidos.includes(servicio)) {
+                                // Marcar el checkbox correspondiente
+                                const checkbox = document.querySelector(`.edit_servicio_extra[value="${servicio}"]`);
+                                if (checkbox) {
+                                    checkbox.checked = true;
+                                }
+                            } else {
+                                // Añadir a otros servicios
+                                serviciosOtros.push(servicio);
+                            }
+                        });
+                        
+                        // Establecer otros servicios
+                        const otrosInput = document.getElementById('edit_servicios_extra_otros');
+                        if (otrosInput && serviciosOtros.length > 0) {
+                            otrosInput.value = serviciosOtros.join(', ');
+                        }
+                    }
+                    
                     // Cargar documentos del residente
                     await loadDocumentos(idResidente);
                 } else {
@@ -2398,7 +3931,17 @@
                     }
                 });
                 
-                const data = await response.json();
+                const contentType = response.headers.get('content-type');
+                let data;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    console.error('Respuesta de documentos no es JSON:', text);
+                    documentosList.innerHTML = `<p style="color: red;">Error: La respuesta del servidor no es válida. Status: ${response.status}</p>`;
+                    return;
+                }
                 
                 if (response.ok) {
                     if (data.documentos && data.documentos.length > 0) {
@@ -2414,7 +3957,7 @@
                                         <p style="margin: 5px 0 0 0; color: #999; font-size: 11px;">${new Date(doc.fecha_subida).toLocaleDateString('es-ES')}</p>
                                     </div>
                                     <div style="display: flex; gap: 8px;">
-                                        ${doc.url_descarga ? `<button onclick="window.open('${doc.url_descarga}', '_blank')" style="background: #667eea; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;">📥 Descargar</button>` : ''}
+                                        ${doc.url_descarga ? `<button onclick="window.open('${doc.url_descarga}', '_blank')" style="background: #667eea; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;"><img src="/static/icons/medical/file-medical.svg" alt="Descargar" style="width: 14px; height: 14px; filter: brightness(0) invert(1);"> Descargar</button>` : ''}
                                         <button onclick="eliminarDocumento(${doc.id_documento}, ${idResidente})" style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;">Eliminar</button>
                                     </div>
                                 </div>
@@ -2426,9 +3969,15 @@
                         documentosList.innerHTML = '<p style="color: #666; font-style: italic;">No hay documentos registrados.</p>';
                     }
                 } else {
-                    documentosList.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+                    if (response.status === 401) {
+                        documentosList.innerHTML = `<p style="color: red;">Sesión expirada. Por favor, recarga la página.</p>`;
+                    } else {
+                        documentosList.innerHTML = `<p style="color: red;">Error (${response.status}): ${data.error || 'Error desconocido'}</p>`;
+                    }
+                    console.error('Error al cargar documentos:', response.status, data);
                 }
             } catch (error) {
+                console.error('Error de conexión al cargar documentos:', error);
                 documentosList.innerHTML = `<p style="color: red;">Error de conexión: ${error.message}</p>`;
             }
         }
@@ -2527,7 +4076,6 @@
             const originalText = updateBtn.textContent;
             
             const formData = new FormData(form);
-            const activoCheckbox = document.getElementById('edit_activo');
             
             const id_residencia = formData.get('id_residencia');
             if (!id_residencia) {
@@ -2570,10 +4118,30 @@
                 fecha_ingreso: fecha_ingreso_es ? fechaEspanolToISO(fecha_ingreso_es) : null,
                 costo_habitacion: formData.get('costo_habitacion') ? parseFloat(formData.get('costo_habitacion')) : null,
                 metodo_pago_preferido: formData.get('metodo_pago_preferido') || null,
-                servicios_extra: formData.get('servicios_extra') || null,
+                servicios_extra: (() => {
+                    // Combinar servicios extra seleccionados en el formulario de edición
+                    const serviciosSeleccionados = [];
+                    const checkboxesServicios = document.querySelectorAll('.edit_servicio_extra:checked');
+                    checkboxesServicios.forEach(cb => {
+                        serviciosSeleccionados.push(cb.value);
+                    });
+                    const otrosServicios = formData.get('servicios_extra_otros') || '';
+                    if (otrosServicios.trim()) {
+                        const otros = otrosServicios.split(',').map(s => s.trim()).filter(s => s);
+                        serviciosSeleccionados.push(...otros);
+                    }
+                    return serviciosSeleccionados.length > 0 ? serviciosSeleccionados.join(', ') : null;
+                })(),
                 medicaciones: formData.get('medicaciones') || null,
                 peculiaridades: formData.get('peculiaridades') || null,
-                activo: activoCheckbox ? activoCheckbox.checked : true
+                grupo_sanguineo: formData.get('grupo_sanguineo') || null,
+                alergias: formData.get('alergias') || null,
+                diagnosticos: formData.get('diagnosticos') || null,
+                restricciones_dieteticas: formData.get('restricciones_dieteticas') || null,
+                nivel_dependencia: formData.get('nivel_dependencia') || null,
+                movilidad: formData.get('movilidad') || null,
+                medico_referencia: formData.get('medico_referencia') || null,
+                telefono_medico: formData.get('telefono_medico') || null
             };
             
             // Limpiar valores vacíos
@@ -2652,7 +4220,6 @@
             
             // Obtener datos del formulario
             const formData = new FormData(form);
-            const activoCheckbox = document.getElementById('res_activo');
             
             const id_residencia = formData.get('id_residencia');
             if (!id_residencia) {
@@ -2681,6 +4248,20 @@
                 return;
             }
             
+            // Combinar servicios extra seleccionados
+            const serviciosSeleccionados = [];
+            const checkboxesServicios = form.querySelectorAll('input[name="servicio_extra"]:checked');
+            checkboxesServicios.forEach(cb => {
+                serviciosSeleccionados.push(cb.value);
+            });
+            const otrosServicios = formData.get('servicios_extra_otros') || '';
+            if (otrosServicios.trim()) {
+                // Dividir por comas y limpiar espacios
+                const otros = otrosServicios.split(',').map(s => s.trim()).filter(s => s);
+                serviciosSeleccionados.push(...otros);
+            }
+            const serviciosExtraCombinados = serviciosSeleccionados.length > 0 ? serviciosSeleccionados.join(', ') : null;
+            
             const data = {
                 id_residencia: parseInt(id_residencia),
                 nombre: formData.get('nombre'),
@@ -2695,10 +4276,10 @@
                 fecha_ingreso: fecha_ingreso_es ? fechaEspanolToISO(fecha_ingreso_es) : null,
                 costo_habitacion: formData.get('costo_habitacion') ? parseFloat(formData.get('costo_habitacion')) : null,
                 metodo_pago_preferido: formData.get('metodo_pago_preferido') || null,
-                servicios_extra: formData.get('servicios_extra') || null,
+                servicios_extra: serviciosExtraCombinados,
                 medicaciones: formData.get('medicaciones') || null,
                 peculiaridades: formData.get('peculiaridades') || null,
-                activo: activoCheckbox ? activoCheckbox.checked : true
+                activo: true  // Los nuevos residentes siempre son activos
             };
             
             // Limpiar valores vacíos
