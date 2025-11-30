@@ -16,7 +16,8 @@ from storage_manager import upload_document, get_document_url, delete_document
 from validators import (
     validate_residente_data, validate_cobro_data, validate_monto,
     validate_residencia_id, validate_estado, validate_metodo_pago,
-    validate_text, validate_email, validate_phone
+    validate_text, validate_email, validate_phone, validate_personal_data,
+    validate_turno_extra_data
 )
 import mimetypes
 
@@ -196,8 +197,8 @@ def login():
 def obtener_habitaciones_ocupadas(id_residencia):
     """Obtiene las habitaciones ocupadas de una residencia (solo residentes activos)."""
     try:
-        # Verificar que el usuario tenga acceso a esta residencia
-        if id_residencia != g.id_residencia:
+        # Verificar que el usuario tenga acceso a esta residencia (o sea admin)
+        if g.id_rol != 1 and id_residencia != g.id_residencia:
             return jsonify({'error': 'No tienes permisos para acceder a esta residencia'}), 403
         
         conn = get_db_connection()
@@ -649,9 +650,9 @@ def dar_baja_residente(id_residente):
         cursor = conn.cursor()
         
         try:
-            # Verificar que el residente existe y está activo
+            # Verificar que el residente existe, está activo y pertenece a la residencia del usuario
             cursor.execute("""
-                SELECT id_residente, activo FROM residente
+                SELECT id_residente, activo, id_residencia FROM residente
                 WHERE id_residente = %s
             """, (id_residente,))
             
@@ -659,29 +660,57 @@ def dar_baja_residente(id_residente):
             if not residente:
                 return jsonify({'error': 'Residente no encontrado'}), 404
             
+            # Verificar que el residente pertenece a la residencia del usuario (o es admin)
+            if g.id_rol != 1 and residente[2] != g.id_residencia:
+                return jsonify({'error': 'No tienes permisos para dar de baja a este residente'}), 403
+            
             if not residente[1]:  # Si ya está inactivo
                 return jsonify({'error': 'El residente ya está dado de baja'}), 400
+            
+            # Verificar si las columnas de baja existen
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'residente' 
+                  AND column_name IN ('motivo_baja', 'fecha_baja')
+            """)
+            columnas_baja = {row[0] for row in cursor.fetchall()}
             
             # Actualizar el residente: activo = False, motivo_baja, fecha_baja = hoy
             from datetime import date
             fecha_baja = date.today()
             
-            cursor.execute("""
+            # Construir la consulta dinámicamente según las columnas que existan
+            # Al dar de baja, NO se libera la habitación (se mantiene para referencia histórica)
+            # El sistema de habitaciones ocupadas filtra por activo = TRUE, así que no hay conflicto
+            updates = ['activo = FALSE']
+            valores = []
+            
+            if 'motivo_baja' in columnas_baja:
+                updates.append('motivo_baja = %s')
+                valores.append(motivo_baja)
+            
+            if 'fecha_baja' in columnas_baja:
+                updates.append('fecha_baja = %s')
+                valores.append(fecha_baja)
+            
+            valores.append(id_residente)
+            
+            query = f"""
                 UPDATE residente
-                SET activo = FALSE,
-                    motivo_baja = %s,
-                    fecha_baja = %s
+                SET {', '.join(updates)}
                 WHERE id_residente = %s
                 RETURNING id_residente
-            """, (motivo_baja, fecha_baja, id_residente))
+            """
             
+            cursor.execute(query, tuple(valores))
             conn.commit()
             
             return jsonify({
                 'mensaje': 'Residente dado de baja exitosamente',
                 'id_residente': id_residente,
-                'motivo_baja': motivo_baja,
-                'fecha_baja': str(fecha_baja)
+                'motivo_baja': motivo_baja if 'motivo_baja' in columnas_baja else None,
+                'fecha_baja': str(fecha_baja) if 'fecha_baja' in columnas_baja else None
             }), 200
             
         except Exception as e:
@@ -694,6 +723,168 @@ def dar_baja_residente(id_residente):
             
     except Exception as e:
         app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/residentes/<int:id_residente>/alta', methods=['POST'])
+def dar_alta_residente(id_residente):
+    """Reactiva un residente que estaba de baja (baja por error)."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el residente existe y está inactivo
+            cursor.execute("""
+                SELECT id_residente, activo, id_residencia FROM residente
+                WHERE id_residente = %s
+            """, (id_residente,))
+            
+            residente = cursor.fetchone()
+            if not residente:
+                return jsonify({'error': 'Residente no encontrado'}), 404
+            
+            # Verificar que el residente pertenece a la residencia del usuario (o es admin)
+            if g.id_rol != 1 and residente[2] != g.id_residencia:
+                return jsonify({'error': 'No tienes permisos para reactivar a este residente'}), 403
+            
+            if residente[1]:  # Si ya está activo
+                return jsonify({'error': 'El residente ya está activo'}), 400
+            
+            # Verificar si las columnas de baja existen
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'residente' 
+                  AND column_name IN ('motivo_baja', 'fecha_baja')
+            """)
+            columnas_baja = {row[0] for row in cursor.fetchall()}
+            
+            # Reactivar el residente: activo = True, limpiar motivo_baja y fecha_baja
+            updates = ['activo = TRUE']
+            valores = []
+            
+            if 'motivo_baja' in columnas_baja:
+                updates.append('motivo_baja = NULL')
+            
+            if 'fecha_baja' in columnas_baja:
+                updates.append('fecha_baja = NULL')
+            
+            valores.append(id_residente)
+            
+            query = f"""
+                UPDATE residente
+                SET {', '.join(updates)}
+                WHERE id_residente = %s
+                RETURNING id_residente
+            """
+            
+            cursor.execute(query, tuple(valores))
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Residente reactivado exitosamente',
+                'id_residente': id_residente
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al reactivar al residente: {str(e)}")
+            import traceback
+            app.logger.error(traceback.format_exc())
+            return jsonify({'error': 'Error al reactivar al residente', 'details': str(e)}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/residentes/<int:id_residente>', methods=['DELETE'])
+def eliminar_residente(id_residente):
+    """Elimina completamente un residente de la base de datos."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el residente existe
+            cursor.execute("""
+                SELECT id_residente, id_residencia FROM residente
+                WHERE id_residente = %s
+            """, (id_residente,))
+            
+            residente = cursor.fetchone()
+            if not residente:
+                return jsonify({'error': 'Residente no encontrado'}), 404
+            
+            # Verificar que el residente pertenece a la residencia del usuario (o es admin)
+            if g.id_rol != 1 and residente[1] != g.id_residencia:
+                return jsonify({'error': 'No tienes permisos para eliminar a este residente'}), 403
+            
+            # Verificar que está dado de baja antes de eliminar
+            cursor.execute("""
+                SELECT activo FROM residente
+                WHERE id_residente = %s
+            """, (id_residente,))
+            
+            activo = cursor.fetchone()[0]
+            if activo:
+                return jsonify({'error': 'No se puede eliminar un residente activo. Primero debe darse de baja.'}), 400
+            
+            # Eliminar documentos asociados (si existe la tabla)
+            try:
+                cursor.execute("""
+                    DELETE FROM documento_residente
+                    WHERE id_residente = %s
+                """, (id_residente,))
+            except Exception as e:
+                app.logger.warning(f"Error al eliminar documentos del residente {id_residente}: {str(e)}")
+            
+            # Eliminar pagos asociados antes de eliminar el residente
+            # Esto es necesario porque hay una foreign key constraint
+            try:
+                cursor.execute("""
+                    DELETE FROM pago_residente
+                    WHERE id_residente = %s
+                """, (id_residente,))
+                app.logger.info(f"Pagos eliminados para residente {id_residente}: {cursor.rowcount}")
+            except Exception as e:
+                app.logger.warning(f"Error al eliminar pagos del residente {id_residente}: {str(e)}")
+                # Si falla, intentar continuar de todas formas
+            
+            # Eliminar el residente
+            cursor.execute("""
+                DELETE FROM residente
+                WHERE id_residente = %s
+                RETURNING id_residente
+            """, (id_residente,))
+            
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Residente eliminado completamente',
+                'id_residente': id_residente
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al eliminar al residente: {str(e)}")
+            import traceback
+            app.logger.error(traceback.format_exc())
+            return jsonify({'error': 'Error al eliminar al residente', 'details': str(e)}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
         return jsonify({'error': 'Error interno del servidor'}), 500
 
 
@@ -848,7 +1039,7 @@ def listar_cobros():
                     FROM pago_residente p
                     JOIN residente r ON p.id_residente = r.id_residente
                     JOIN residencia res ON p.id_residencia = res.id_residencia
-                    WHERE p.id_residencia = %s
+                WHERE p.id_residencia = %s
                     ORDER BY 
                              CASE 
                                  WHEN p.fecha_prevista IS NOT NULL THEN p.fecha_prevista
@@ -856,7 +1047,7 @@ def listar_cobros():
                                  ELSE '9999-12-31'::date
                              END ASC,
                              p.fecha_creacion DESC
-                """, (g.id_residencia,))
+            """, (g.id_residencia,))
             
             cobros = cursor.fetchall()
             
@@ -1003,15 +1194,13 @@ def generar_cobros_previstos():
     Genera automáticamente cobros previstos para todos los residentes activos
     que tengan costo_habitacion definido.
     
-    Lógica: Si un residente NO tiene un cobro completado en el mes actual,
+    Lógica: Si un residente NO tiene un cobro completado en el mes siguiente,
     se genera un cobro previsto para ese mes.
     
-    La fecha prevista se calcula según el metodo_pago_preferido:
-    - transferencia: día 3 del mes
-    - remesa: día 30 del mes
-    - otros: día 5 del mes (por defecto)
+    La fecha prevista es siempre el día 1 del mes que se va a cobrar (mes siguiente),
+    independientemente del método de pago. Esto evita problemas con fechas del mes anterior.
     
-    Por defecto genera para el mes actual (no el siguiente).
+    Por defecto genera para el mes siguiente al actual.
     """
     try:
         data = request.get_json() or {}
@@ -1083,13 +1272,13 @@ def generar_cobros_previstos():
             else:
                 cursor.execute("""
                     SELECT id_residente, nombre, apellido, costo_habitacion, metodo_pago_preferido, fecha_ingreso, id_residencia
-                    FROM residente
-                    WHERE id_residencia = %s 
-                      AND activo = TRUE 
-                      AND costo_habitacion IS NOT NULL 
-                      AND costo_habitacion > 0
+                FROM residente
+                WHERE id_residencia = %s 
+                  AND activo = TRUE 
+                  AND costo_habitacion IS NOT NULL 
+                  AND costo_habitacion > 0
                       AND fecha_ingreso IS NOT NULL
-                """, (g.id_residencia,))
+            """, (g.id_residencia,))
             
             residentes = cursor.fetchall()
             
@@ -1138,27 +1327,13 @@ def generar_cobros_previstos():
                 # - Si ingresó en el futuro (imposible por validación), no debería estar activo
                 # La única excepción es si ya tiene un cobro completado para ese mes
                 
-                # Calcular fecha prevista según método de pago
-                # Lógica:
-                # - Remesa: día 30 del mes ACTUAL, pero mes_pagado es el mes SIGUIENTE
-                # - Transferencia/otros: días 1-5 del mes SIGUIENTE, mes_pagado es el mes SIGUIENTE
+                # Calcular fecha prevista - todos los métodos usan el día 1 del mes que se va a cobrar
+                # Esto evita problemas con fechas del mes anterior
                 
-                if metodo_pago.lower() in ['remesa']:
-                    # Remesa: día 30 del mes actual, pero el pago es para el mes siguiente
-                    # Calcular último día del mes actual
-                    ultimo_dia = (siguiente_mes - timedelta(days=1)).day
-                    dia_remesa = min(30, ultimo_dia)
-                    fecha_prevista = datetime(año_actual, mes_actual, dia_remesa)
-                    # Mes pagado es el mes siguiente
-                    mes_pagado = siguiente_mes.strftime('%Y-%m')
-                elif metodo_pago.lower() in ['transferencia', 'transfer']:
-                    # Transferencia: días 1-5 del mes SIGUIENTE, mes_pagado es el mes SIGUIENTE
-                    fecha_prevista = datetime(siguiente_mes.year, siguiente_mes.month, 3)  # Día 3 como valor medio
-                    mes_pagado = siguiente_mes.strftime('%Y-%m')
-                else:
-                    # Otros métodos (metálico, bizum, etc.): días 1-5 del mes SIGUIENTE
-                    fecha_prevista = datetime(siguiente_mes.year, siguiente_mes.month, 5)
-                    mes_pagado = siguiente_mes.strftime('%Y-%m')
+                # Todos los métodos de pago usan el día 1 del mes que se va a cobrar (mes siguiente)
+                # Esto evita problemas con fechas del mes anterior
+                fecha_prevista = datetime(siguiente_mes.year, siguiente_mes.month, 1)
+                mes_pagado = siguiente_mes.strftime('%Y-%m')
                 
                 # Verificar si el residente ya tiene un cobro COMPLETADO en este mes
                 # Si tiene cobro completado, NO generar cobro previsto
@@ -1259,84 +1434,164 @@ def estadisticas_cobros():
         cursor = conn.cursor()
         
         try:
-            # Obtener cobros históricos (cobrados) agrupados por mes
-            # Para remesas cobradas el día 30, usar mes_pagado (mes siguiente)
-            # Para otros casos, usar fecha_pago
-            cursor.execute("""
-                SELECT 
-                    CASE 
-                        WHEN metodo_pago ILIKE 'remesa' 
-                             AND EXTRACT(DAY FROM fecha_pago) = 30 
-                             AND mes_pagado IS NOT NULL
-                        THEN mes_pagado
-                        ELSE TO_CHAR(fecha_pago, 'YYYY-MM')
-                    END as mes,
-                    SUM(monto) as total_cobrado,
-                    COUNT(*) as cantidad
-                FROM pago_residente
-                WHERE id_residencia = %s 
-                  AND estado = 'cobrado'
-                  AND fecha_pago IS NOT NULL
-                GROUP BY 
-                    CASE 
-                        WHEN metodo_pago ILIKE 'remesa' 
-                             AND EXTRACT(DAY FROM fecha_pago) = 30 
-                             AND mes_pagado IS NOT NULL
-                        THEN mes_pagado
-                        ELSE TO_CHAR(fecha_pago, 'YYYY-MM')
-                    END
-                ORDER BY mes DESC
-                LIMIT 12
-            """, (g.id_residencia,))
-            
-            historico = cursor.fetchall()
-            
-            # Obtener estimaciones futuras (cobros previstos pendientes) agrupados por mes
-            # Para remesas, usar mes_pagado (mes siguiente al que se cobra)
-            # Para otros casos, usar fecha_prevista
-            cursor.execute("""
-                SELECT 
-                    CASE 
-                        WHEN metodo_pago ILIKE 'remesa' AND mes_pagado IS NOT NULL
-                        THEN mes_pagado
-                        ELSE TO_CHAR(fecha_prevista, 'YYYY-MM')
-                    END as mes,
-                    SUM(monto) as total_previsto,
-                    COUNT(*) as cantidad
-                FROM pago_residente
-                WHERE id_residencia = %s 
-                  AND es_cobro_previsto = TRUE
-                  AND estado = 'pendiente'
-                  AND fecha_prevista IS NOT NULL
-                GROUP BY 
-                    CASE 
-                        WHEN metodo_pago ILIKE 'remesa' AND mes_pagado IS NOT NULL
-                        THEN mes_pagado
-                        ELSE TO_CHAR(fecha_prevista, 'YYYY-MM')
-                    END
-                ORDER BY mes ASC
-                LIMIT 6
-            """, (g.id_residencia,))
-            
-            estimaciones = cursor.fetchall()
-            
-            # Formatear datos históricos
-            historico_data = []
-            for row in historico:
-                historico_data.append({
-                    'mes': row[0],
-                    'total': float(row[1]),
-                    'cantidad': row[2]
-                })
-            
-            # Formatear estimaciones
-            estimaciones_data = []
-            for row in estimaciones:
-                estimaciones_data.append({
-                    'mes': row[0],
-                    'total': float(row[1]),
-                    'cantidad': row[2]
-                })
+            # Si es Admin (rol 1), obtiene de TODAS las residencias agrupado. Si no, solo de la suya.
+            if g.id_rol == 1:
+                # Obtener cobros históricos (cobrados) agrupados por mes y residencia
+                cursor.execute("""
+                    SELECT 
+                        CASE 
+                            WHEN p.metodo_pago ILIKE 'remesa' 
+                                 AND EXTRACT(DAY FROM p.fecha_pago) = 30 
+                                 AND p.mes_pagado IS NOT NULL
+                            THEN p.mes_pagado
+                            ELSE TO_CHAR(p.fecha_pago, 'YYYY-MM')
+                        END as mes,
+                        res.nombre as nombre_residencia,
+                        res.id_residencia,
+                        SUM(p.monto) as total_cobrado,
+                        COUNT(*) as cantidad
+                    FROM pago_residente p
+                    JOIN residencia res ON p.id_residencia = res.id_residencia
+                    WHERE p.estado = 'cobrado'
+                      AND p.fecha_pago IS NOT NULL
+                    GROUP BY 
+                        CASE 
+                            WHEN p.metodo_pago ILIKE 'remesa' 
+                                 AND EXTRACT(DAY FROM p.fecha_pago) = 30 
+                                 AND p.mes_pagado IS NOT NULL
+                            THEN p.mes_pagado
+                            ELSE TO_CHAR(p.fecha_pago, 'YYYY-MM')
+                        END,
+                        res.id_residencia, res.nombre
+                    ORDER BY mes DESC
+                    LIMIT 48
+                """)
+                historico = cursor.fetchall()
+                
+                # Obtener estimaciones futuras agrupados por mes y residencia
+                cursor.execute("""
+                    SELECT 
+                        CASE 
+                            WHEN p.metodo_pago ILIKE 'remesa' AND p.mes_pagado IS NOT NULL
+                            THEN p.mes_pagado
+                            ELSE TO_CHAR(p.fecha_prevista, 'YYYY-MM')
+                        END as mes,
+                        res.nombre as nombre_residencia,
+                        res.id_residencia,
+                        SUM(p.monto) as total_previsto,
+                        COUNT(*) as cantidad
+                    FROM pago_residente p
+                    JOIN residencia res ON p.id_residencia = res.id_residencia
+                    WHERE p.es_cobro_previsto = TRUE
+                      AND p.estado = 'pendiente'
+                      AND p.fecha_prevista IS NOT NULL
+                    GROUP BY 
+                        CASE 
+                            WHEN p.metodo_pago ILIKE 'remesa' AND p.mes_pagado IS NOT NULL
+                            THEN p.mes_pagado
+                            ELSE TO_CHAR(p.fecha_prevista, 'YYYY-MM')
+                        END,
+                        res.id_residencia, res.nombre
+                    ORDER BY mes ASC
+                    LIMIT 24
+                """)
+                estimaciones = cursor.fetchall()
+
+                historico_data = []
+                for row in historico:
+                    historico_data.append({
+                        'mes': row[0],
+                        'nombre_residencia': row[1],
+                        'id_residencia': row[2],
+                        'total': float(row[3]),
+                        'cantidad': row[4]
+                    })
+
+                estimaciones_data = []
+                for row in estimaciones:
+                    estimaciones_data.append({
+                        'mes': row[0],
+                        'nombre_residencia': row[1],
+                        'id_residencia': row[2],
+                        'total': float(row[3]),
+                        'cantidad': row[4]
+                    })
+
+            else:
+                # Obtener cobros históricos (cobrados) agrupados por mes
+                cursor.execute("""
+                    SELECT 
+                        CASE 
+                            WHEN metodo_pago ILIKE 'remesa' 
+                                 AND EXTRACT(DAY FROM fecha_pago) = 30 
+                                 AND mes_pagado IS NOT NULL
+                            THEN mes_pagado
+                            ELSE TO_CHAR(fecha_pago, 'YYYY-MM')
+                        END as mes,
+                        SUM(monto) as total_cobrado,
+                        COUNT(*) as cantidad
+                    FROM pago_residente
+                    WHERE id_residencia = %s 
+                      AND estado = 'cobrado'
+                      AND fecha_pago IS NOT NULL
+                    GROUP BY 
+                        CASE 
+                            WHEN metodo_pago ILIKE 'remesa' 
+                                 AND EXTRACT(DAY FROM fecha_pago) = 30 
+                                 AND mes_pagado IS NOT NULL
+                            THEN mes_pagado
+                            ELSE TO_CHAR(fecha_pago, 'YYYY-MM')
+                        END
+                    ORDER BY mes DESC
+                    LIMIT 12
+                """, (g.id_residencia,))
+                
+                historico = cursor.fetchall()
+                
+                # Obtener estimaciones futuras
+                cursor.execute("""
+                    SELECT 
+                        CASE 
+                            WHEN metodo_pago ILIKE 'remesa' AND mes_pagado IS NOT NULL
+                            THEN mes_pagado
+                            ELSE TO_CHAR(fecha_prevista, 'YYYY-MM')
+                        END as mes,
+                        SUM(monto) as total_previsto,
+                        COUNT(*) as cantidad
+                    FROM pago_residente
+                    WHERE id_residencia = %s 
+                      AND es_cobro_previsto = TRUE
+                      AND estado = 'pendiente'
+                      AND fecha_prevista IS NOT NULL
+                    GROUP BY 
+                        CASE 
+                            WHEN metodo_pago ILIKE 'remesa' AND mes_pagado IS NOT NULL
+                            THEN mes_pagado
+                            ELSE TO_CHAR(fecha_prevista, 'YYYY-MM')
+                        END
+                    ORDER BY mes ASC
+                    LIMIT 6
+                """, (g.id_residencia,))
+                
+                estimaciones = cursor.fetchall()
+                
+                historico_data = []
+                for row in historico:
+                    historico_data.append({
+                        'mes': row[0],
+                        'total': float(row[1]),
+                        'cantidad': row[2],
+                        'id_residencia': g.id_residencia
+                    })
+                
+                estimaciones_data = []
+                for row in estimaciones:
+                    estimaciones_data.append({
+                        'mes': row[0],
+                        'total': float(row[1]),
+                        'cantidad': row[2],
+                        'id_residencia': g.id_residencia
+                    })
             
             return jsonify({
                 'historico': historico_data,
@@ -1498,19 +1753,39 @@ def obtener_cobro(id_pago):
         cursor = conn.cursor()
         
         try:
+            # Primero verificar que el cobro existe y pertenece a la residencia
             cursor.execute("""
-                SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                SELECT id_pago, id_residente, id_residencia
+                FROM pago_residente
+                WHERE id_pago = %s
+            """, (id_pago,))
+            
+            cobro_basico = cursor.fetchone()
+            
+            if not cobro_basico:
+                app.logger.warning(f"Cobro {id_pago} no encontrado")
+                return jsonify({'error': 'Cobro no encontrado'}), 404
+            
+            # Verificar que pertenece a la residencia del usuario
+            if cobro_basico[2] != g.id_residencia:
+                app.logger.warning(f"Intento de acceso a cobro {id_pago} de otra residencia. Usuario: {g.id_residencia}, Cobro: {cobro_basico[2]}")
+                return jsonify({'error': 'Cobro no encontrado'}), 404
+            
+            # Ahora obtener la información completa con JOIN
+            cursor.execute("""
+                SELECT p.id_pago, p.id_residente, 
+                       COALESCE(r.nombre || ' ' || r.apellido, 'Residente no encontrado') as residente,
                        p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
                        p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion
                 FROM pago_residente p
-                JOIN residente r ON p.id_residente = r.id_residente
+                LEFT JOIN residente r ON p.id_residente = r.id_residente AND r.id_residencia = %s
                 WHERE p.id_pago = %s AND p.id_residencia = %s
-            """, (id_pago, g.id_residencia))
+            """, (g.id_residencia, id_pago, g.id_residencia))
             
             cobro = cursor.fetchone()
             
             if not cobro:
-                return jsonify({'error': 'Cobro no encontrado'}), 404
+                return jsonify({'error': 'Error al obtener información del cobro'}), 500
             
             resultado = {
                 'id_pago': cobro[0],
@@ -1535,8 +1810,10 @@ def obtener_cobro(id_pago):
             conn.close()
             
     except Exception as e:
-        app.logger.error(f"Error al obtener cobro: {str(e)}")
-        return jsonify({'error': 'Error al obtener cobro'}), 500
+        app.logger.error(f"Error al obtener cobro {id_pago}: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': 'Error al obtener cobro', 'details': str(e)}), 500
 
 
 @app.route('/api/v1/facturacion/cobros/<int:id_pago>', methods=['PUT'])
@@ -1552,11 +1829,18 @@ def actualizar_cobro(id_pago):
         cursor = conn.cursor()
         
         try:
-            # Verificar que el cobro existe y pertenece a la residencia
-            cursor.execute("""
-                SELECT id_pago FROM pago_residente
-                WHERE id_pago = %s AND id_residencia = %s
-            """, (id_pago, g.id_residencia))
+            # Verificar que el cobro existe
+            # Si es Admin (rol 1), puede actualizar cobros de todas las residencias
+            if g.id_rol == 1:
+                cursor.execute("""
+                    SELECT id_pago FROM pago_residente
+                    WHERE id_pago = %s
+                """, (id_pago,))
+            else:
+                cursor.execute("""
+                    SELECT id_pago FROM pago_residente
+                    WHERE id_pago = %s AND id_residencia = %s
+                """, (id_pago, g.id_residencia))
             
             if not cursor.fetchone():
                 return jsonify({'error': 'Cobro no encontrado'}), 404
@@ -1594,14 +1878,23 @@ def actualizar_cobro(id_pago):
             if not updates:
                 return jsonify({'error': 'No hay campos para actualizar'}), 400
             
-            valores.extend([id_pago, g.id_residencia])
-            
-            query = f"""
-                UPDATE pago_residente
-                SET {', '.join(updates)}
-                WHERE id_pago = %s AND id_residencia = %s
-                RETURNING id_pago
-            """
+            # Si es Admin (rol 1), puede actualizar cobros de todas las residencias
+            if g.id_rol == 1:
+                valores.append(id_pago)
+                query = f"""
+                    UPDATE pago_residente
+                    SET {', '.join(updates)}
+                    WHERE id_pago = %s
+                    RETURNING id_pago
+                """
+            else:
+                valores.extend([id_pago, g.id_residencia])
+                query = f"""
+                    UPDATE pago_residente
+                    SET {', '.join(updates)}
+                    WHERE id_pago = %s AND id_residencia = %s
+                    RETURNING id_pago
+                """
             
             cursor.execute(query, valores)
             conn.commit()
@@ -1618,6 +1911,78 @@ def actualizar_cobro(id_pago):
             
     except Exception as e:
         app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/facturacion/cobros/<int:id_pago>', methods=['DELETE'])
+def eliminar_cobro(id_pago):
+    """Elimina un cobro completamente."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el cobro existe y pertenece a la residencia del usuario
+            if g.id_rol == 1:
+                cursor.execute("""
+                    SELECT id_pago, id_residencia FROM pago_residente
+                    WHERE id_pago = %s
+                """, (id_pago,))
+            else:
+                cursor.execute("""
+                    SELECT id_pago, id_residencia FROM pago_residente
+                    WHERE id_pago = %s AND id_residencia = %s
+                """, (id_pago, g.id_residencia))
+            
+            cobro = cursor.fetchone()
+            
+            if not cobro:
+                return jsonify({'error': 'Cobro no encontrado'}), 404
+            
+            # Verificar permisos (solo si no es admin)
+            if g.id_rol != 1 and cobro[1] != g.id_residencia:
+                return jsonify({'error': 'No tienes permisos para eliminar este cobro'}), 403
+            
+            # Eliminar el cobro
+            if g.id_rol == 1:
+                cursor.execute("""
+                    DELETE FROM pago_residente
+                    WHERE id_pago = %s
+                    RETURNING id_pago
+                """, (id_pago,))
+            else:
+                cursor.execute("""
+                    DELETE FROM pago_residente
+                    WHERE id_pago = %s AND id_residencia = %s
+                    RETURNING id_pago
+                """, (id_pago, g.id_residencia))
+            
+            eliminado = cursor.fetchone()
+            
+            if not eliminado:
+                return jsonify({'error': 'No se pudo eliminar el cobro'}), 500
+            
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Cobro eliminado exitosamente',
+                'id_pago': id_pago
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al eliminar cobro: {str(e)}")
+            import traceback
+            app.logger.error(traceback.format_exc())
+            return jsonify({'error': 'Error al eliminar el cobro', 'details': str(e)}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
         return jsonify({'error': 'Error interno del servidor'}), 500
 
 
@@ -1706,7 +2071,7 @@ def crear_pago_proveedor():
         
         if not monto or monto <= 0:
             return jsonify({'error': 'monto es requerido'}), 400
-        
+            
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -1742,6 +2107,159 @@ def crear_pago_proveedor():
             conn.rollback()
             app.logger.error(f"Error al crear pago a proveedor: {str(e)}")
             return jsonify({'error': 'Error al crear pago a proveedor'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/facturacion/proveedores/<int:id_pago>', methods=['GET'])
+def obtener_pago_proveedor(id_pago):
+    """Obtiene un pago a proveedor por su ID."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT id_pago, proveedor, concepto, monto, fecha_pago, fecha_prevista,
+                       metodo_pago, estado, numero_factura, observaciones, fecha_creacion
+                FROM pago_proveedor
+                WHERE id_pago = %s AND id_residencia = %s
+            """, (id_pago, g.id_residencia))
+            
+            pago = cursor.fetchone()
+            
+            if not pago:
+                return jsonify({'error': 'Pago no encontrado'}), 404
+            
+            return jsonify({
+                'id_pago': pago[0],
+                'proveedor': pago[1],
+                'concepto': pago[2],
+                'monto': float(pago[3]),
+                'fecha_pago': str(pago[4]) if pago[4] else None,
+                'fecha_prevista': str(pago[5]) if pago[5] else None,
+                'metodo_pago': pago[6],
+                'estado': pago[7],
+                'numero_factura': pago[8],
+                'observaciones': pago[9],
+                'fecha_creacion': pago[10].isoformat() if pago[10] else None
+            }), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al obtener pago a proveedor: {str(e)}")
+        return jsonify({'error': 'Error al obtener pago a proveedor'}), 500
+
+
+@app.route('/api/v1/facturacion/proveedores/<int:id_pago>', methods=['PUT'])
+def actualizar_pago_proveedor(id_pago):
+    """Actualiza un pago a proveedor."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el pago existe y pertenece a la residencia del usuario
+            cursor.execute("""
+                SELECT id_pago FROM pago_proveedor
+                WHERE id_pago = %s AND id_residencia = %s
+            """, (id_pago, g.id_residencia))
+            
+            if not cursor.fetchone():
+                return jsonify({'error': 'Pago no encontrado'}), 404
+            
+            # Preparar datos para actualizar
+            updates = []
+            valores = []
+            
+            if 'proveedor' in data:
+                updates.append('proveedor = %s')
+                valores.append(data['proveedor'])
+            
+            if 'concepto' in data:
+                updates.append('concepto = %s')
+                valores.append(data['concepto'])
+            
+            if 'monto' in data:
+                updates.append('monto = %s')
+                valores.append(data['monto'])
+            
+            if 'fecha_pago' in data:
+                updates.append('fecha_pago = %s')
+                valores.append(data['fecha_pago'] if data['fecha_pago'] else None)
+            
+            if 'fecha_prevista' in data:
+                updates.append('fecha_prevista = %s')
+                valores.append(data['fecha_prevista'] if data['fecha_prevista'] else None)
+            
+            if 'metodo_pago' in data:
+                updates.append('metodo_pago = %s')
+                valores.append(data['metodo_pago'])
+            
+            if 'numero_factura' in data:
+                updates.append('numero_factura = %s')
+                valores.append(data['numero_factura'])
+            
+            if 'observaciones' in data:
+                updates.append('observaciones = %s')
+                valores.append(data['observaciones'])
+            
+            # Calcular estado automáticamente basado en las fechas
+            if 'fecha_pago' in data or 'fecha_prevista' in data:
+                fecha_pago = data.get('fecha_pago')
+                fecha_prevista = data.get('fecha_prevista')
+                
+                if fecha_pago:
+                    estado = 'pagado'
+                elif fecha_prevista:
+                    estado = 'pendiente'
+                else:
+                    estado = data.get('estado', 'pendiente')
+                
+                updates.append('estado = %s')
+                valores.append(estado)
+            elif 'estado' in data:
+                updates.append('estado = %s')
+                valores.append(data['estado'])
+            
+            if not updates:
+                return jsonify({'error': 'No hay datos para actualizar'}), 400
+            
+            valores.append(id_pago)
+            valores.append(g.id_residencia)
+            
+            query = f"""
+                UPDATE pago_proveedor
+                SET {', '.join(updates)}
+                WHERE id_pago = %s AND id_residencia = %s
+                RETURNING id_pago
+            """
+            
+            cursor.execute(query, valores)
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Pago a proveedor actualizado exitosamente',
+                'id_pago': id_pago
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al actualizar pago a proveedor: {str(e)}")
+            return jsonify({'error': 'Error al actualizar pago a proveedor'}), 500
         finally:
             cursor.close()
             conn.close()
@@ -2026,6 +2544,345 @@ def listar_personal():
         return jsonify({'error': 'Error al obtener personal'}), 500
 
 
+@app.route('/api/v1/personal', methods=['POST'])
+def crear_personal():
+    """
+    Crea un nuevo empleado/personal. Permite elegir la residencia (Violetas 1 o Violetas 2).
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        # Validar datos con el módulo de validación
+        is_valid, errors = validate_personal_data(data, is_update=False)
+        if not is_valid:
+            return jsonify({'error': 'Errores de validación', 'detalles': errors}), 400
+        
+        nombre = data.get('nombre')
+        apellido = data.get('apellido')
+        id_residencia = data.get('id_residencia')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que la residencia existe
+            cursor.execute("SELECT id_residencia FROM residencia WHERE id_residencia = %s", (id_residencia,))
+            if not cursor.fetchone():
+                return jsonify({'error': 'Residencia no encontrada'}), 404
+            
+            cursor.execute("""
+                INSERT INTO personal (id_residencia, nombre, apellido, documento_identidad,
+                                   telefono, email, cargo, activo, fecha_contratacion)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id_personal, fecha_creacion
+            """, (
+                id_residencia,
+                nombre,
+                apellido,
+                data.get('documento_identidad'),
+                data.get('telefono'),
+                data.get('email'),
+                data.get('cargo'),
+                data.get('activo', True),
+                data.get('fecha_contratacion')
+            ))
+            
+            resultado = cursor.fetchone()
+            id_personal = resultado[0]
+            conn.commit()
+            
+            return jsonify({
+                'id_personal': id_personal,
+                'mensaje': 'Personal creado exitosamente'
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al crear personal: {str(e)}")
+            return jsonify({'error': 'Error al crear personal'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+# ============================================================================
+# ENDPOINTS DE TURNOS EXTRA
+# ============================================================================
+
+@app.route('/api/v1/turnos-extra', methods=['GET'])
+def listar_turnos_extra():
+    """Lista los turnos extra de la residencia del usuario."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Obtener parámetros de filtro opcionales
+            id_personal = request.args.get('id_personal', type=int)
+            aprobado = request.args.get('aprobado', type=str)  # 'true', 'false', o None para todos
+            
+            query = """
+                SELECT te.id_turno_extra, te.id_personal, te.id_residencia,
+                       te.fecha, te.hora_entrada, te.hora_salida, te.motivo,
+                       te.aprobado, te.fecha_creacion,
+                       p.nombre || ' ' || p.apellido as nombre_personal,
+                       p.cargo
+                FROM turno_extra te
+                JOIN personal p ON te.id_personal = p.id_personal
+                WHERE te.id_residencia = %s
+            """
+            params = [g.id_residencia]
+            
+            if id_personal:
+                query += " AND te.id_personal = %s"
+                params.append(id_personal)
+            
+            if aprobado is not None:
+                if aprobado.lower() == 'true':
+                    query += " AND te.aprobado = TRUE"
+                elif aprobado.lower() == 'false':
+                    query += " AND te.aprobado = FALSE"
+            
+            query += " ORDER BY te.fecha DESC, te.hora_entrada DESC"
+            
+            cursor.execute(query, params)
+            turnos = cursor.fetchall()
+            
+            resultado = []
+            for t in turnos:
+                resultado.append({
+                    'id_turno_extra': t[0],
+                    'id_personal': t[1],
+                    'id_residencia': t[2],
+                    'fecha': str(t[3]) if t[3] else None,
+                    'hora_entrada': str(t[4]) if t[4] else None,
+                    'hora_salida': str(t[5]) if t[5] else None,
+                    'motivo': t[6],
+                    'aprobado': t[7],
+                    'fecha_creacion': t[8].isoformat() if t[8] else None,
+                    'nombre_personal': t[9],
+                    'cargo': t[10]
+                })
+            
+            return jsonify({'turnos_extra': resultado, 'total': len(resultado)}), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al listar turnos extra: {str(e)}")
+        return jsonify({'error': 'Error al obtener turnos extra'}), 500
+
+
+@app.route('/api/v1/turnos-extra', methods=['POST'])
+def crear_turno_extra():
+    """Crea un nuevo turno extra."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        # Validar datos
+        is_valid, errors = validate_turno_extra_data(data, is_update=False)
+        if not is_valid:
+            return jsonify({'error': 'Errores de validación', 'detalles': errors}), 400
+        
+        id_personal = data.get('id_personal')
+        fecha = data.get('fecha')
+        hora_entrada = data.get('hora_entrada')
+        hora_salida = data.get('hora_salida')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el personal existe y pertenece a la residencia
+            cursor.execute("""
+                SELECT id_personal, id_residencia FROM personal
+                WHERE id_personal = %s AND id_residencia = %s
+            """, (id_personal, g.id_residencia))
+            
+            personal = cursor.fetchone()
+            if not personal:
+                return jsonify({'error': 'Personal no encontrado o no pertenece a esta residencia'}), 404
+            
+            cursor.execute("""
+                INSERT INTO turno_extra (id_personal, id_residencia, fecha, hora_entrada, hora_salida, motivo, aprobado)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id_turno_extra, fecha_creacion
+            """, (
+                id_personal,
+                g.id_residencia,
+                fecha,
+                hora_entrada,
+                hora_salida,
+                data.get('motivo'),
+                data.get('aprobado', False)
+            ))
+            
+            resultado = cursor.fetchone()
+            id_turno_extra = resultado[0]
+            conn.commit()
+            
+            return jsonify({
+                'id_turno_extra': id_turno_extra,
+                'mensaje': 'Turno extra creado exitosamente'
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al crear turno extra: {str(e)}")
+            return jsonify({'error': 'Error al crear turno extra'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/turnos-extra/<int:id_turno_extra>', methods=['PUT'])
+def actualizar_turno_extra(id_turno_extra):
+    """Actualiza un turno extra (puede ser para aprobar/rechazar o editar)."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el turno existe y pertenece a la residencia
+            cursor.execute("""
+                SELECT id_turno_extra, id_residencia FROM turno_extra
+                WHERE id_turno_extra = %s AND id_residencia = %s
+            """, (id_turno_extra, g.id_residencia))
+            
+            turno = cursor.fetchone()
+            if not turno:
+                return jsonify({'error': 'Turno extra no encontrado'}), 404
+            
+            # Construir la consulta de actualización dinámicamente
+            updates = []
+            params = []
+            
+            if 'fecha' in data:
+                updates.append('fecha = %s')
+                params.append(data.get('fecha'))
+            
+            if 'hora_entrada' in data:
+                updates.append('hora_entrada = %s')
+                params.append(data.get('hora_entrada'))
+            
+            if 'hora_salida' in data:
+                updates.append('hora_salida = %s')
+                params.append(data.get('hora_salida'))
+            
+            if 'motivo' in data:
+                updates.append('motivo = %s')
+                params.append(data.get('motivo'))
+            
+            if 'aprobado' in data:
+                updates.append('aprobado = %s')
+                params.append(data.get('aprobado'))
+            
+            if not updates:
+                return jsonify({'error': 'No hay campos para actualizar'}), 400
+            
+            # Validar datos si se están actualizando campos críticos
+            if 'fecha' in data or 'hora_entrada' in data or 'hora_salida' in data:
+                is_valid, errors = validate_turno_extra_data(data, is_update=True)
+                if not is_valid:
+                    return jsonify({'error': 'Errores de validación', 'detalles': errors}), 400
+            
+            params.append(id_turno_extra)
+            
+            query = f"""
+                UPDATE turno_extra
+                SET {', '.join(updates)}
+                WHERE id_turno_extra = %s AND id_residencia = %s
+                RETURNING id_turno_extra
+            """
+            params.append(g.id_residencia)
+            
+            cursor.execute(query, params)
+            
+            if not cursor.fetchone():
+                return jsonify({'error': 'Error al actualizar turno extra'}), 500
+            
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Turno extra actualizado exitosamente'
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al actualizar turno extra: {str(e)}")
+            return jsonify({'error': 'Error al actualizar turno extra'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/turnos-extra/<int:id_turno_extra>', methods=['DELETE'])
+def eliminar_turno_extra(id_turno_extra):
+    """Elimina un turno extra."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el turno existe y pertenece a la residencia
+            cursor.execute("""
+                SELECT id_turno_extra FROM turno_extra
+                WHERE id_turno_extra = %s AND id_residencia = %s
+            """, (id_turno_extra, g.id_residencia))
+            
+            turno = cursor.fetchone()
+            if not turno:
+                return jsonify({'error': 'Turno extra no encontrado'}), 404
+            
+            cursor.execute("""
+                DELETE FROM turno_extra
+                WHERE id_turno_extra = %s AND id_residencia = %s
+            """, (id_turno_extra, g.id_residencia))
+            
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Turno extra eliminado exitosamente'
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al eliminar turno extra: {str(e)}")
+            return jsonify({'error': 'Error al eliminar turno extra'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
 # ============================================================================
 # ENDPOINTS DE DOCUMENTACIÓN DE RESIDENTES
 # ============================================================================
@@ -2180,16 +3037,26 @@ def crear_documento_residente(id_residente):
             tamaño_bytes = len(file_content)
             
             # Subir a Cloud Storage
-            blob_path = upload_document(
-                file_content=file_content,
-                id_residencia=id_residencia,
-                id_residente=id_residente,
-                tipo_documento=tipo_documento,
-                nombre_archivo=nombre_archivo
-            )
-            
-            if not blob_path:
-                return jsonify({'error': 'Error al subir el archivo a Cloud Storage'}), 500
+            try:
+                blob_path = upload_document(
+                    file_content=file_content,
+                    id_residencia=id_residencia,
+                    id_residente=id_residente,
+                    tipo_documento=tipo_documento,
+                    nombre_archivo=nombre_archivo,
+                    content_type=tipo_mime
+                )
+                
+                if not blob_path:
+                    app.logger.error("upload_document retornó None")
+                    return jsonify({
+                        'error': 'Error al subir el archivo a Cloud Storage. Verifique la configuración de GOOGLE_APPLICATION_CREDENTIALS y GCS_BUCKET_NAME'
+                    }), 500
+            except Exception as upload_error:
+                app.logger.error(f"Error al subir documento a Cloud Storage: {str(upload_error)}")
+                return jsonify({
+                    'error': f'Error al subir el archivo: {str(upload_error)}'
+                }), 500
             
             # Guardar en base de datos
             cursor.execute("""
@@ -2221,7 +3088,7 @@ def crear_documento_residente(id_residente):
             
         except Exception as e:
             conn.rollback()
-            app.logger.error(f"Error al crear documento: {str(e)}")
+            app.logger.error(f"Error al crear documento: {str(e)}", exc_info=True)
             return jsonify({'error': f'Error al crear documento: {str(e)}'}), 500
         finally:
             cursor.close()

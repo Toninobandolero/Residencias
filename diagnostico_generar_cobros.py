@@ -78,19 +78,9 @@ def diagnostico_generar_cobros():
             print(f"      - Costo: €{costo_habitacion}")
             print(f"      - Método pago: {metodo_pago}")
             
-            # Calcular fecha prevista (igual que en el backend)
-            if metodo_pago.lower() in ['transferencia', 'transfer']:
-                fecha_prevista = datetime(fecha_base.year, fecha_base.month, 3)
-            elif metodo_pago.lower() in ['remesa']:
-                if fecha_base.month == 12:
-                    siguiente_mes = datetime(fecha_base.year + 1, 1, 1)
-                else:
-                    siguiente_mes = datetime(fecha_base.year, fecha_base.month + 1, 1)
-                ultimo_dia = (siguiente_mes - timedelta(days=1)).day
-                dia_remesa = min(30, ultimo_dia)
-                fecha_prevista = datetime(fecha_base.year, fecha_base.month, dia_remesa)
-            else:
-                fecha_prevista = datetime(fecha_base.year, fecha_base.month, 5)
+            # Calcular fecha prevista - todos los métodos usan el día 1 del mes que se va a cobrar
+            # fecha_base ya es el día 1 del mes siguiente, así que lo usamos directamente
+            fecha_prevista = fecha_base
             
             print(f"      - Fecha prevista calculada: {fecha_prevista.strftime('%Y-%m-%d')}")
             

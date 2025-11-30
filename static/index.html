@@ -24,7 +24,9 @@
             justify-content: center;
             align-items: center;
             padding: 20px;
+            position: relative;
         }
+
 
         .container {
             background: white;
@@ -39,6 +41,9 @@
         .logo {
             text-align: left;
             margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
         }
 
         .logo h1 {
@@ -47,9 +52,18 @@
             margin-bottom: 10px;
         }
 
+        .logo img {
+            max-height: 80px;
+            width: auto;
+            display: block;
+        }
+
         .logo p {
-            color: #666;
+            color: #8d2f77;
             font-size: 14px;
+            font-size: 28px;
+            font-weight: 600;
+            margin: 0;
         }
 
         .header {
@@ -63,18 +77,28 @@
 
         .header-logo {
             flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .header-logo-text {
+            display: flex;
+            flex-direction: column;
         }
 
         .header-logo h1 {
             color: #667eea;
             font-size: 32px;
+            margin: 0;
             margin-bottom: 5px;
         }
 
-        .header-logo p {
-            color: #666;
-            font-size: 14px;
-            margin: 0;
+
+        .header-logo img {
+            max-height: 60px;
+            width: auto;
+            display: block;
         }
 
         .user-menu-container {
@@ -546,13 +570,17 @@
     <div class="container">
         <!-- Header para login -->
         <div class="logo" id="loginHeader">
-            <h1>Violetas Sistema de Gestión de Residencias</h1>
+            <img src="/static/logotipoRLV.svg" alt="Violetas Sistema de Gestión de Residencias" style="max-height: 80px; width: auto;">
+            <p>Gestión Residencias</p>
         </div>
 
         <!-- Header para dashboard con menú de usuario -->
         <div class="header" id="dashboardHeader" style="display: none;">
             <div class="header-logo">
-                <h1>Violetas Sistema de Gestión de Residencias</h1>
+                <img src="/static/logotipoRLV.svg" alt="Violetas Sistema de Gestión de Residencias" style="max-height: 60px; width: auto;">
+                <div class="header-logo-text">
+                    <h1>Gestión Residencias</h1>
+                </div>
             </div>
             <div class="user-menu-container">
                 <button class="user-icon-btn" onclick="toggleUserMenu()" title="Menú de usuario">
@@ -747,7 +775,7 @@
                     
                     <!-- Datos Médicos Esenciales -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                        <div class="form-group">
+                    <div class="form-group">
                             <label for="res_grupo_sanguineo">Grupo Sanguíneo</label>
                             <select id="res_grupo_sanguineo" name="grupo_sanguineo" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
                                 <option value="">Seleccione</option>
@@ -821,7 +849,7 @@
                     </div>
                     
                     <div class="form-group" style="margin-top: 15px;">
-                        <label for="res_servicios_extra">Servicios Extra</label>
+                        <label>Servicios Extra</label>
                         <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px;">
                             <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
                                 <input type="checkbox" name="servicio_extra" value="Peluquería" style="width: auto; margin-right: 8px;">
@@ -839,7 +867,7 @@
                                 <input type="checkbox" name="servicio_extra" value="Farmacia" style="width: auto; margin-right: 8px;">
                                 Farmacia
                             </label>
-                        </div>
+                    </div>
                         <input type="text" id="res_servicios_extra_otros" name="servicios_extra_otros" placeholder="Otros servicios (separados por comas, ej: Lavandería, Masajes)" style="margin-top: 5px;">
                         <input type="hidden" id="res_servicios_extra" name="servicios_extra" value="">
                     </div>
@@ -861,6 +889,146 @@
         </div>
     </div>
 
+    <!-- Modal para agregar personal -->
+    <div id="modalPersonal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Personal</h2>
+                <button class="close-modal" onclick="closeModal('modalPersonal')">&times;</button>
+            </div>
+            <form id="formPersonal" onsubmit="savePersonal(event)">
+                
+                <!-- SECCIÓN: Información de Residencia -->
+                <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/home.svg" alt="Residencia" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información de Residencia</h3>
+                    <div class="form-group">
+                        <label for="per_id_residencia">Residencia *</label>
+                        <select id="per_id_residencia" name="id_residencia" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                            <option value="">Seleccione una residencia</option>
+                            <option value="1">Violetas 1</option>
+                            <option value="2">Violetas 2</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- SECCIÓN: Información Personal -->
+                <div style="background: #fff5f5; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #f56565;">
+                    <h3 style="color: #f56565; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/user-medical.svg" alt="Usuario" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información Personal</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label for="per_nombre">Nombre *</label>
+                            <input type="text" id="per_nombre" name="nombre" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="per_apellido">Apellido *</label>
+                            <input type="text" id="per_apellido" name="apellido" required>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="per_documento">Documento de Identidad</label>
+                            <input type="text" id="per_documento" name="documento_identidad">
+                        </div>
+                        <div class="form-group">
+                            <label for="per_cargo">Cargo</label>
+                            <input type="text" id="per_cargo" name="cargo" placeholder="Ej: Enfermero/a, Auxiliar, Director/a">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- SECCIÓN: Información de Contacto -->
+                <div style="background: #f0fff4; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #48bb78;">
+                    <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/phone.svg" alt="Contacto" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información de Contacto</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label for="per_telefono">Teléfono</label>
+                            <input type="tel" id="per_telefono" name="telefono">
+                        </div>
+                        <div class="form-group">
+                            <label for="per_email">Email</label>
+                            <input type="email" id="per_email" name="email">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- SECCIÓN: Información Laboral -->
+                <div style="background: #fffaf0; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #ed8936;">
+                    <h3 style="color: #ed8936; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Laboral" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información Laboral</h3>
+                    <div class="form-group">
+                        <label for="per_fecha_contratacion">Fecha de Contratación</label>
+                        <input type="text" id="per_fecha_contratacion" name="fecha_contratacion" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)" readonly style="cursor: pointer; background-color: white;">
+                    </div>
+                </div>
+                
+                <!-- Los nuevos empleados siempre son activos -->
+                <input type="hidden" id="per_activo" name="activo" value="true">
+                <div id="modalPersonalAlert" class="alert" style="display: none;"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="savePersonalBtn" style="flex: 1;">Guardar</button>
+                    <button type="button" onclick="closeModal('modalPersonal')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para agregar/editar turno extra -->
+    <div id="modalTurnoExtra" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><img src="/static/icons/medical/clock.svg" alt="Turno Extra" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> <span id="modalTurnoExtraTitle">Agregar Turno Extra</span></h2>
+                <button class="close-modal" onclick="closeModal('modalTurnoExtra')">&times;</button>
+            </div>
+            <form id="formTurnoExtra" onsubmit="saveTurnoExtra(event)">
+                <input type="hidden" id="turno_id_turno_extra" name="id_turno_extra" value="">
+                
+                <!-- SECCIÓN: Información del Turno -->
+                <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/user-medical.svg" alt="Empleado" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Empleado</h3>
+                    <div class="form-group">
+                        <label for="turno_id_personal">Empleado *</label>
+                        <select id="turno_id_personal" name="id_personal" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                            <option value="">Seleccione un empleado</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- SECCIÓN: Fecha y Horas -->
+                <div style="background: #fff5f5; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #f56565;">
+                    <h3 style="color: #f56565; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/calendar.svg" alt="Fecha" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Fecha y Horas</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label for="turno_fecha">Fecha *</label>
+                            <input type="text" id="turno_fecha" name="fecha" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)" readonly style="cursor: pointer; background-color: white;" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="turno_hora_entrada">Hora Entrada *</label>
+                            <input type="time" id="turno_hora_entrada" name="hora_entrada" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="turno_hora_salida">Hora Salida *</label>
+                            <input type="time" id="turno_hora_salida" name="hora_salida" required>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- SECCIÓN: Motivo -->
+                <div style="background: #f0fff4; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #48bb78;">
+                    <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Motivo" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Motivo</h3>
+                    <div class="form-group">
+                        <label for="turno_motivo">Motivo del Turno Extra</label>
+                        <textarea id="turno_motivo" name="motivo" rows="3" placeholder="Describa el motivo del turno extra..."></textarea>
+                    </div>
+                </div>
+                
+                <div id="modalTurnoExtraAlert" class="alert" style="display: none;"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="saveTurnoExtraBtn" style="flex: 1;">Guardar</button>
+                    <button type="button" onclick="closeModal('modalTurnoExtra')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal para agregar proveedor -->
     <div id="modalProveedor" class="modal">
         <div class="modal-content">
@@ -869,6 +1037,7 @@
                 <button class="close-modal" onclick="closeModal('modalProveedor')">&times;</button>
             </div>
             <form id="formProveedor" onsubmit="saveProveedor(event)">
+                <input type="hidden" id="prov_id_proveedor" name="id_proveedor" value="">
                 
                 <!-- SECCIÓN: Información Básica -->
                 <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
@@ -953,7 +1122,7 @@
     <div id="modalCobro" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 id="modalCobroTitulo"><img src="/static/icons/medical/money.svg" alt="Cobro" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Cobro</h2>
+                <h2 id="modalCobroTitulo"><img src="/static/icons/medical/bill.svg" alt="Cobro" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Cobro</h2>
                 <button class="close-modal" onclick="closeModal('modalCobro')">&times;</button>
             </div>
             <form id="formCobro" onsubmit="saveCobro(event)">
@@ -986,7 +1155,12 @@
                     </div>
                     <div class="form-group" style="margin-top: 15px;">
                         <label for="cobro_concepto">Concepto *</label>
-                        <input type="text" id="cobro_concepto" name="concepto" required placeholder="Ej: Pago mensual habitación, Servicio extra, etc.">
+                        <select id="cobro_concepto" name="concepto" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;" onchange="actualizarCampoConceptoOtros()">
+                            <option value="">Seleccione un concepto</option>
+                            <option value="Pago mensual habitación">Pago mensual habitación</option>
+                            <option value="otros">Otros</option>
+                        </select>
+                        <input type="text" id="cobro_concepto_otros" name="concepto_otros" placeholder="Escriba el concepto personalizado" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333; margin-top: 10px; display: none;">
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                         <div class="form-group">
@@ -1010,6 +1184,7 @@
                 <div id="modalCobroAlert" class="alert" style="display: none;"></div>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
                     <button type="submit" id="saveCobroBtn" style="flex: 1;">Guardar</button>
+                    <button type="button" id="deleteCobroBtn" onclick="confirmarEliminarCobro()" style="flex: 1; background: #dc3545; display: none;">Eliminar</button>
                     <button type="button" onclick="closeModal('modalCobro')" style="flex: 1; background: #6c757d;">Cancelar</button>
                 </div>
             </form>
@@ -1050,6 +1225,22 @@
         </div>
     </div>
 
+    <!-- Modal para listar proveedores -->
+    <div id="modalListaProveedores" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h2><img src="/static/icons/medical/package.svg" alt="Proveedores" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Listado de Proveedores</h2>
+                <button class="close-modal" onclick="closeModal('modalListaProveedores')">&times;</button>
+            </div>
+            <div id="listaProveedoresContent" style="padding: 20px;">
+                <div style="text-align: center; padding: 40px;">
+                    <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <p style="margin-top: 15px; color: #666;">Cargando proveedores...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal para agregar pago a proveedor -->
     <div id="modalPagoProveedor" class="modal">
         <div class="modal-content">
@@ -1058,6 +1249,7 @@
                 <button class="close-modal" onclick="closeModal('modalPagoProveedor')">&times;</button>
             </div>
             <form id="formPagoProveedor" onsubmit="savePagoProveedor(event)">
+                <input type="hidden" id="pago_id_pago" name="id_pago" value="">
                 
                 <!-- SECCIÓN: Información del Pago -->
                 <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
@@ -1083,12 +1275,12 @@
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                         <div class="form-group">
-                            <label for="pago_fecha_pago">Fecha de Pago</label>
-                            <input type="text" id="pago_fecha_pago" name="fecha_pago" placeholder="DD/MM/YYYY" maxlength="10" readonly style="cursor: pointer; background-color: white;">
-                        </div>
-                        <div class="form-group">
                             <label for="pago_fecha_prevista">Fecha Prevista</label>
                             <input type="text" id="pago_fecha_prevista" name="fecha_prevista" placeholder="DD/MM/YYYY" maxlength="10" readonly style="cursor: pointer; background-color: white;">
+                        </div>
+                        <div class="form-group">
+                            <label for="pago_fecha_pago">Fecha de Pago</label>
+                            <input type="text" id="pago_fecha_pago" name="fecha_pago" placeholder="DD/MM/YYYY" maxlength="10" readonly style="cursor: pointer; background-color: white;">
                         </div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
@@ -1118,7 +1310,7 @@
                         <textarea id="pago_observaciones" name="observaciones" rows="3" placeholder="Notas adicionales sobre el pago"></textarea>
                     </div>
                     <p style="margin-top: 10px; font-size: 12px; color: #666;">
-                        💡 <strong>Nota:</strong> Si tiene fecha de pago, será un pago completado. Si tiene fecha prevista, será un pago pendiente.
+                        💡 <strong>Nota:</strong> Si tiene fecha de pago, será un pago completado. Si no tiene fecha de pago, será un pago pendiente.
                     </p>
                 </div>
                 
@@ -1382,11 +1574,11 @@
                         html += `
                             <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #667eea;">
                                 <h4 style="color: #667eea; margin-bottom: 15px; font-size: 18px; font-weight: 600;">Violetas 1 (${residentesVioletas1.length})</h4>
-                                <table class="data-table">
-                                    <thead>
-                                        <tr>
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
                                             <th>Habitación</th>
-                                            <th>Nombre</th>
+                                        <th>Nombre</th>
                                             <th>Contacto de Emergencia</th>
                                             <th>Teléfono de Emergencia</th>
                                         </tr>
@@ -1427,13 +1619,13 @@
                                 <table class="data-table">
                                     <thead>
                                         <tr>
-                                            <th>Habitación</th>
+                                        <th>Habitación</th>
                                             <th>Nombre</th>
                                             <th>Contacto de Emergencia</th>
                                             <th>Teléfono de Emergencia</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
+                                    </tr>
+                                </thead>
+                                <tbody>
                         `;
                         
                         residentesVioletas2.forEach(res => {
@@ -1494,14 +1686,14 @@
                             residentesResidencia.forEach(res => {
                                 html += `
                                     <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
-                                        <td>${res.habitacion || '-'}</td>
+                                    <td>${res.habitacion || '-'}</td>
                                         <td>${res.nombre} ${res.apellido}</td>
                                         <td>${res.contacto_emergencia || '-'}</td>
                                         <td>${res.telefono_emergencia || '-'}</td>
-                                    </tr>
-                                `;
-                            });
-                            
+                                </tr>
+                            `;
+                        });
+                        
                             html += `
                                         </tbody>
                                         <tfoot>
@@ -1551,12 +1743,22 @@
                             `;
                             
                             inactivosVioletas1.forEach(res => {
+                                // Debug: verificar datos recibidos
+                                console.log('Residente inactivo:', {
+                                    id: res.id_residente,
+                                    nombre: res.nombre,
+                                    habitacion: res.habitacion,
+                                    motivo_baja: res.motivo_baja,
+                                    fecha_baja: res.fecha_baja
+                                });
+                                
                                 const fechaBaja = res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : '-';
+                                const motivoBaja = res.motivo_baja || '-';
                                 html += `
                                     <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
                                         <td>${res.habitacion || '-'}</td>
                                         <td>${res.nombre} ${res.apellido}</td>
-                                        <td>${res.motivo_baja || '-'}</td>
+                                        <td>${motivoBaja}</td>
                                         <td>${fechaBaja}</td>
                                     </tr>
                                 `;
@@ -1594,12 +1796,22 @@
                             `;
                             
                             inactivosVioletas2.forEach(res => {
+                                // Debug: verificar datos recibidos
+                                console.log('Residente inactivo:', {
+                                    id: res.id_residente,
+                                    nombre: res.nombre,
+                                    habitacion: res.habitacion,
+                                    motivo_baja: res.motivo_baja,
+                                    fecha_baja: res.fecha_baja
+                                });
+                                
                                 const fechaBaja = res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : '-';
+                                const motivoBaja = res.motivo_baja || '-';
                                 html += `
                                     <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
                                         <td>${res.habitacion || '-'}</td>
                                         <td>${res.nombre} ${res.apellido}</td>
-                                        <td>${res.motivo_baja || '-'}</td>
+                                        <td>${motivoBaja}</td>
                                         <td>${fechaBaja}</td>
                                     </tr>
                                 `;
@@ -1650,12 +1862,22 @@
                                 `;
                                 
                                 residentesResidencia.forEach(res => {
+                                    // Debug: verificar datos recibidos
+                                    console.log('Residente inactivo:', {
+                                        id: res.id_residente,
+                                        nombre: res.nombre,
+                                        habitacion: res.habitacion,
+                                        motivo_baja: res.motivo_baja,
+                                        fecha_baja: res.fecha_baja
+                                    });
+                                    
                                     const fechaBaja = res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : '-';
+                                    const motivoBaja = res.motivo_baja || '-';
                                     html += `
                                         <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
                                             <td>${res.habitacion || '-'}</td>
                                             <td>${res.nombre} ${res.apellido}</td>
-                                            <td>${res.motivo_baja || '-'}</td>
+                                            <td>${motivoBaja}</td>
                                             <td>${fechaBaja}</td>
                                         </tr>
                                     `;
@@ -1797,20 +2019,20 @@
                         
                         const generarContentType = generarRes.headers.get('content-type');
                         if (generarContentType && generarContentType.includes('application/json')) {
-                            const generarData = await generarRes.json();
-                            
-                            if (generarRes.ok) {
+                        const generarData = await generarRes.json();
+                        
+                        if (generarRes.ok) {
                                 console.log(`✅ Cobros generados: ${generarData.cobros_generados || 0}, eliminados: ${generarData.cobros_eliminados || 0}`);
-                                // Recargar los cobros después de generarlos
-                                cobrosRes = await fetch(`${API_URL}/api/v1/facturacion/cobros`, {
-                                    headers: { 'Authorization': `Bearer ${token}` }
-                                });
+                            // Recargar los cobros después de generarlos
+                            cobrosRes = await fetch(`${API_URL}/api/v1/facturacion/cobros`, {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            });
                                 const reloadContentType = cobrosRes.headers.get('content-type');
                                 if (reloadContentType && reloadContentType.includes('application/json')) {
-                                    cobrosData = await cobrosRes.json();
+                            cobrosData = await cobrosRes.json();
                                 }
-                            } else {
-                                console.warn('⚠️ No se pudieron generar cobros previstos:', generarData.error || 'Error desconocido');
+                        } else {
+                            console.warn('⚠️ No se pudieron generar cobros previstos:', generarData.error || 'Error desconocido');
                             }
                         }
                     } catch (e) {
@@ -1991,7 +2213,7 @@
                             
                             <div class="tabs-container">
                                 <div class="tabs">
-                                    <button class="tab active" onclick="switchFacturacionTab('cobros')"><img src="/static/icons/medical/money.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros</button>
+                                    <button class="tab active" onclick="switchFacturacionTab('cobros')"><img src="/static/icons/medical/bill.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros</button>
                                     <button class="tab" onclick="switchFacturacionTab('pagos')"><img src="/static/icons/medical/package.svg" alt="Pagos" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Pagos a Proveedores</button>
                                 </div>
                                 
@@ -2012,47 +2234,69 @@
                         
                         residenciasOrdenadas.forEach(idRes => {
                             const grupo = cobrosPrevistosPorResidencia[idRes];
-                            html += `
+                        html += `
                                 <div style="margin-bottom: 30px;">
                                     <h5 style="color: #667eea; margin-bottom: 15px; padding: 10px; background: #f0f7ff; border-radius: 8px; border-left: 4px solid #667eea;">
                                         🏢 ${grupo.nombre_residencia} (${grupo.cobros.length} cobros pendientes)
                                     </h5>
-                                    <table class="data-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Residente</th>
-                                                <th>Monto</th>
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Residente</th>
+                                        <th>Monto</th>
                                                 <th>Concepto</th>
                                                 <th>Tipo Pago</th>
-                                                <th>Fecha Prevista</th>
-                                                <th>Estado</th>
-                                                <th>Acciones</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                            `;
-                            
+                                        <th>Fecha Prevista</th>
+                                        <th>Estado</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                            let totalGrupo = 0;
                             grupo.cobros.forEach(cobro => {
-                                const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
+                            const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
                                 const concepto = cobro.concepto || '-';
                                 const tipoPago = cobro.metodo_pago || '-';
-                                html += `
+                                totalGrupo += parseFloat(cobro.monto) || 0;
+                                
+                                // Verificar si la fecha prevista ya pasó
+                                let fechaPrevistaStyle = 'color: #333;';
+                                if (cobro.fecha_prevista) {
+                                    const fechaPrevistaDate = new Date(cobro.fecha_prevista);
+                                    const hoy = new Date();
+                                    hoy.setHours(0, 0, 0, 0);
+                                    fechaPrevistaDate.setHours(0, 0, 0, 0);
+                                    if (fechaPrevistaDate < hoy) {
+                                        fechaPrevistaStyle = 'color: #dc3545; font-weight: 600;';
+                                    }
+                                }
+                                
+                            html += `
                                     <tr style="cursor: pointer;" onclick="editarCobro(${cobro.id_pago})" title="Haz clic para editar">
-                                        <td style="color: #333;">${cobro.residente}</td>
+                                    <td style="color: #333;">${cobro.residente}</td>
                                         <td style="color: #333;">${Math.round(parseFloat(cobro.monto))}€</td>
                                         <td style="color: #333;">${concepto}</td>
                                         <td style="color: #333;">${tipoPago}</td>
-                                        <td style="color: #333;">${fechaPrevista}</td>
-                                        <td><span style="color: #ffc107; font-weight: 600;">Pendiente</span></td>
+                                    <td style="${fechaPrevistaStyle}">${fechaPrevista}</td>
+                                    <td><span style="color: #ffc107; font-weight: 600;">Pendiente</span></td>
                                         <td onclick="event.stopPropagation();">
-                                            <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'cobrado')" style="padding: 4px 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Marcar como Cobrado</button>
-                                        </td>
-                                    </tr>
-                                `;
-                            });
-                            
+                                        <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'cobrado')" style="padding: 4px 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Marcar como Cobrado</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        
                             html += `
                                         </tbody>
+                                        <tfoot>
+                                            <tr style="background: #f8f9fa; font-weight: 600; border-top: 2px solid #e0e0e0;">
+                                                <td style="padding: 10px; text-align: right; color: #667eea;">Total:</td>
+                                                <td style="padding: 10px; text-align: left; color: #667eea; font-weight: 600;">${Math.round(totalGrupo)}€</td>
+                                                <td colspan="5"></td>
+                                            </tr>
+                                        </tfoot>
                                     </table>
                                 </div>
                             `;
@@ -2076,50 +2320,72 @@
                         
                         residenciasOrdenadas.forEach(idRes => {
                             const grupo = cobrosCompletadosPorResidencia[idRes];
-                            html += `
+                        html += `
                                 <div style="margin-bottom: 30px;">
                                     <h5 style="color: #28a745; margin-bottom: 15px; padding: 10px; background: #f0fff4; border-radius: 8px; border-left: 4px solid #28a745;">
                                         🏢 ${grupo.nombre_residencia} (${grupo.cobros.length} cobros completados)
                                     </h5>
-                                    <table class="data-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Residente</th>
-                                                <th>Monto</th>
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Residente</th>
+                                        <th>Monto</th>
                                                 <th>Concepto</th>
                                                 <th>Tipo Pago</th>
-                                                <th>Fecha Prevista</th>
-                                                <th>Fecha de Pago</th>
-                                                <th>Estado</th>
+                                        <th>Fecha Prevista</th>
+                                        <th>Fecha de Pago</th>
+                                        <th>Estado</th>
                                                 <th>Acciones</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                            `;
-                            
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                            let totalGrupo = 0;
                             grupo.cobros.forEach(cobro => {
-                                const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
-                                const fechaPago = cobro.fecha_pago ? fechaISOToEspanol(cobro.fecha_pago) : '-';
+                            const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
+                            const fechaPago = cobro.fecha_pago ? fechaISOToEspanol(cobro.fecha_pago) : '-';
                                 const concepto = cobro.concepto || 'Pago mensual habitación';
                                 const tipoPago = cobro.metodo_pago || '-';
-                                html += `
-                                    <tr>
-                                        <td style="color: #333;">${cobro.residente}</td>
+                                totalGrupo += parseFloat(cobro.monto) || 0;
+                                
+                                // Verificar si la fecha prevista ya pasó (aunque esté cobrado, para referencia histórica)
+                                let fechaPrevistaStyle = 'color: #333;';
+                                if (cobro.fecha_prevista) {
+                                    const fechaPrevistaDate = new Date(cobro.fecha_prevista);
+                                    const hoy = new Date();
+                                    hoy.setHours(0, 0, 0, 0);
+                                    fechaPrevistaDate.setHours(0, 0, 0, 0);
+                                    if (fechaPrevistaDate < hoy) {
+                                        fechaPrevistaStyle = 'color: #dc3545; font-weight: 600;';
+                                    }
+                                }
+                                
+                            html += `
+                                <tr style="cursor: pointer;" onclick="editarCobro(${cobro.id_pago})" title="Haz clic para editar">
+                                    <td style="color: #333;">${cobro.residente}</td>
                                         <td style="color: #333;">${Math.round(parseFloat(cobro.monto))}€</td>
                                         <td style="color: #333;">${concepto}</td>
                                         <td style="color: #333;">${tipoPago}</td>
-                                        <td style="color: #333;">${fechaPrevista}</td>
-                                        <td style="color: #333;">${fechaPago}</td>
-                                        <td><span style="color: #28a745; font-weight: 600;"><img src="/static/icons/medical/check-circle.svg" alt="Cobrado" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;"> Cobrado</span></td>
-                                        <td>
+                                    <td style="${fechaPrevistaStyle}">${fechaPrevista}</td>
+                                    <td style="color: #333;">${fechaPago}</td>
+                                        <td><span style="color: #28a745; font-weight: 600;">Cobrado</span></td>
+                                        <td onclick="event.stopPropagation();">
                                             <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'pendiente')" style="padding: 4px 8px; background: #ffc107; color: #333; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Revertir</button>
                                         </td>
-                                    </tr>
-                                `;
-                            });
-                            
+                                </tr>
+                            `;
+                        });
+                        
                             html += `
                                         </tbody>
+                                        <tfoot>
+                                            <tr style="background: #f8f9fa; font-weight: 600; border-top: 2px solid #e0e0e0;">
+                                                <td style="padding: 10px; text-align: right; color: #28a745;">Total:</td>
+                                                <td style="padding: 10px; text-align: left; color: #28a745; font-weight: 600;">${Math.round(totalGrupo)}€</td>
+                                                <td colspan="6"></td>
+                                            </tr>
+                                        </tfoot>
                                     </table>
                                 </div>
                             `;
@@ -2145,7 +2411,8 @@
                                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                                         <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/package.svg" alt="Proveedores" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Pagos a Proveedores (${proveedoresData.total || 0})</h4>
                                         <div style="display: flex; gap: 10px;">
-                                            <button class="add-btn" onclick="openModal('modalProveedor')" style="padding: 8px 16px; font-size: 14px; background: #6c757d;">+ Proveedor</button>
+                                            <button class="add-btn" onclick="abrirModalListaProveedores()" style="padding: 8px 16px; font-size: 14px; background: #17a2b8;">Ver Proveedores</button>
+                                            <button class="add-btn" onclick="resetProveedorForm(); openModal('modalProveedor');" style="padding: 8px 16px; font-size: 14px; background: #6c757d;">+ Proveedor</button>
                                             <button class="add-btn" onclick="openModalProveedor()" style="padding: 8px 16px; font-size: 14px;">+ Pago Proveedor</button>
                                         </div>
                                     </div>
@@ -2167,22 +2434,35 @@
                                 <tbody>
                         `;
                         
+                        let totalPagos = 0;
                         proveedoresData.pagos.forEach(pago => {
                             const estadoPago = (pago.estado || 'pendiente').toLowerCase();
                             const tipo = estadoPago === 'pagado' ? '<img src="/static/icons/medical/check-circle.svg" alt="Pagado" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;"> Pagado' : '<img src="/static/icons/medical/clock.svg" alt="Pendiente" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;"> Pendiente';
+                            const metodoPago = pago.metodo_pago || pago.tipo_pago || '-';
+                            const monto = parseFloat(pago.monto || pago.monto_estimado || 0);
+                            totalPagos += monto;
                             html += `
-                                <tr>
+                                <tr style="cursor: pointer;" onclick="editarPagoProveedor(${pago.id_pago})" title="Haz clic para editar">
                                     <td>${pago.proveedor}</td>
                                     <td>${pago.concepto}</td>
-                                    <td>${Math.round(parseFloat(pago.monto || pago.monto_estimado || 0))}€</td>
+                                    <td>${Math.round(monto)}€</td>
                                     <td>${pago.fecha_prevista || pago.fecha_pago || '-'}</td>
-                                    <td>${pago.estado}</td>
                                     <td>${tipo}</td>
+                                    <td>${metodoPago}</td>
                                 </tr>
                             `;
                         });
                         
-                        html += '</tbody></table>';
+                        html += `
+                                </tbody>
+                                <tfoot>
+                                    <tr style="background: #f8f9fa; font-weight: 600; border-top: 2px solid #e0e0e0;">
+                                        <td style="padding: 10px; text-align: right; color: #667eea;">Total:</td>
+                                        <td style="padding: 10px; text-align: left; color: #667eea; font-weight: 600;">${Math.round(totalPagos)}€</td>
+                                        <td colspan="4"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>`;
                     } else {
                         html += '<p style="color: #333;">No hay pagos a proveedores registrados.</p>';
                     }
@@ -2312,9 +2592,22 @@
                         }
                     });
                     
-                    // Forzar el valor del select si se proporcionó un ID
+                    // Inicializar conceptos con servicios predefinidos
+                    actualizarConceptosCobro([]);
+                    
+                    // Añadir event listener para cargar servicios extra cuando cambie el residente
+                    select.addEventListener('change', function() {
+                        const idResidente = this.value;
+                        if (idResidente) {
+                            cargarServiciosExtraResidente(idResidente);
+                        } else {
+                            actualizarConceptosCobro([]);
+                        }
+                    });
+                    
+                    // Si hay un residente seleccionado, cargar sus servicios extra
                     if (residenteSeleccionadoId) {
-                        select.value = residenteSeleccionadoId;
+                        await cargarServiciosExtraResidente(residenteSeleccionadoId);
                     }
                 } else {
                     select.innerHTML = '<option value="">Error al cargar residentes</option>';
@@ -2322,6 +2615,92 @@
             } catch (error) {
                 console.error('Error al cargar residentes:', error);
                 select.innerHTML = '<option value="">Error al cargar residentes</option>';
+            }
+        }
+
+        async function cargarServiciosExtraResidente(idResidente) {
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residentes/${idResidente}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.residente) {
+                    const serviciosExtra = data.residente.servicios_extra || '';
+                    // Parsear servicios extra (pueden estar separados por comas)
+                    const servicios = serviciosExtra.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                    actualizarConceptosCobro(servicios);
+                } else {
+                    actualizarConceptosCobro([]);
+                }
+            } catch (error) {
+                console.error('Error al cargar servicios extra del residente:', error);
+                actualizarConceptosCobro([]);
+            }
+        }
+
+        function actualizarConceptosCobro(serviciosExtra) {
+            const selectConcepto = document.getElementById('cobro_concepto');
+            if (!selectConcepto) return;
+            
+            // Guardar el valor actual si existe
+            const valorActual = selectConcepto.value;
+            
+            // Limpiar opciones
+            selectConcepto.innerHTML = '<option value="">Seleccione un concepto</option>';
+            
+            // Añadir opción básica
+            selectConcepto.innerHTML += '<option value="Pago mensual habitación">Pago mensual habitación</option>';
+            
+            // Servicios extra predefinidos que siempre aparecen
+            const serviciosPredefinidos = ['Peluquería', 'Podólogo', 'Fisio', 'Farmacia'];
+            serviciosPredefinidos.forEach(servicio => {
+                const option = document.createElement('option');
+                option.value = servicio;
+                option.textContent = servicio;
+                selectConcepto.appendChild(option);
+            });
+            
+            // Añadir servicios extra del residente (si no están ya en los predefinidos)
+            if (serviciosExtra && serviciosExtra.length > 0) {
+                serviciosExtra.forEach(servicio => {
+                    // Solo añadir si no está ya en los predefinidos
+                    if (!serviciosPredefinidos.includes(servicio)) {
+                        const option = document.createElement('option');
+                        option.value = servicio;
+                        option.textContent = servicio;
+                        selectConcepto.appendChild(option);
+                    }
+                });
+            }
+            
+            // Añadir opción "Otros" al final
+            selectConcepto.innerHTML += '<option value="otros">Otros</option>';
+            
+            // Restaurar el valor anterior si existe
+            if (valorActual && Array.from(selectConcepto.options).some(opt => opt.value === valorActual)) {
+                selectConcepto.value = valorActual;
+            }
+        }
+
+        function actualizarCampoConceptoOtros() {
+            const selectConcepto = document.getElementById('cobro_concepto');
+            const campoOtros = document.getElementById('cobro_concepto_otros');
+            
+            if (!selectConcepto || !campoOtros) return;
+            
+            if (selectConcepto.value === 'otros') {
+                campoOtros.style.display = 'block';
+                campoOtros.required = true;
+            } else {
+                campoOtros.style.display = 'none';
+                campoOtros.required = false;
+                campoOtros.value = '';
             }
         }
         
@@ -2427,6 +2806,26 @@
                 return;
             }
             
+            // Obtener el concepto (del select o del campo "otros")
+            let concepto = formData.get('concepto');
+            if (concepto === 'otros') {
+                const conceptoOtros = document.getElementById('cobro_concepto_otros').value.trim();
+                if (!conceptoOtros) {
+                    showCobroModalError('Debe escribir el concepto personalizado');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                    return;
+                }
+                concepto = conceptoOtros;
+            }
+            
+            if (!concepto) {
+                showCobroModalError('Debe seleccionar o escribir un concepto');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
             // Convertir fechas de formato español a ISO
             const fecha_pago_es = formData.get('fecha_pago');
             let fecha_prevista_es = formData.get('fecha_prevista');
@@ -2477,7 +2876,7 @@
             const data = {
                 id_residente: parseInt(id_residente),
                 monto: formData.get('monto') ? parseFloat(formData.get('monto')) : null,
-                concepto: formData.get('concepto') || null,
+                concepto: concepto,
                 metodo_pago: formData.get('metodo_pago') || null,
                 fecha_pago: fecha_pago_es ? fechaEspanolToISO(fecha_pago_es) : null,
                 fecha_prevista: fecha_prevista_es ? fechaEspanolToISO(fecha_prevista_es) : null,
@@ -2544,7 +2943,18 @@
                     }
                 });
                 
-                const cobro = await response.json();
+                // Verificar el tipo de contenido antes de parsear
+                const contentType = response.headers.get('content-type');
+                let cobro;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    cobro = await response.json();
+                } else {
+                    const text = await response.text();
+                    console.error('Respuesta no es JSON al obtener cobro:', text);
+                    showCobroModalError(`Error: No se pudo obtener el cobro. Status: ${response.status}`);
+                    return;
+                }
                 
                 if (response.ok) {
                     // Guardar el id_residente antes de cargar los residentes
@@ -2563,7 +2973,32 @@
                     }
                     
                     document.getElementById('cobro_monto').value = cobro.monto;
-                    document.getElementById('cobro_concepto').value = cobro.concepto || '';
+                    
+                    // Establecer el concepto en el select o en "otros"
+                    const selectConcepto = document.getElementById('cobro_concepto');
+                    const campoOtros = document.getElementById('cobro_concepto_otros');
+                    const concepto = cobro.concepto || '';
+                    
+                    // Cargar servicios extra del residente para tener todas las opciones disponibles
+                    await cargarServiciosExtraResidente(idResidenteSeleccionado);
+                    
+                    // Verificar si el concepto está en las opciones del select
+                    const opciones = Array.from(selectConcepto.options).map(opt => opt.value);
+                    if (opciones.includes(concepto)) {
+                        selectConcepto.value = concepto;
+                        campoOtros.style.display = 'none';
+                        campoOtros.value = '';
+                    } else if (concepto) {
+                        // Si no está en las opciones, usar "otros"
+                        selectConcepto.value = 'otros';
+                        campoOtros.style.display = 'block';
+                        campoOtros.value = concepto;
+                    } else {
+                        selectConcepto.value = '';
+                        campoOtros.style.display = 'none';
+                        campoOtros.value = '';
+                    }
+                    
                     document.getElementById('cobro_metodo_pago').value = cobro.metodo_pago || '';
                     document.getElementById('cobro_observaciones').value = cobro.observaciones || '';
                     
@@ -2583,7 +3018,13 @@
                     }
                     
                     // Cambiar título del modal
-                    document.getElementById('modalCobroTitulo').innerHTML = '<img src="/static/icons/medical/money.svg" alt="Cobro" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Cobro';
+                    document.getElementById('modalCobroTitulo').innerHTML = '<img src="/static/icons/medical/bill.svg" alt="Cobro" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Cobro';
+                    
+                    // Mostrar botón de eliminar cuando se está editando
+                    const deleteBtn = document.getElementById('deleteCobroBtn');
+                    if (deleteBtn) {
+                        deleteBtn.style.display = 'block';
+                    }
                     
                     // Abrir modal primero
                     document.getElementById('modalCobro').style.display = 'block';
@@ -2591,10 +3032,21 @@
                     // Inicializar date pickers
                     initializeCobroDatePickers();
                 } else {
-                    alert('Error al cargar el cobro: ' + (cobro.error || 'Error desconocido'));
+                    // Manejar errores de autenticación
+                    if (response.status === 401) {
+                        showCobroModalError('Sesión expirada. Por favor, recarga la página para iniciar sesión nuevamente.');
+                        localStorage.removeItem('violetas_token');
+                    } else if (response.status === 404) {
+                        showCobroModalError('El cobro no se encontró. Puede que haya sido eliminado o no tengas permisos para verlo.');
+                        console.error('Cobro no encontrado:', cobro.error || 'Error desconocido');
+                    } else {
+                        showCobroModalError('Error al obtener el cobro: ' + (cobro.error || `Error ${response.status}`));
+                        console.error('Error al obtener cobro:', response.status, cobro);
+                    }
                 }
             } catch (error) {
-                alert('Error de conexión: ' + error.message);
+                console.error('Error de conexión al obtener cobro:', error);
+                showCobroModalError('Error de conexión: ' + error.message + '. Verifica que el servidor esté corriendo.');
             }
         }
         
@@ -2623,12 +3075,91 @@
             }
         }
         
+        function confirmarEliminarCobro() {
+            const idPago = document.getElementById('cobro_id_pago').value;
+            
+            if (!idPago) {
+                showCobroModalError('No se puede eliminar: no hay cobro seleccionado');
+                return;
+            }
+            
+            if (!confirm('¿Está seguro de que desea eliminar este cobro? Esta acción no se puede deshacer.')) {
+                return;
+            }
+            
+            eliminarCobro(idPago);
+        }
+        
+        async function eliminarCobro(idPago) {
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/facturacion/cobros/${idPago}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                // Verificar el tipo de contenido antes de parsear
+                const contentType = response.headers.get('content-type');
+                let result;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    result = await response.json();
+                } else {
+                    const text = await response.text();
+                    console.error('Respuesta no es JSON al eliminar cobro:', text);
+                    showCobroModalError(`Error: No se pudo eliminar el cobro. Status: ${response.status}`);
+                    return;
+                }
+                
+                if (response.ok) {
+                    showCobroModalSuccess('Cobro eliminado exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalCobro');
+                        loadFacturacion(); // Recargar la lista
+                    }, 1500);
+                } else {
+                    // Manejar errores de autenticación
+                    if (response.status === 401) {
+                        showCobroModalError('Sesión expirada. Por favor, recarga la página para iniciar sesión nuevamente.');
+                        localStorage.removeItem('violetas_token');
+                    } else {
+                        showCobroModalError('Error: ' + (result.error || 'Error al eliminar el cobro'));
+                        console.error('Error al eliminar cobro:', response.status, result);
+                    }
+                }
+            } catch (error) {
+                console.error('Error de conexión al eliminar cobro:', error);
+                showCobroModalError('Error de conexión: ' + error.message + '. Verifica que el servidor esté corriendo.');
+            }
+        }
+        
         async function openModalProveedor() {
+            // Resetear formulario para nuevo pago
+            resetPagoProveedorForm();
             // Cargar proveedores antes de abrir el modal
             await loadProveedoresForSelect();
             openModal('modalPagoProveedor');
             // Inicializar date pickers
             initializePagoProveedorDatePickers();
+        }
+        
+        function resetPagoProveedorForm() {
+            // Limpiar el formulario y restablecer el título
+            document.getElementById('formPagoProveedor').reset();
+            document.getElementById('pago_id_pago').value = '';
+            
+            // Restablecer título del modal
+            const modalHeader = document.querySelector('#modalPagoProveedor .modal-header h2');
+            if (modalHeader) {
+                modalHeader.innerHTML = '<img src="/static/icons/medical/money.svg" alt="Pago" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Pago a Proveedor';
+            }
+            
+            // Limpiar alertas
+            hidePagoProveedorModalAlert();
         }
         
         function initializePagoProveedorDatePickers() {
@@ -2645,8 +3176,9 @@
             
             // Inicializar flatpickr para fecha de pago
             if (fechaPagoInput) {
-                // Establecer fecha de hoy por defecto si no tiene valor
-                if (!fechaPagoInput.value) {
+                // Establecer fecha de hoy por defecto si no tiene valor y no estamos editando
+                const idPago = document.getElementById('pago_id_pago').value;
+                if (!fechaPagoInput.value && !idPago) {
                     const hoy = new Date();
                     const dia = String(hoy.getDate()).padStart(2, '0');
                     const mes = String(hoy.getMonth() + 1).padStart(2, '0');
@@ -2660,7 +3192,7 @@
                     allowInput: true,
                     clickOpens: true,
                     maxDate: "today",
-                    defaultDate: "today",
+                    defaultDate: fechaPagoInput.value || "today",
                     onChange: function(selectedDates, dateStr, instance) {
                         if (dateStr) {
                             const partes = dateStr.split('/');
@@ -2669,6 +3201,11 @@
                                 const mes = partes[1].padStart(2, '0');
                                 const año = partes[2];
                                 instance.input.value = `${dia}/${mes}/${año}`;
+                            }
+                            // Si se selecciona fecha de pago, limpiar fecha prevista
+                            if (fechaPrevistaInput && flatpickrPagoProveedorFechaPrevista) {
+                                fechaPrevistaInput.value = '';
+                                flatpickrPagoProveedorFechaPrevista.clear();
                             }
                         }
                     }
@@ -2682,6 +3219,7 @@
                     locale: "es",
                     allowInput: true,
                     clickOpens: true,
+                    defaultDate: fechaPrevistaInput.value || null,
                     onChange: function(selectedDates, dateStr, instance) {
                         if (dateStr) {
                             const partes = dateStr.split('/');
@@ -2690,6 +3228,11 @@
                                 const mes = partes[1].padStart(2, '0');
                                 const año = partes[2];
                                 instance.input.value = `${dia}/${mes}/${año}`;
+                            }
+                            // Si se selecciona fecha prevista, limpiar fecha de pago
+                            if (fechaPagoInput && flatpickrPagoProveedorFechaPago) {
+                                fechaPagoInput.value = '';
+                                flatpickrPagoProveedorFechaPago.clear();
                             }
                         }
                     }
@@ -2781,11 +3324,119 @@
             document.getElementById('modalBajaAlert').style.display = 'none';
         }
         
+        async function reactivarResidente(idResidente) {
+            if (!confirm('¿Está seguro de que desea reactivar a este residente? La baja se eliminó por error.')) {
+                return;
+            }
+            
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residentes/${idResidente}/alta`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const contentType = response.headers.get('content-type');
+                let result;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    result = await response.json();
+                } else {
+                    const text = await response.text();
+                    console.error('Respuesta no es JSON:', text);
+                    alert('Error: No se pudo reactivar al residente. Status: ' + response.status);
+                    return;
+                }
+                
+                if (response.ok) {
+                    alert('Residente reactivado exitosamente');
+                    closeModal('modalViewResidente');
+                    loadResidentes();
+                } else {
+                    alert('Error: ' + (result.error || 'Error al reactivar al residente'));
+                }
+            } catch (error) {
+                console.error('Error al reactivar residente:', error);
+                alert('Error de conexión: ' + error.message);
+            }
+        }
+        
+        function confirmarEliminarResidente(idResidente) {
+            if (!confirm('⚠️ ADVERTENCIA: Esta acción es IRREVERSIBLE.\n\n¿Está seguro de que desea eliminar completamente a este residente?\n\nEsto eliminará todos los datos del residente de la base de datos.')) {
+                return;
+            }
+            
+            // Confirmación adicional
+            if (!confirm('Esta acción NO se puede deshacer. ¿Está completamente seguro?')) {
+                return;
+            }
+            
+            eliminarResidente(idResidente);
+        }
+        
+        async function eliminarResidente(idResidente) {
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residentes/${idResidente}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const contentType = response.headers.get('content-type');
+                let result;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    result = await response.json();
+                } else {
+                    const text = await response.text();
+                    console.error('Respuesta no es JSON:', text);
+                    alert('Error: No se pudo eliminar al residente. Status: ' + response.status);
+                    return;
+                }
+                
+                if (response.ok) {
+                    alert('Residente eliminado completamente');
+                    closeModal('modalViewResidente');
+                    loadResidentes();
+                } else {
+                    alert('Error: ' + (result.error || 'Error al eliminar al residente'));
+                }
+            } catch (error) {
+                console.error('Error al eliminar residente:', error);
+                alert('Error de conexión: ' + error.message);
+            }
+        }
+        
         function openModalProveedorNuevo() {
             // Abrir modal de nuevo proveedor
             event.stopPropagation();
             event.preventDefault();
+            resetProveedorForm();
             openModal('modalProveedor');
+        }
+        
+        function resetProveedorForm() {
+            // Limpiar el formulario y restablecer el título
+            document.getElementById('formProveedor').reset();
+            document.getElementById('prov_id_proveedor').value = '';
+            document.getElementById('prov_activo').checked = true;
+            
+            // Restablecer título del modal
+            const modalHeader = document.querySelector('#modalProveedor .modal-header h2');
+            if (modalHeader) {
+                modalHeader.innerHTML = '<img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Proveedor';
+            }
+            
+            // Limpiar alertas
+            hideProveedorModalAlert();
         }
 
         async function loadProveedoresForSelect() {
@@ -2829,6 +3480,119 @@
             }
         }
 
+        async function abrirModalListaProveedores() {
+            const token = localStorage.getItem('violetas_token');
+            const content = document.getElementById('listaProveedoresContent');
+            
+            // Mostrar loading
+            content.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <p style="margin-top: 15px; color: #666;">Cargando proveedores...</p>
+                </div>
+            `;
+            
+            // Abrir modal
+            openModal('modalListaProveedores');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/proveedores`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const contentType = response.headers.get('content-type');
+                let data;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    content.innerHTML = `<p style="color: red;">Error: La respuesta del servidor no es válida. Status: ${response.status}</p>`;
+                    return;
+                }
+                
+                if (response.ok && data.proveedores) {
+                    if (data.proveedores.length > 0) {
+                        let html = `
+                            <div style="margin-bottom: 20px;">
+                                <p style="color: #666; margin-bottom: 15px;">Total de proveedores: <strong>${data.proveedores.length}</strong></p>
+                            </div>
+                            <div style="overflow-x: auto;">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Nombre</th>
+                                            <th>Tipo de Servicio</th>
+                                            <th>NIF/CIF</th>
+                                            <th>Teléfono</th>
+                                            <th>Email</th>
+                                            <th>Contacto</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                        `;
+                        
+                        data.proveedores.forEach(prov => {
+                            const estado = prov.activo ? 
+                                '<span style="color: #28a745; font-weight: 600;">✅ Activo</span>' : 
+                                '<span style="color: #dc3545; font-weight: 600;">❌ Inactivo</span>';
+                            
+                            // Verificar que id_proveedor existe
+                            if (!prov.id_proveedor) {
+                                console.error('Proveedor sin id_proveedor:', prov);
+                                return; // Saltar este proveedor
+                            }
+                            
+                            html += `
+                                <tr style="cursor: pointer;" onclick="editarProveedor(${prov.id_proveedor})" title="Haz clic para editar">
+                                    <td style="color: #333; font-weight: 600;">${prov.nombre || '-'}</td>
+                                    <td style="color: #333;">${prov.tipo_servicio || '-'}</td>
+                                    <td style="color: #333;">${prov.nif_cif || '-'}</td>
+                                    <td style="color: #333;">${prov.telefono || '-'}</td>
+                                    <td style="color: #333;">${prov.email || '-'}</td>
+                                    <td style="color: #333;">${prov.contacto || '-'}</td>
+                                    <td>${estado}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                        
+                        // Añadir información adicional si hay observaciones o dirección
+                        const proveedoresConInfo = data.proveedores.filter(p => p.observaciones || p.direccion);
+                        if (proveedoresConInfo.length > 0) {
+                            html += `<div style="margin-top: 30px;"><h4 style="color: #667eea; margin-bottom: 15px;">Información Adicional</h4>`;
+                            proveedoresConInfo.forEach(prov => {
+                                html += `
+                                    <div style="background: #f7fafc; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #667eea;">
+                                        <strong style="color: #667eea;">${prov.nombre}</strong>
+                                        ${prov.direccion ? `<p style="margin: 5px 0; color: #666;"><strong>Dirección:</strong> ${prov.direccion}</p>` : ''}
+                                        ${prov.observaciones ? `<p style="margin: 5px 0; color: #666;"><strong>Observaciones:</strong> ${prov.observaciones}</p>` : ''}
+                                    </div>
+                                `;
+                            });
+                            html += `</div>`;
+                        }
+                        
+                        content.innerHTML = html;
+                    } else {
+                        content.innerHTML = '<p style="color: #666; font-style: italic; text-align: center; padding: 40px;">No hay proveedores registrados.</p>';
+                    }
+                } else {
+                    content.innerHTML = `<p style="color: red;">Error (${response.status}): ${data.error || 'Error desconocido'}</p>`;
+                }
+            } catch (error) {
+                console.error('Error de conexión al cargar proveedores:', error);
+                content.innerHTML = `<p style="color: red;">Error de conexión: ${error.message}</p>`;
+            }
+        }
+
         async function saveProveedor(event) {
             event.preventDefault();
             
@@ -2863,9 +3627,13 @@
             saveBtn.textContent = 'Guardando...';
             hideProveedorModalAlert();
             
+            const idProveedor = document.getElementById('prov_id_proveedor').value;
+            const method = idProveedor ? 'PUT' : 'POST';
+            const url = idProveedor ? `${API_URL}/api/v1/proveedores/${idProveedor}` : `${API_URL}/api/v1/proveedores`;
+            
             try {
-                const response = await fetch(`${API_URL}/api/v1/proveedores`, {
-                    method: 'POST',
+                const response = await fetch(url, {
+                    method: method,
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
@@ -2876,9 +3644,10 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    showProveedorModalSuccess('Proveedor agregado exitosamente');
+                    showProveedorModalSuccess(idProveedor ? 'Proveedor actualizado exitosamente' : 'Proveedor agregado exitosamente');
                     // Guardar si el modal de pago estaba abierto antes de abrir el de proveedor
                     const modalPagoEstabaAbierto = sessionStorage.getItem('modalPagoAbierto') === 'true';
+                    const modalListaEstabaAbierto = document.getElementById('modalListaProveedores').style.display === 'block';
                     
                     setTimeout(() => {
                         closeModal('modalProveedor');
@@ -2890,6 +3659,17 @@
                                 sessionStorage.removeItem('modalPagoAbierto');
                             }, 100);
                         }
+                        // Si el modal de lista estaba abierto, recargarlo
+                        if (modalListaEstabaAbierto) {
+                            setTimeout(async () => {
+                                await abrirModalListaProveedores();
+                            }, 100);
+                        }
+                        // Recargar proveedores en el select si existe
+                        const selectProveedor = document.getElementById('pago_id_proveedor');
+                        if (selectProveedor) {
+                            loadProveedoresForSelect();
+                        }
                     }, 1500);
                 } else {
                     showProveedorModalError(result.error || 'Error al guardar el proveedor');
@@ -2900,6 +3680,95 @@
                 showProveedorModalError('Error de conexión: ' + error.message);
                 saveBtn.disabled = false;
                 saveBtn.textContent = originalText;
+            }
+        }
+
+        async function editarProveedor(idProveedor) {
+            console.log('editarProveedor llamado con id:', idProveedor);
+            
+            if (!idProveedor) {
+                console.error('idProveedor no está definido');
+                showProveedorModalError('Error: ID de proveedor no válido');
+                return;
+            }
+            
+            const token = localStorage.getItem('violetas_token');
+            
+            if (!token) {
+                showProveedorModalError('No hay sesión activa. Por favor, inicia sesión nuevamente.');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/proveedores/${idProveedor}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                console.log('Respuesta del servidor:', response.status);
+                
+                const contentType = response.headers.get('content-type');
+                let proveedor;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    proveedor = await response.json();
+                } else {
+                    const text = await response.text();
+                    console.error('Respuesta no es JSON al obtener proveedor:', text);
+                    showProveedorModalError(`Error: No se pudo obtener el proveedor. Status: ${response.status}`);
+                    return;
+                }
+                
+                if (response.ok) {
+                    console.log('Proveedor obtenido:', proveedor);
+                    
+                    // Llenar el formulario con los datos del proveedor
+                    const idProveedorInput = document.getElementById('prov_id_proveedor');
+                    if (!idProveedorInput) {
+                        console.error('No se encontró el campo prov_id_proveedor');
+                        showProveedorModalError('Error: No se pudo encontrar el formulario de edición');
+                        return;
+                    }
+                    
+                    idProveedorInput.value = proveedor.id_proveedor;
+                    document.getElementById('prov_nombre').value = proveedor.nombre || '';
+                    document.getElementById('prov_nif_cif').value = proveedor.nif_cif || '';
+                    document.getElementById('prov_tipo_servicio').value = proveedor.tipo_servicio || '';
+                    document.getElementById('prov_telefono').value = proveedor.telefono || '';
+                    document.getElementById('prov_email').value = proveedor.email || '';
+                    document.getElementById('prov_direccion').value = proveedor.direccion || '';
+                    document.getElementById('prov_contacto').value = proveedor.contacto || '';
+                    document.getElementById('prov_observaciones').value = proveedor.observaciones || '';
+                    document.getElementById('prov_activo').checked = proveedor.activo !== false;
+                    
+                    // Cambiar título del modal
+                    const modalHeader = document.querySelector('#modalProveedor .modal-header h2');
+                    if (modalHeader) {
+                        modalHeader.innerHTML = '<img src="/static/icons/medical/settings.svg" alt="Editar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Proveedor';
+                    }
+                    
+                    // Cerrar el modal de lista si está abierto
+                    closeModal('modalListaProveedores');
+                    
+                    // Abrir modal de edición
+                    openModal('modalProveedor');
+                } else {
+                    // Manejar errores de autenticación
+                    if (response.status === 401) {
+                        showProveedorModalError('Sesión expirada. Por favor, recarga la página para iniciar sesión nuevamente.');
+                        localStorage.removeItem('violetas_token');
+                    } else if (response.status === 404) {
+                        showProveedorModalError('El proveedor no se encontró. Puede que haya sido eliminado o no tengas permisos para verlo.');
+                        console.error('Proveedor no encontrado:', proveedor.error || 'Error desconocido');
+                    } else {
+                        showProveedorModalError('Error al obtener el proveedor: ' + (proveedor.error || `Error ${response.status}`));
+                        console.error('Error al obtener proveedor:', response.status, proveedor);
+                    }
+                }
+            } catch (error) {
+                console.error('Error de conexión al obtener proveedor:', error);
+                showProveedorModalError('Error de conexión: ' + error.message + '. Verifica que el servidor esté corriendo.');
             }
         }
 
@@ -2946,22 +3815,28 @@
             
             // Calcular estado automáticamente basado en las fechas
             // Si tiene fecha_pago → pagado, si tiene fecha_prevista → pendiente
-            let estado = 'pendiente';
+            let estado;
             if (fecha_pago_es) {
                 estado = 'pagado';
             } else if (fecha_prevista_es) {
                 estado = 'pendiente';
+            } else {
+                estado = 'pendiente'; // Por defecto
             }
             
+            const idPago = document.getElementById('pago_id_pago').value;
+            const method = idPago ? 'PUT' : 'POST';
+            const url = idPago ? `${API_URL}/api/v1/facturacion/proveedores/${idPago}` : `${API_URL}/api/v1/facturacion/proveedores`;
+            
             const data = {
-                proveedor: nombreProveedor, // Por ahora usamos el nombre, luego podemos usar id_proveedor
+                proveedor: nombreProveedor,
                 concepto: formData.get('concepto'),
                 monto: formData.get('monto') ? parseFloat(formData.get('monto')) : null,
                 fecha_pago: fecha_pago_es ? fechaEspanolToISO(fecha_pago_es) : null,
                 fecha_prevista: fecha_prevista_es ? fechaEspanolToISO(fecha_prevista_es) : null,
                 metodo_pago: formData.get('metodo_pago') || null,
                 numero_factura: formData.get('numero_factura') || null,
-                estado: estado, // Calculado automáticamente
+                estado: estado,
                 observaciones: formData.get('observaciones') || null
             };
             
@@ -2977,8 +3852,8 @@
             hidePagoProveedorModalAlert();
             
             try {
-                const response = await fetch(`${API_URL}/api/v1/facturacion/proveedores`, {
-                    method: 'POST',
+                const response = await fetch(url, {
+                    method: method,
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
@@ -2989,7 +3864,7 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    showPagoProveedorModalSuccess('Pago a proveedor registrado exitosamente');
+                    showPagoProveedorModalSuccess(idPago ? 'Pago a proveedor actualizado exitosamente' : 'Pago a proveedor registrado exitosamente');
                     setTimeout(() => {
                         closeModal('modalPagoProveedor');
                         loadFacturacion(); // Recargar la lista
@@ -3003,6 +3878,111 @@
                 showPagoProveedorModalError('Error de conexión: ' + error.message);
                 saveBtn.disabled = false;
                 saveBtn.textContent = originalText;
+            }
+        }
+
+        async function editarPagoProveedor(idPago) {
+            const token = localStorage.getItem('violetas_token');
+            
+            if (!idPago) {
+                console.error('idPago no está definido');
+                showPagoProveedorModalError('Error: ID de pago no válido');
+                return;
+            }
+            
+            if (!token) {
+                showPagoProveedorModalError('No hay sesión activa. Por favor, inicia sesión nuevamente.');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/facturacion/proveedores/${idPago}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const contentType = response.headers.get('content-type');
+                let pago;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    pago = await response.json();
+                } else {
+                    const text = await response.text();
+                    console.error('Respuesta no es JSON al obtener pago:', text);
+                    showPagoProveedorModalError(`Error: No se pudo obtener el pago. Status: ${response.status}`);
+                    return;
+                }
+                
+                if (response.ok) {
+                    // Guardar el nombre del proveedor antes de cargar los proveedores
+                    const nombreProveedorSeleccionado = pago.proveedor;
+                    
+                    // Cargar proveedores para el select
+                    await loadProveedoresForSelect();
+                    
+                    // Llenar el formulario con los datos del pago
+                    document.getElementById('pago_id_pago').value = pago.id_pago;
+                    
+                    // Seleccionar el proveedor en el select
+                    const selectProveedor = document.getElementById('pago_id_proveedor');
+                    if (selectProveedor) {
+                        // Buscar el proveedor por nombre
+                        for (let i = 0; i < selectProveedor.options.length; i++) {
+                            const optionText = selectProveedor.options[i].text;
+                            if (optionText.includes(nombreProveedorSeleccionado)) {
+                                selectProveedor.value = selectProveedor.options[i].value;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    document.getElementById('pago_concepto').value = pago.concepto || '';
+                    document.getElementById('pago_monto').value = pago.monto || '';
+                    document.getElementById('pago_metodo_pago').value = pago.metodo_pago || '';
+                    document.getElementById('pago_numero_factura').value = pago.numero_factura || '';
+                    document.getElementById('pago_observaciones').value = pago.observaciones || '';
+                    
+                    // Convertir fechas de ISO a formato español
+                    if (pago.fecha_prevista) {
+                        document.getElementById('pago_fecha_prevista').value = fechaISOToEspanol(pago.fecha_prevista);
+                    } else {
+                        document.getElementById('pago_fecha_prevista').value = '';
+                    }
+                    
+                    if (pago.fecha_pago) {
+                        document.getElementById('pago_fecha_pago').value = fechaISOToEspanol(pago.fecha_pago);
+                    } else {
+                        document.getElementById('pago_fecha_pago').value = '';
+                    }
+                    
+                    // Cambiar título del modal
+                    const modalHeader = document.querySelector('#modalPagoProveedor .modal-header h2');
+                    if (modalHeader) {
+                        modalHeader.innerHTML = '<img src="/static/icons/medical/settings.svg" alt="Editar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Pago a Proveedor';
+                    }
+                    
+                    // Inicializar date pickers
+                    initializePagoProveedorDatePickers();
+                    
+                    // Abrir modal de edición
+                    openModal('modalPagoProveedor');
+                } else {
+                    // Manejar errores de autenticación
+                    if (response.status === 401) {
+                        showPagoProveedorModalError('Sesión expirada. Por favor, recarga la página para iniciar sesión nuevamente.');
+                        localStorage.removeItem('violetas_token');
+                    } else if (response.status === 404) {
+                        showPagoProveedorModalError('El pago no se encontró. Puede que haya sido eliminado o no tengas permisos para verlo.');
+                        console.error('Pago no encontrado:', pago.error || 'Error desconocido');
+                    } else {
+                        showPagoProveedorModalError('Error al obtener el pago: ' + (pago.error || `Error ${response.status}`));
+                        console.error('Error al obtener pago:', response.status, pago);
+                    }
+                }
+            } catch (error) {
+                console.error('Error de conexión al obtener pago:', error);
+                showPagoProveedorModalError('Error de conexión: ' + error.message + '. Verifica que el servidor esté corriendo.');
             }
         }
 
@@ -3090,26 +4070,75 @@
                     
                     const mesesOrdenados = Array.from(todosMeses).sort();
                     
-                    // Crear mapas para acceso rápido
-                    const historicoMap = {};
+                    // Identificar residencias (si existen en los datos)
+                    const residencias = new Map(); // id -> nombre
                     historico.forEach(h => {
-                        historicoMap[h.mes] = h.total;
+                        if (h.id_residencia) residencias.set(h.id_residencia, h.nombre_residencia || `Residencia ${h.id_residencia}`);
                     });
-                    
-                    const estimacionesMap = {};
                     estimaciones.forEach(e => {
-                        estimacionesMap[e.mes] = e.total;
+                         if (e.id_residencia) residencias.set(e.id_residencia, e.nombre_residencia || `Residencia ${e.id_residencia}`);
+                    });
+
+                    // Si no hay info de residencia (usuario normal o datos antiguos), usar "General"
+                    if (residencias.size === 0) {
+                        residencias.set('default', 'General');
+                    }
+                    
+                    const datasets = [];
+                    const colorPalette = [
+                        '#28a745', // Verde (Principal/Violetas)
+                        '#007bff', // Azul (Secundaria)
+                        '#6f42c1', // Púrpura
+                        '#fd7e14', // Naranja
+                    ];
+                    
+                    let colorIdx = 0;
+                    residencias.forEach((nombre, id) => {
+                        const color = colorPalette[colorIdx % colorPalette.length];
+                        
+                        // Preparar datos para esta residencia
+                        const datosHistoricos = mesesOrdenados.map(mes => {
+                            const entry = historico.find(h => h.mes === mes && (h.id_residencia === id || (id === 'default')));
+                            return entry ? entry.total : 0;
+                        });
+                        
+                        const datosEstimaciones = mesesOrdenados.map(mes => {
+                            const entry = estimaciones.find(e => e.mes === mes && (e.id_residencia === id || (id === 'default')));
+                            return entry ? entry.total : 0;
+                        });
+
+                        // Dataset Histórico (Línea sólida)
+                        datasets.push({
+                            label: `${nombre} (Cobrado)`,
+                            data: datosHistoricos,
+                            borderColor: color,
+                            backgroundColor: color + '1A', // 10% opacity
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.4
+                        });
+                        
+                        // Dataset Estimado (Línea punteada)
+                        datasets.push({
+                            label: `${nombre} (Previsto)`,
+                            data: datosEstimaciones,
+                            borderColor: color,
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            fill: false,
+                            tension: 0.4
+                        });
+                        
+                        colorIdx++;
                     });
                     
-                    // Preparar datos para Chart.js
+                    // Preparar etiquetas (Eje X)
                     const labels = mesesOrdenados.map(mes => {
                         const [año, mesNum] = mes.split('-');
                         const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
                         return `${meses[parseInt(mesNum) - 1]} ${año}`;
                     });
-                    
-                    const datosHistoricos = mesesOrdenados.map(mes => historicoMap[mes] || 0);
-                    const datosEstimaciones = mesesOrdenados.map(mes => estimacionesMap[mes] || 0);
                     
                     // Crear el gráfico
                     const ctx = canvas.getContext('2d');
@@ -3117,31 +4146,7 @@
                         type: 'line',
                         data: {
                             labels: labels,
-                            datasets: [
-                                {
-                                    label: 'Cobros Realizados (Histórico)',
-                                    data: datosHistoricos,
-                                    borderColor: '#28a745',
-                                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
-                                    borderWidth: 2,
-                                    fill: true,
-                                    tension: 0.4,
-                                    pointRadius: 4,
-                                    pointHoverRadius: 6
-                                },
-                                {
-                                    label: 'Cobros Previstos (Estimación)',
-                                    data: datosEstimaciones,
-                                    borderColor: '#ffc107',
-                                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
-                                    borderWidth: 2,
-                                    borderDash: [5, 5],
-                                    fill: true,
-                                    tension: 0.4,
-                                    pointRadius: 4,
-                                    pointHoverRadius: 6
-                                }
-                            ]
+                            datasets: datasets
                         },
                         options: {
                             responsive: true,
@@ -3242,6 +4247,48 @@
             }
         }
 
+        function switchPersonalTab(tabName) {
+            // Ocultar todas las pestañas dentro del módulo de personal
+            const personalModule = document.querySelector('#moduleContent .module-content');
+            if (!personalModule) return;
+            
+            personalModule.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Remover clase active de todos los botones de personal
+            personalModule.querySelectorAll('.tab').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Mostrar la pestaña seleccionada
+            let tabContentId;
+            if (tabName === 'personal') {
+                tabContentId = 'tabPersonal';
+            } else if (tabName === 'turnos-extra') {
+                tabContentId = 'tabTurnosExtra';
+                // Cargar turnos extra si no se han cargado aún
+                const turnosContent = document.getElementById('turnosExtraContent');
+                if (turnosContent && turnosContent.innerHTML.includes('Cargando')) {
+                    loadTurnosExtra();
+                }
+            }
+            
+            const tabContent = document.getElementById(tabContentId);
+            
+            // Activar el botón correspondiente
+            const tabs = personalModule.querySelectorAll('.tab');
+            tabs.forEach((btn, index) => {
+                if ((tabName === 'personal' && index === 0) || (tabName === 'turnos-extra' && index === 1)) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            if (tabContent) {
+                tabContent.classList.add('active');
+            }
+        }
+
         // Event listeners para el DOM
         document.addEventListener('DOMContentLoaded', function() {
             
@@ -3302,8 +4349,20 @@
                 if (response.ok) {
                     let html = `
                         <div class="module-content">
-                            <h3 style="color: #667eea; margin-bottom: 15px;"><img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Personal (${data.total || 0})</h3>
-                            <button class="add-btn" onclick="alert('Función de agregar personal próximamente')" style="display: inline-flex; align-items: center; gap: 6px;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Personal</button>
+                            <h3 style="color: #667eea; margin-bottom: 20px;"><img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Personal</h3>
+                            
+                            <div class="tabs-container">
+                                <div class="tabs">
+                                    <button class="tab active" onclick="switchPersonalTab('personal')"><img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Personal (${data.total || 0})</button>
+                                    <button class="tab" onclick="switchPersonalTab('turnos-extra')"><img src="/static/icons/medical/clock.svg" alt="Turnos" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Turnos Extra</button>
+                                </div>
+                                
+                                <!-- Pestaña de Personal -->
+                                <div id="tabPersonal" class="tab-content active">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                        <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Personal (${data.total || 0})</h4>
+                                        <button class="add-btn" onclick="openModal('modalPersonal')" style="padding: 8px 16px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Personal</button>
+                                    </div>
                     `;
                     
                     if (data.personal && data.personal.length > 0) {
@@ -3336,8 +4395,25 @@
                         html += '<p>No hay personal registrado.</p>';
                     }
                     
-                    html += '</div>';
+                    html += `
+                                </div>
+                                
+                                <!-- Pestaña de Turnos Extra -->
+                                <div id="tabTurnosExtra" class="tab-content">
+                                    <div id="turnosExtraContent">
+                                        <div style="text-align: center; padding: 40px;">
+                                            <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                                            <p style="margin-top: 15px; color: #666;">Cargando turnos extra...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
                     content.innerHTML = html;
+                    
+                    // Cargar turnos extra cuando se muestre la pestaña
+                    loadTurnosExtra();
                 } else {
                     // Manejar errores de autenticación
                     if (response.status === 401) {
@@ -3359,6 +4435,7 @@
         let flatpickrNacimiento = null;
         let flatpickrEditIngreso = null;
         let flatpickrEditNacimiento = null;
+        let flatpickrContratacion = null;
 
         async function openModal(modalId) {
             document.getElementById(modalId).style.display = 'block';
@@ -3476,6 +4553,131 @@
                     });
                 }
             }
+            
+            // Si es el modal de agregar personal, establecer residencia por defecto según el token
+            if (modalId === 'modalPersonal') {
+                const token = localStorage.getItem('violetas_token');
+                const selectResidencia = document.getElementById('per_id_residencia');
+                
+                if (token) {
+                    try {
+                        const payload = JSON.parse(atob(token.split('.')[1]));
+                        const residenciaId = payload.id_residencia;
+                        if (selectResidencia) {
+                            selectResidencia.value = residenciaId; // Establecer como valor por defecto
+                        }
+                    } catch (e) {
+                        console.error('Error al obtener residencia del token:', e);
+                    }
+                }
+                
+                // Inicializar calendario con flatpickr para fecha de contratación
+                const fechaContratacionInput = document.getElementById('per_fecha_contratacion');
+                
+                // Destruir instancia anterior si existe
+                if (flatpickrContratacion) {
+                    flatpickrContratacion.destroy();
+                }
+                
+                // Inicializar flatpickr para fecha de contratación
+                if (fechaContratacionInput) {
+                    // Establecer fecha de hoy por defecto
+                    const hoy = new Date();
+                    const dia = String(hoy.getDate()).padStart(2, '0');
+                    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+                    const año = hoy.getFullYear();
+                    const fechaHoy = `${dia}/${mes}/${año}`;
+                    
+                    if (!fechaContratacionInput.value) {
+                        fechaContratacionInput.value = fechaHoy;
+                    }
+                    
+                    flatpickrContratacion = flatpickr(fechaContratacionInput, {
+                        dateFormat: "d/m/Y",
+                        locale: "es",
+                        allowInput: true,
+                        clickOpens: true,
+                        maxDate: "today", // La fecha de contratación no puede ser mayor que hoy
+                        onChange: function(selectedDates, dateStr, instance) {
+                            // Asegurar formato DD/MM/YYYY
+                            if (dateStr) {
+                                const partes = dateStr.split('/');
+                                if (partes.length === 3) {
+                                    const dia = partes[0].padStart(2, '0');
+                                    const mes = partes[1].padStart(2, '0');
+                                    const año = partes[2];
+                                    instance.input.value = `${dia}/${mes}/${año}`;
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            
+            // Si es el modal de agregar turno extra
+            if (modalId === 'modalTurnoExtra') {
+                const token = localStorage.getItem('violetas_token');
+                const selectPersonal = document.getElementById('turno_id_personal');
+                const fechaInput = document.getElementById('turno_fecha');
+                
+                // Cargar personal para el select
+                if (selectPersonal) {
+                    fetch(`${API_URL}/api/v1/personal`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        selectPersonal.innerHTML = '<option value="">Seleccione un empleado</option>';
+                        if (data.personal) {
+                            data.personal.forEach(p => {
+                                selectPersonal.innerHTML += `<option value="${p.id_personal}">${p.nombre} ${p.apellido}${p.cargo ? ' (' + p.cargo + ')' : ''}</option>`;
+                            });
+                        }
+                    })
+                    .catch(err => console.error('Error al cargar personal:', err));
+                }
+                
+                // Inicializar date picker para fecha
+                if (fechaInput) {
+                    // Destruir instancia anterior si existe
+                    if (window.flatpickrTurnoExtra) {
+                        window.flatpickrTurnoExtra.destroy();
+                    }
+                    
+                    // Establecer fecha de hoy por defecto si está vacío
+                    if (!fechaInput.value) {
+                        const hoy = new Date();
+                        const dia = String(hoy.getDate()).padStart(2, '0');
+                        const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+                        const año = hoy.getFullYear();
+                        fechaInput.value = `${dia}/${mes}/${año}`;
+                    }
+                    
+                    window.flatpickrTurnoExtra = flatpickr(fechaInput, {
+                        dateFormat: "d/m/Y",
+                        locale: "es",
+                        allowInput: true,
+                        clickOpens: true,
+                        onChange: function(selectedDates, dateStr, instance) {
+                            if (dateStr) {
+                                const partes = dateStr.split('/');
+                                if (partes.length === 3) {
+                                    const dia = partes[0].padStart(2, '0');
+                                    const mes = partes[1].padStart(2, '0');
+                                    const año = partes[2];
+                                    instance.input.value = `${dia}/${mes}/${año}`;
+                                }
+                            }
+                        }
+                    });
+                }
+                
+                // Resetear título del modal
+                const modalTitle = document.getElementById('modalTurnoExtraTitle');
+                if (modalTitle) {
+                    modalTitle.textContent = 'Agregar Turno Extra';
+                }
+            }
         }
 
         function closeModal(modalId) {
@@ -3524,6 +4726,52 @@
                     fechaIngresoInput.value = `${dia}/${mes}/${año}`;
                 }
             }
+            const formPersonal = document.getElementById('formPersonal');
+            if (formPersonal) {
+                formPersonal.reset();
+                const activoCheckbox = document.getElementById('per_activo');
+                if (activoCheckbox) {
+                    activoCheckbox.value = 'true';
+                }
+                
+                // Destruir instancia de flatpickr de contratación
+                if (flatpickrContratacion) {
+                    flatpickrContratacion.destroy();
+                    flatpickrContratacion = null;
+                }
+                
+                // Establecer fecha de contratación como hoy después del reset
+                const fechaContratacionInput = document.getElementById('per_fecha_contratacion');
+                if (fechaContratacionInput) {
+                    const hoy = new Date();
+                    const dia = String(hoy.getDate()).padStart(2, '0');
+                    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+                    const año = hoy.getFullYear();
+                    fechaContratacionInput.value = `${dia}/${mes}/${año}`;
+                }
+            }
+            const formTurnoExtra = document.getElementById('formTurnoExtra');
+            if (formTurnoExtra) {
+                formTurnoExtra.reset();
+                document.getElementById('turno_id_turno_extra').value = '';
+                document.getElementById('modalTurnoExtraTitle').textContent = 'Agregar Turno Extra';
+                
+                // Destruir instancia de flatpickr de turno extra
+                if (window.flatpickrTurnoExtra) {
+                    window.flatpickrTurnoExtra.destroy();
+                    window.flatpickrTurnoExtra = null;
+                }
+                
+                // Establecer fecha como hoy después del reset
+                const fechaInput = document.getElementById('turno_fecha');
+                if (fechaInput) {
+                    const hoy = new Date();
+                    const dia = String(hoy.getDate()).padStart(2, '0');
+                    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+                    const año = hoy.getFullYear();
+                    fechaInput.value = `${dia}/${mes}/${año}`;
+                }
+            }
             const formProveedor = document.getElementById('formProveedor');
             if (formProveedor) {
                 formProveedor.reset();
@@ -3540,10 +4788,6 @@
                     flatpickrPagoProveedorFechaPago.destroy();
                     flatpickrPagoProveedorFechaPago = null;
                 }
-                if (flatpickrPagoProveedorFechaPrevista) {
-                    flatpickrPagoProveedorFechaPrevista.destroy();
-                    flatpickrPagoProveedorFechaPrevista = null;
-                }
             }
             const formCobro = document.getElementById('formCobro');
             if (formCobro) {
@@ -3551,10 +4795,27 @@
                 // Limpiar id_pago oculto
                 document.getElementById('cobro_id_pago').value = '';
                 // Restaurar título del modal
-                document.getElementById('modalCobroTitulo').innerHTML = '<img src="/static/icons/medical/money.svg" alt="Cobro" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Cobro';
+                document.getElementById('modalCobroTitulo').innerHTML = '<img src="/static/icons/medical/bill.svg" alt="Cobro" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Cobro';
+                // Ocultar botón de eliminar cuando se está agregando
+                const deleteBtn = document.getElementById('deleteCobroBtn');
+                if (deleteBtn) {
+                    deleteBtn.style.display = 'none';
+                }
                 const esPrevisto = document.getElementById('cobro_es_previsto');
                 if (esPrevisto) {
                     esPrevisto.checked = true;
+                }
+                // Limpiar campo de concepto "otros"
+                const campoOtros = document.getElementById('cobro_concepto_otros');
+                if (campoOtros) {
+                    campoOtros.style.display = 'none';
+                    campoOtros.value = '';
+                    campoOtros.required = false;
+                }
+                // Resetear select de concepto
+                const selectConcepto = document.getElementById('cobro_concepto');
+                if (selectConcepto) {
+                    selectConcepto.value = '';
                 }
                 // Destruir flatpickr de cobros
                 if (flatpickrCobroPrevista) {
@@ -3578,8 +4839,17 @@
             const modalViewResidente = document.getElementById('modalViewResidente');
             const modalProveedor = document.getElementById('modalProveedor');
             const modalPagoProveedor = document.getElementById('modalPagoProveedor');
+            const modalListaProveedores = document.getElementById('modalListaProveedores');
             if (event.target == modalResidente) {
                 closeModal('modalResidente');
+            }
+            const modalPersonal = document.getElementById('modalPersonal');
+            if (event.target == modalPersonal) {
+                closeModal('modalPersonal');
+            }
+            const modalTurnoExtra = document.getElementById('modalTurnoExtra');
+            if (event.target == modalTurnoExtra) {
+                closeModal('modalTurnoExtra');
             }
             if (event.target == modalViewResidente) {
                 closeModal('modalViewResidente');
@@ -3589,6 +4859,9 @@
             }
             if (event.target == modalPagoProveedor) {
                 closeModal('modalPagoProveedor');
+            }
+            if (event.target == modalListaProveedores) {
+                closeModal('modalListaProveedores');
             }
         }
 
@@ -3970,7 +5243,7 @@
                                 
                                 <!-- Datos Médicos Esenciales -->
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
-                                    <div class="form-group">
+                                <div class="form-group">
                                         <label for="edit_grupo_sanguineo">Grupo Sanguíneo</label>
                                         <select id="edit_grupo_sanguineo" name="grupo_sanguineo" style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
                                             <option value="">Seleccione</option>
@@ -4044,7 +5317,7 @@
                                 </div>
                                 
                                 <div class="form-group" style="margin-top: 15px;">
-                                    <label for="edit_servicios_extra">Servicios Extra</label>
+                                    <label>Servicios Extra</label>
                                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px;">
                                         <label style="display: flex; align-items: center; cursor: pointer; font-weight: normal;">
                                             <input type="checkbox" class="edit_servicio_extra" value="Peluquería" style="width: auto; margin-right: 8px;">
@@ -4062,8 +5335,7 @@
                                             <input type="checkbox" class="edit_servicio_extra" value="Farmacia" style="width: auto; margin-right: 8px;">
                                             Farmacia
                                         </label>
-                                    </div>
-                                    <input type="text" id="edit_servicios_extra_otros" name="servicios_extra_otros" placeholder="Otros servicios (separados por comas, ej: Lavandería, Masajes)" style="margin-top: 5px;">
+                                </div>
                                     <input type="hidden" id="edit_servicios_extra" name="servicios_extra" value="${res.servicios_extra || ''}">
                                 </div>
                                 
@@ -4071,29 +5343,6 @@
                                     <label for="edit_peculiaridades">Peculiaridades / Notas Importantes</label>
                                     <textarea id="edit_peculiaridades" name="peculiaridades" rows="3" placeholder="Información adicional relevante">${res.peculiaridades || ''}</textarea>
                                 </div>
-                            </div>
-                            
-                            <!-- SECCIÓN: Estado -->
-                            <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #718096;">
-                                <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/settings.svg" alt="Estado" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Estado</h3>
-                                ${res.activo ? `
-                                    <div class="form-group">
-                                        <p style="color: #28a745; font-weight: 600; margin-bottom: 15px;">
-                                            <img src="/static/icons/medical/check-circle.svg" alt="Activo" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Residente Activo
-                                        </p>
-                                        <button type="button" onclick="abrirModalBaja(${res.id_residente})" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
-                                            <img src="/static/icons/medical/user-x.svg" alt="Dar de baja" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Dar de Baja
-                                        </button>
-                                    </div>
-                                ` : `
-                                    <div class="form-group">
-                                        <p style="color: #dc3545; font-weight: 600; margin-bottom: 10px;">
-                                            <img src="/static/icons/medical/user-x.svg" alt="Inactivo" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Usuario de Baja
-                                        </p>
-                                        <p style="color: #666; margin-bottom: 5px;"><strong>Motivo:</strong> ${res.motivo_baja || 'No especificado'}</p>
-                                        <p style="color: #666;"><strong>Fecha de baja:</strong> ${res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : 'No especificada'}</p>
-                                    </div>
-                                `}
                             </div>
                             
                             <hr style="margin: 30px 0; border: none; border-top: 2px solid #e0e0e0;">
@@ -4122,6 +5371,39 @@
                                     <textarea id="doc_descripcion" placeholder="Descripción (opcional)" rows="2" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; background: white; color: #333; font-family: inherit;"></textarea>
                                     <button type="button" onclick="agregarDocumento(${idResidente})" style="width: auto; padding: 8px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">+ Subir Documento</button>
                                 </div>
+                            </div>
+                            
+                            <hr style="margin: 30px 0; border: none; border-top: 2px solid #e0e0e0;">
+                            
+                            <!-- SECCIÓN: Estado -->
+                            <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #718096;">
+                                <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/settings.svg" alt="Estado" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Estado</h3>
+                                ${res.activo ? `
+                                    <div class="form-group">
+                                        <p style="color: #28a745; font-weight: 600; margin-bottom: 15px;">
+                                            <img src="/static/icons/medical/check-circle.svg" alt="Activo" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Residente Activo
+                                        </p>
+                                        <button type="button" onclick="abrirModalBaja(${res.id_residente})" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                                            <img src="/static/icons/medical/user-x.svg" alt="Dar de baja" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Dar de Baja
+                                        </button>
+                                    </div>
+                                ` : `
+                                    <div class="form-group">
+                                        <p style="color: #dc3545; font-weight: 600; margin-bottom: 10px;">
+                                            <img src="/static/icons/medical/user-x.svg" alt="Inactivo" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Usuario de Baja
+                                        </p>
+                                        <p style="color: #666; margin-bottom: 5px;"><strong>Motivo:</strong> ${res.motivo_baja || 'No especificado'}</p>
+                                        <p style="color: #666; margin-bottom: 15px;"><strong>Fecha de baja:</strong> ${res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : 'No especificada'}</p>
+                                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                            <button type="button" onclick="reactivarResidente(${res.id_residente})" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                                                <img src="/static/icons/medical/check-circle.svg" alt="Dar de alta" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Dar de Alta
+                                            </button>
+                                            <button type="button" onclick="confirmarEliminarResidente(${res.id_residente})" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                                                <img src="/static/icons/medical/alert-circle.svg" alt="Eliminar" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Eliminar Completamente
+                                            </button>
+                                        </div>
+                                    </div>
+                                `}
                             </div>
                             
                             <div id="editModalAlert" class="alert" style="display: none;"></div>
@@ -4226,12 +5508,6 @@
                                 serviciosOtros.push(servicio);
                             }
                         });
-                        
-                        // Establecer otros servicios
-                        const otrosInput = document.getElementById('edit_servicios_extra_otros');
-                        if (otrosInput && serviciosOtros.length > 0) {
-                            otrosInput.value = serviciosOtros.join(', ');
-                        }
                     }
                     
                     // Cargar documentos del residente
@@ -4283,8 +5559,20 @@
                                         <p style="margin: 5px 0 0 0; color: #999; font-size: 11px;">${new Date(doc.fecha_subida).toLocaleDateString('es-ES')}</p>
                                     </div>
                                     <div style="display: flex; gap: 8px;">
-                                        ${doc.url_descarga ? `<button onclick="window.open('${doc.url_descarga}', '_blank')" style="background: #667eea; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;"><img src="/static/icons/medical/file-medical.svg" alt="Descargar" style="width: 14px; height: 14px; filter: brightness(0) invert(1);"> Descargar</button>` : ''}
-                                        <button onclick="eliminarDocumento(${doc.id_documento}, ${idResidente})" style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;">Eliminar</button>
+                                        ${doc.url_descarga ? `
+                                            <button onclick="window.open('${doc.url_descarga}', '_blank')" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;" title="Ver en navegador">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="filter: brightness(0) invert(1);">
+                                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                    <circle cx="12" cy="12" r="3"></circle>
+                                                </svg>
+                                                Ver
+                                            </button>
+                                            <button onclick="window.open('${doc.url_descarga}', '_blank')" style="background: #667eea; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;" title="Descargar">
+                                                <img src="/static/icons/medical/file-medical.svg" alt="Descargar" style="width: 14px; height: 14px; filter: brightness(0) invert(1);">
+                                                Descargar
+                                            </button>
+                                        ` : ''}
+                                        <button onclick="eliminarDocumento(${doc.id_documento}, ${idResidente})" style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;" title="Eliminar">Eliminar</button>
                                     </div>
                                 </div>
                             `;
@@ -4451,11 +5739,6 @@
                     checkboxesServicios.forEach(cb => {
                         serviciosSeleccionados.push(cb.value);
                     });
-                    const otrosServicios = formData.get('servicios_extra_otros') || '';
-                    if (otrosServicios.trim()) {
-                        const otros = otrosServicios.split(',').map(s => s.trim()).filter(s => s);
-                        serviciosSeleccionados.push(...otros);
-                    }
                     return serviciosSeleccionados.length > 0 ? serviciosSeleccionados.join(', ') : null;
                 })(),
                 medicaciones: formData.get('medicaciones') || null,
@@ -4673,7 +5956,483 @@
                 alert.style.display = 'none';
             }
         }
+
+        async function savePersonal(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const saveBtn = document.getElementById('savePersonalBtn');
+            const originalText = saveBtn.textContent;
+            
+            // Obtener datos del formulario
+            const formData = new FormData(form);
+            
+            const id_residencia = formData.get('id_residencia');
+            if (!id_residencia) {
+                showModalPersonalError('Debe seleccionar una residencia');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
+            // Convertir fecha de formato español a ISO antes de enviar
+            const fecha_contratacion_es = formData.get('fecha_contratacion');
+            
+            // Validar fecha antes de convertir
+            if (fecha_contratacion_es && !validarFechaEspanol(fecha_contratacion_es)) {
+                showModalPersonalError('La fecha de contratación no es válida. Use formato DD/MM/YYYY');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
+            const data = {
+                id_residencia: parseInt(id_residencia),
+                nombre: formData.get('nombre'),
+                apellido: formData.get('apellido'),
+                documento_identidad: formData.get('documento_identidad') || null,
+                telefono: formData.get('telefono') || null,
+                email: formData.get('email') || null,
+                cargo: formData.get('cargo') || null,
+                fecha_contratacion: fecha_contratacion_es ? fechaEspanolToISO(fecha_contratacion_es) : null,
+                activo: true  // Los nuevos empleados siempre son activos
+            };
+            
+            // Limpiar valores vacíos
+            Object.keys(data).forEach(key => {
+                if (data[key] === '' || data[key] === null) {
+                    delete data[key];
+                }
+            });
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Guardando...';
+            hideModalPersonalAlert();
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/personal`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showModalPersonalSuccess('Personal agregado exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalPersonal');
+                        loadPersonal(); // Recargar la lista
+                    }, 1500);
+                } else {
+                    showModalPersonalError(result.error || 'Error al guardar el personal');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            } catch (error) {
+                showModalPersonalError('Error de conexión: ' + error.message);
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        }
+
+        function showModalPersonalError(message) {
+            const alert = document.getElementById('modalPersonalAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function showModalPersonalSuccess(message) {
+            const alert = document.getElementById('modalPersonalAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function hideModalPersonalAlert() {
+            const alert = document.getElementById('modalPersonalAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
+
+        async function loadTurnosExtra() {
+            const turnosContent = document.getElementById('turnosExtraContent');
+            if (!turnosContent) return;
+            
+            const token = localStorage.getItem('violetas_token');
+            
+            // Obtener filtros
+            const filtroPersonal = document.getElementById('filtroPersonal');
+            const filtroAprobado = document.getElementById('filtroAprobado');
+            const idPersonal = filtroPersonal ? filtroPersonal.value : '';
+            const aprobado = filtroAprobado ? filtroAprobado.value : '';
+            
+            let url = `${API_URL}/api/v1/turnos-extra`;
+            const params = new URLSearchParams();
+            if (idPersonal) params.append('id_personal', idPersonal);
+            if (aprobado) params.append('aprobado', aprobado);
+            if (params.toString()) url += '?' + params.toString();
+            
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const contentType = response.headers.get('content-type');
+                let data;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    console.error('Respuesta no es JSON:', text);
+                    turnosContent.innerHTML = `<p style="color: red;">Error: La respuesta del servidor no es válida. Status: ${response.status}</p>`;
+                    return;
+                }
+                
+                if (response.ok) {
+                    let html = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/clock.svg" alt="Turnos" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Turnos Extra (${data.total || 0})</h4>
+                            <button class="add-btn" onclick="openModal('modalTurnoExtra')" style="padding: 8px 16px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Turno Extra</button>
+                        </div>
+                        
+                        <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
+                            <label style="font-weight: 600; color: #666;">Filtros:</label>
+                            <select id="filtroPersonal" onchange="loadTurnosExtra()" style="padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                <option value="">Todos los empleados</option>
+                            </select>
+                            <select id="filtroAprobado" onchange="loadTurnosExtra()" style="padding: 8px 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                <option value="">Todos</option>
+                                <option value="false">Pendientes</option>
+                                <option value="true">Aprobados</option>
+                            </select>
+                        </div>
+                    `;
+                    
+                    // Cargar lista de personal para el filtro
+                    const personalResponse = await fetch(`${API_URL}/api/v1/personal`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    let personalData = { personal: [] };
+                    if (personalResponse.ok) {
+                        personalData = await personalResponse.json();
+                    }
+                    
+                    // Actualizar select de personal
+                    if (filtroPersonal) {
+                        const currentValue = filtroPersonal.value;
+                        filtroPersonal.innerHTML = '<option value="">Todos los empleados</option>';
+                        personalData.personal.forEach(p => {
+                            filtroPersonal.innerHTML += `<option value="${p.id_personal}" ${p.id_personal == currentValue ? 'selected' : ''}>${p.nombre} ${p.apellido}</option>`;
+                        });
+                    }
+                    
+                    if (filtroAprobado && aprobado) {
+                        filtroAprobado.value = aprobado;
+                    }
+                    
+                    if (data.turnos_extra && data.turnos_extra.length > 0) {
+                        html += `
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Empleado</th>
+                                        <th>Fecha</th>
+                                        <th>Hora Entrada</th>
+                                        <th>Hora Salida</th>
+                                        <th>Motivo</th>
+                                        <th>Estado</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                        data.turnos_extra.forEach(t => {
+                            const fechaFormateada = t.fecha ? fechaISOToEspanol(t.fecha) : '-';
+                            const estadoBadge = t.aprobado 
+                                ? '<span style="background: #48bb78; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">✓ Aprobado</span>'
+                                : '<span style="background: #ed8936; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">⏳ Pendiente</span>';
+                            
+                            html += `
+                                <tr>
+                                    <td>${t.nombre_personal || '-'}${t.cargo ? ' (' + t.cargo + ')' : ''}</td>
+                                    <td>${fechaFormateada}</td>
+                                    <td>${t.hora_entrada || '-'}</td>
+                                    <td>${t.hora_salida || '-'}</td>
+                                    <td>${t.motivo || '-'}</td>
+                                    <td>${estadoBadge}</td>
+                                    <td style="display: flex; gap: 5px;">
+                                        ${!t.aprobado ? `<button onclick="aprobarTurnoExtra(${t.id_turno_extra})" style="padding: 6px 12px; background: #48bb78; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">Aprobar</button>` : ''}
+                                        <button onclick="editarTurnoExtra(${t.id_turno_extra})" style="padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">Editar</button>
+                                        <button onclick="eliminarTurnoExtra(${t.id_turno_extra})" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">Eliminar</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += '</tbody></table>';
+                    } else {
+                        html += '<p>No hay turnos extra registrados.</p>';
+                    }
+                    
+                    turnosContent.innerHTML = html;
+                } else {
+                    if (response.status === 401) {
+                        turnosContent.innerHTML = `<p style="color: red;">Error: Sesión expirada. Por favor, recarga la página.</p>`;
+                        localStorage.removeItem('violetas_token');
+                    } else {
+                        turnosContent.innerHTML = `<p style="color: red;">Error (${response.status}): ${data.error || 'Error desconocido'}</p>`;
+                    }
+                }
+            } catch (error) {
+                console.error('Error de conexión al cargar turnos extra:', error);
+                if (turnosContent) {
+                    turnosContent.innerHTML = `<p style="color: red;">Error de conexión: ${error.message}</p>`;
+                }
+            }
+        }
+
+        async function saveTurnoExtra(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const saveBtn = document.getElementById('saveTurnoExtraBtn');
+            const originalText = saveBtn.textContent;
+            const idTurnoExtra = document.getElementById('turno_id_turno_extra').value;
+            
+            const formData = new FormData(form);
+            
+            const fecha_es = formData.get('fecha');
+            if (!fecha_es || !validarFechaEspanol(fecha_es)) {
+                showModalTurnoExtraError('La fecha no es válida. Use formato DD/MM/YYYY');
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+                return;
+            }
+            
+            const data = {
+                id_personal: parseInt(formData.get('id_personal')),
+                fecha: fechaEspanolToISO(fecha_es),
+                hora_entrada: formData.get('hora_entrada'),
+                hora_salida: formData.get('hora_salida'),
+                motivo: formData.get('motivo') || null
+            };
+            
+            // Limpiar valores vacíos
+            Object.keys(data).forEach(key => {
+                if (data[key] === '' || data[key] === null) {
+                    delete data[key];
+                }
+            });
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Guardando...';
+            hideModalTurnoExtraAlert();
+            
+            try {
+                const url = idTurnoExtra 
+                    ? `${API_URL}/api/v1/turnos-extra/${idTurnoExtra}`
+                    : `${API_URL}/api/v1/turnos-extra`;
+                const method = idTurnoExtra ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showModalTurnoExtraSuccess(idTurnoExtra ? 'Turno extra actualizado exitosamente' : 'Turno extra creado exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalTurnoExtra');
+                        loadTurnosExtra();
+                    }, 1500);
+                } else {
+                    showModalTurnoExtraError(result.error || 'Error al guardar el turno extra');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            } catch (error) {
+                showModalTurnoExtraError('Error de conexión: ' + error.message);
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        }
+
+        async function aprobarTurnoExtra(idTurnoExtra) {
+            if (!confirm('¿Está seguro de aprobar este turno extra?')) {
+                return;
+            }
+            
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/turnos-extra/${idTurnoExtra}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ aprobado: true })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('Turno extra aprobado exitosamente');
+                    loadTurnosExtra();
+                } else {
+                    alert('Error: ' + (result.error || 'Error desconocido'));
+                }
+            } catch (error) {
+                alert('Error de conexión: ' + error.message);
+            }
+        }
+
+        async function editarTurnoExtra(idTurnoExtra) {
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/turnos-extra`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.turnos_extra) {
+                    const turno = data.turnos_extra.find(t => t.id_turno_extra === idTurnoExtra);
+                    
+                    if (turno) {
+                        // Cargar personal para el select
+                        const personalResponse = await fetch(`${API_URL}/api/v1/personal`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        const personalData = await personalResponse.json();
+                        
+                        const selectPersonal = document.getElementById('turno_id_personal');
+                        selectPersonal.innerHTML = '<option value="">Seleccione un empleado</option>';
+                        personalData.personal.forEach(p => {
+                            selectPersonal.innerHTML += `<option value="${p.id_personal}" ${p.id_personal == turno.id_personal ? 'selected' : ''}>${p.nombre} ${p.apellido}</option>`;
+                        });
+                        
+                        // Llenar formulario
+                        document.getElementById('turno_id_turno_extra').value = turno.id_turno_extra;
+                        document.getElementById('turno_fecha').value = turno.fecha ? fechaISOToEspanol(turno.fecha) : '';
+                        document.getElementById('turno_hora_entrada').value = turno.hora_entrada || '';
+                        document.getElementById('turno_hora_salida').value = turno.hora_salida || '';
+                        document.getElementById('turno_motivo').value = turno.motivo || '';
+                        document.getElementById('modalTurnoExtraTitle').textContent = 'Editar Turno Extra';
+                        
+                        // Inicializar date picker
+                        const fechaInput = document.getElementById('turno_fecha');
+                        if (fechaInput && !window.flatpickrTurnoExtra) {
+                            window.flatpickrTurnoExtra = flatpickr(fechaInput, {
+                                dateFormat: "d/m/Y",
+                                locale: "es",
+                                allowInput: true,
+                                clickOpens: true,
+                                onChange: function(selectedDates, dateStr, instance) {
+                                    if (dateStr) {
+                                        const partes = dateStr.split('/');
+                                        if (partes.length === 3) {
+                                            const dia = partes[0].padStart(2, '0');
+                                            const mes = partes[1].padStart(2, '0');
+                                            const año = partes[2];
+                                            instance.input.value = `${dia}/${mes}/${año}`;
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                        
+                        openModal('modalTurnoExtra');
+                    } else {
+                        alert('Turno extra no encontrado');
+                    }
+                } else {
+                    alert('Error al cargar el turno extra');
+                }
+            } catch (error) {
+                alert('Error de conexión: ' + error.message);
+            }
+        }
+
+        async function eliminarTurnoExtra(idTurnoExtra) {
+            if (!confirm('¿Está seguro de eliminar este turno extra? Esta acción no se puede deshacer.')) {
+                return;
+            }
+            
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/turnos-extra/${idTurnoExtra}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert('Turno extra eliminado exitosamente');
+                    loadTurnosExtra();
+                } else {
+                    alert('Error: ' + (result.error || 'Error desconocido'));
+                }
+            } catch (error) {
+                alert('Error de conexión: ' + error.message);
+            }
+        }
+
+        function showModalTurnoExtraError(message) {
+            const alert = document.getElementById('modalTurnoExtraAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function showModalTurnoExtraSuccess(message) {
+            const alert = document.getElementById('modalTurnoExtraAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+
+        function hideModalTurnoExtraAlert() {
+            const alert = document.getElementById('modalTurnoExtraAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
     </script>
+    
 </body>
 </html>
 

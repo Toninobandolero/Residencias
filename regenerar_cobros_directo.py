@@ -120,18 +120,10 @@ def regenerar_cobros_previstos():
                 print(f"   ⏭️  {nombre} {apellido}: Ya tiene cobro completado para {mes_siguiente}")
                 continue
             
-            # Calcular fecha prevista según método de pago
-            if metodo_pago.lower() in ['remesa']:
-                ultimo_dia = (siguiente_mes - timedelta(days=1)).day
-                dia_remesa = min(30, ultimo_dia)
-                fecha_prevista = datetime(año_actual, mes_actual, dia_remesa)
-                mes_pagado = mes_siguiente
-            elif metodo_pago.lower() in ['transferencia', 'transfer']:
-                fecha_prevista = datetime(siguiente_mes.year, siguiente_mes.month, 3)
-                mes_pagado = mes_siguiente
-            else:
-                fecha_prevista = datetime(siguiente_mes.year, siguiente_mes.month, 5)
-                mes_pagado = mes_siguiente
+            # Calcular fecha prevista - todos los métodos usan el día 1 del mes que se va a cobrar
+            # Esto evita problemas con fechas del mes anterior
+            fecha_prevista = datetime(siguiente_mes.year, siguiente_mes.month, 1)
+            mes_pagado = mes_siguiente
             
             nombre_mes = meses_espanol.get(siguiente_mes.month, 'mes')
             concepto = f"Pago {nombre_mes}"

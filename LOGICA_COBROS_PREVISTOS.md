@@ -28,10 +28,9 @@
      AND costo_habitacion > 0
    ```
 
-2. **Cálculo de fecha prevista según método de pago:**
-   - **Transferencia**: Día 3 del mes siguiente
-   - **Remesa**: Día 30 del mes siguiente
-   - **Otros** (metálico, bizum, etc.): Día 5 del mes siguiente
+2. **Cálculo de fecha prevista:**
+   - **Todos los métodos de pago**: Día 1 del mes que se va a cobrar (mes siguiente)
+   - Esto evita problemas con fechas del mes anterior y simplifica la gestión
 
 3. **Prevención de duplicados:**
    - Verifica si ya existe un cobro previsto para ese residente en ese mes

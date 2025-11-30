@@ -268,3 +268,138 @@ def validate_cobro_data(data, is_update=False):
     
     return len(errors) == 0, errors
 
+
+def validate_personal_data(data, is_update=False):
+    """Valida datos completos de personal/empleado."""
+    errors = []
+    
+    # Campos requeridos
+    if not is_update:
+        valid, error = validate_text(data.get('nombre'), 'Nombre', min_length=2, max_length=255)
+        if not valid:
+            errors.append(error)
+        
+        valid, error = validate_text(data.get('apellido'), 'Apellido', min_length=2, max_length=255)
+        if not valid:
+            errors.append(error)
+        
+        valid, error = validate_residencia_id(data.get('id_residencia'))
+        if not valid:
+            errors.append(error)
+    else:
+        # En actualización, solo validar si se proporcionan
+        if 'nombre' in data:
+            valid, error = validate_text(data.get('nombre'), 'Nombre', min_length=2, max_length=255, required=False)
+            if not valid:
+                errors.append(error)
+        
+        if 'apellido' in data:
+            valid, error = validate_text(data.get('apellido'), 'Apellido', min_length=2, max_length=255, required=False)
+            if not valid:
+                errors.append(error)
+        
+        if 'id_residencia' in data:
+            valid, error = validate_residencia_id(data.get('id_residencia'))
+            if not valid:
+                errors.append(error)
+    
+    # Campos opcionales con validación
+    if 'telefono' in data and data.get('telefono'):
+        valid, error = validate_phone(data.get('telefono'), 'Teléfono', required=False)
+        if not valid:
+            errors.append(error)
+    
+    if 'email' in data and data.get('email'):
+        # Validar formato de email si se proporciona (opcional)
+        email = data.get('email')
+        if email and email.strip():
+            pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(pattern, email):
+                errors.append("Formato de email inválido")
+            if len(email) > 255:
+                errors.append("El email es demasiado largo (máximo 255 caracteres)")
+    
+    if 'cargo' in data and data.get('cargo'):
+        valid, error = validate_text(data.get('cargo'), 'Cargo', min_length=1, max_length=100, required=False)
+        if not valid:
+            errors.append(error)
+    
+    if 'fecha_contratacion' in data and data.get('fecha_contratacion'):
+        valid, error = validate_date(data.get('fecha_contratacion'), 'Fecha de contratación', required=False, allow_future=False)
+        if not valid:
+            errors.append(error)
+    
+    if 'documento_identidad' in data and data.get('documento_identidad'):
+        valid, error = validate_text(data.get('documento_identidad'), 'Documento de identidad', min_length=1, max_length=50, required=False)
+        if not valid:
+            errors.append(error)
+    
+    return len(errors) == 0, errors
+
+
+def validate_turno_extra_data(data, is_update=False):
+    """Valida datos completos de turno extra."""
+    errors = []
+    
+    # Campos requeridos
+    if not is_update:
+        if 'id_personal' not in data or data.get('id_personal') is None:
+            errors.append("id_personal es requerido")
+        else:
+            valid, error = validate_number(data.get('id_personal'), 'id_personal', min_value=1, required=True)
+            if not valid:
+                errors.append(error)
+        
+        if 'fecha' not in data or not data.get('fecha'):
+            errors.append("Fecha es requerida")
+        else:
+            valid, error = validate_date(data.get('fecha'), 'Fecha', required=True, allow_future=True)
+            if not valid:
+                errors.append(error)
+        
+        if 'hora_entrada' not in data or not data.get('hora_entrada'):
+            errors.append("Hora de entrada es requerida")
+        
+        if 'hora_salida' not in data or not data.get('hora_salida'):
+            errors.append("Hora de salida es requerida")
+    else:
+        # En actualización, solo validar si se proporcionan
+        if 'id_personal' in data and data.get('id_personal') is not None:
+            valid, error = validate_number(data.get('id_personal'), 'id_personal', min_value=1, required=False)
+            if not valid:
+                errors.append(error)
+        
+        if 'fecha' in data and data.get('fecha'):
+            valid, error = validate_date(data.get('fecha'), 'Fecha', required=False, allow_future=True)
+            if not valid:
+                errors.append(error)
+    
+    # Validar formato de hora (HH:MM)
+    if 'hora_entrada' in data and data.get('hora_entrada'):
+        hora_entrada = data.get('hora_entrada')
+        if not re.match(r'^([0-1][0-9]|2[0-3]):[0-5][0-9]$', hora_entrada):
+            errors.append("Hora de entrada debe tener formato HH:MM (24 horas)")
+    
+    if 'hora_salida' in data and data.get('hora_salida'):
+        hora_salida = data.get('hora_salida')
+        if not re.match(r'^([0-1][0-9]|2[0-3]):[0-5][0-9]$', hora_salida):
+            errors.append("Hora de salida debe tener formato HH:MM (24 horas)")
+    
+    # Validar que hora_salida sea posterior a hora_entrada
+    if 'hora_entrada' in data and 'hora_salida' in data and data.get('hora_entrada') and data.get('hora_salida'):
+        try:
+            from datetime import datetime
+            entrada = datetime.strptime(data.get('hora_entrada'), '%H:%M').time()
+            salida = datetime.strptime(data.get('hora_salida'), '%H:%M').time()
+            if salida <= entrada:
+                errors.append("La hora de salida debe ser posterior a la hora de entrada")
+        except ValueError:
+            pass  # Ya se validó el formato arriba
+    
+    # Validar motivo si se proporciona
+    if 'motivo' in data and data.get('motivo'):
+        valid, error = validate_text(data.get('motivo'), 'Motivo', min_length=1, max_length=500, required=False)
+        if not valid:
+            errors.append(error)
+    
+    return len(errors) == 0, errors

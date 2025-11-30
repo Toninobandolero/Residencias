@@ -17,8 +17,9 @@ def get_storage_client():
             # Intentar usar credenciales por defecto (para Cloud Run)
             return storage.Client()
     except Exception as e:
-        print(f"Error al inicializar cliente de Cloud Storage: {str(e)}")
-        return None
+        error_msg = f"Error al inicializar cliente de Cloud Storage: {str(e)}. Verifique que GOOGLE_APPLICATION_CREDENTIALS esté configurado o que las credenciales por defecto estén disponibles."
+        print(error_msg)
+        raise Exception(error_msg)
 
 
 def upload_document(file_content, id_residencia, id_residente, tipo_documento, nombre_archivo, content_type=None):
@@ -38,16 +39,15 @@ def upload_document(file_content, id_residencia, id_residente, tipo_documento, n
     """
     try:
         client = get_storage_client()
-        if not client:
-            return None
         
         bucket_name = os.getenv('GCS_BUCKET_NAME', 'violetas-documentos')
         bucket = client.bucket(bucket_name)
         
         # Verificar que el bucket existe
         if not bucket.exists():
-            print(f"Error: El bucket '{bucket_name}' no existe en Cloud Storage")
-            return None
+            error_msg = f"El bucket '{bucket_name}' no existe en Cloud Storage. Verifique que GCS_BUCKET_NAME esté configurado correctamente."
+            print(error_msg)
+            raise Exception(error_msg)
         
         # Crear ruta: residencia-{id}/residente-{id}/tipo-fecha-nombre
         fecha = datetime.now().strftime('%Y%m%d')
@@ -68,14 +68,23 @@ def upload_document(file_content, id_residencia, id_residente, tipo_documento, n
         blob = bucket.blob(blob_path)
         blob.upload_from_string(file_content, content_type=content_type)
         
-        # Hacer el blob privado
-        blob.make_private()
+        # Intentar hacer el blob privado (si no tiene permisos, continuar de todas formas)
+        try:
+            blob.make_private()
+        except Exception as make_private_error:
+            # Si no tiene permisos para cambiar IAM, el blob seguirá siendo accesible solo con URLs firmadas
+            # que es lo que necesitamos de todas formas
+            print(f"Advertencia: No se pudo hacer el blob privado (esto es normal si no hay permisos IAM): {str(make_private_error)}")
         
         return blob_path
         
     except Exception as e:
-        print(f"Error al subir documento: {str(e)}")
-        return None
+        import traceback
+        error_msg = f"Error al subir documento: {str(e)}"
+        print(error_msg)
+        print(traceback.format_exc())
+        # Re-lanzar el error para que el backend lo capture con más detalles
+        raise Exception(f"Error al subir documento a Cloud Storage: {str(e)}")
 
 
 def get_document_url(blob_path, expiration_minutes=60):
