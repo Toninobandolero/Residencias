@@ -606,7 +606,7 @@
                         <img src="/static/icons/medical/users.svg" alt="Residentes" style="width: 20px; height: 20px; margin-right: 8px;"> Residentes
                     </button>
                     <button class="module-btn" onclick="showModule('facturacion')">
-                        <img src="/static/icons/medical/money.svg" alt="Facturación" style="width: 20px; height: 20px; margin-right: 8px;"> Facturación
+                        <span style="font-size: 20px; margin-right: 8px;">€</span> Facturación
                     </button>
                     <button class="module-btn" onclick="showModule('personal')">
                         <img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 20px; height: 20px; margin-right: 8px;"> Personal
@@ -1366,32 +1366,37 @@
                     const residentesActivos = (data.residentes || []).filter(r => r.activo);
                     const residentesInactivos = (data.residentes || []).filter(r => !r.activo);
                     
+                    // Agrupar residentes activos por residencia
+                    const residentesVioletas1 = residentesActivos.filter(r => r.id_residencia === 1);
+                    const residentesVioletas2 = residentesActivos.filter(r => r.id_residencia === 2);
+                    const residentesOtrasResidencias = residentesActivos.filter(r => r.id_residencia !== 1 && r.id_residencia !== 2);
+                    
                     let html = `
                         <div class="module-content">
                             <h3 style="color: #667eea; margin-bottom: 15px;"><img src="/static/icons/medical/users.svg" alt="Residentes" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Residentes Activos (${residentesActivos.length})</h3>
                             <button class="add-btn" onclick="openModal('modalResidente')" style="display: inline-flex; align-items: center; gap: 6px;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Residente</button>
                     `;
                     
-                    // Tabla de residentes activos
-                    if (residentesActivos.length > 0) {
+                    // Contenedor para Violetas 1
+                    if (residentesVioletas1.length > 0) {
                         html += `
-                            <table class="data-table" style="margin-top: 20px;">
-                                <thead>
-                                    <tr>
-                                        <th>Residencia</th>
-                                        <th>Habitación</th>
-                                        <th>Nombre</th>
-                                        <th>Contacto de Emergencia</th>
-                                        <th>Teléfono de Emergencia</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
+                            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #667eea;">
+                                <h4 style="color: #667eea; margin-bottom: 15px; font-size: 18px; font-weight: 600;">Violetas 1 (${residentesVioletas1.length})</h4>
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Habitación</th>
+                                            <th>Nombre</th>
+                                            <th>Contacto de Emergencia</th>
+                                            <th>Teléfono de Emergencia</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
                         `;
                         
-                        residentesActivos.forEach(res => {
+                        residentesVioletas1.forEach(res => {
                             html += `
                                 <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
-                                    <td>${res.nombre_residencia || (res.id_residencia === 1 ? 'Violetas 1' : res.id_residencia === 2 ? 'Violetas 2' : `Residencia ${res.id_residencia}`)}</td>
                                     <td>${res.habitacion || '-'}</td>
                                     <td>${res.nombre} ${res.apellido}</td>
                                     <td>${res.contacto_emergencia || '-'}</td>
@@ -1401,65 +1406,280 @@
                         });
                         
                         html += `
-                            </tbody>
-                            <tfoot>
-                                <tr style="background: #f8f9fa; font-weight: 600;">
-                                    <td colspan="5" style="padding: 15px; text-align: right; color: #667eea; border-top: 2px solid #e0e0e0;">
-                                        Total de Residentes Activos: ${residentesActivos.length}
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        </table>`;
-                    } else {
-                        html += '<p style="margin-top: 20px;">No hay residentes activos registrados.</p>';
+                                    </tbody>
+                                    <tfoot>
+                                        <tr style="background: white; font-weight: 600;">
+                                            <td colspan="4" style="padding: 10px; text-align: right; color: #667eea; border-top: 2px solid #e0e0e0;">
+                                                Total: ${residentesVioletas1.length}
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        `;
                     }
                     
-                    // Lista de residentes inactivos (usuarios de baja)
-                    if (residentesInactivos.length > 0) {
+                    // Contenedor para Violetas 2
+                    if (residentesVioletas2.length > 0) {
                         html += `
-                            <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
-                                <h3 style="color: #dc3545; margin-bottom: 15px;"><img src="/static/icons/medical/user-x.svg" alt="Bajas" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Usuarios de Baja (${residentesInactivos.length})</h3>
+                            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #48bb78;">
+                                <h4 style="color: #48bb78; margin-bottom: 15px; font-size: 18px; font-weight: 600;">Violetas 2 (${residentesVioletas2.length})</h4>
                                 <table class="data-table">
                                     <thead>
                                         <tr>
-                                            <th>Residencia</th>
                                             <th>Habitación</th>
                                             <th>Nombre</th>
-                                            <th>Motivo de Baja</th>
-                                            <th>Fecha de Baja</th>
+                                            <th>Contacto de Emergencia</th>
+                                            <th>Teléfono de Emergencia</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                         `;
                         
-                        residentesInactivos.forEach(res => {
-                            const fechaBaja = res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : '-';
+                        residentesVioletas2.forEach(res => {
                             html += `
                                 <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
-                                    <td>${res.nombre_residencia || (res.id_residencia === 1 ? 'Violetas 1' : res.id_residencia === 2 ? 'Violetas 2' : `Residencia ${res.id_residencia}`)}</td>
                                     <td>${res.habitacion || '-'}</td>
                                     <td>${res.nombre} ${res.apellido}</td>
-                                    <td>${res.motivo_baja || '-'}</td>
-                                    <td>${fechaBaja}</td>
+                                    <td>${res.contacto_emergencia || '-'}</td>
+                                    <td>${res.telefono_emergencia || '-'}</td>
                                 </tr>
                             `;
                         });
                         
                         html += `
-                            </tbody>
-                            <tfoot>
-                                <tr style="background: #f8f9fa; font-weight: 600;">
-                                    <td colspan="5" style="padding: 15px; text-align: right; color: #dc3545; border-top: 2px solid #e0e0e0;">
-                                        Total de Usuarios de Baja: ${residentesInactivos.length}
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        </table></div>`;
+                                    </tbody>
+                                    <tfoot>
+                                        <tr style="background: white; font-weight: 600;">
+                                            <td colspan="4" style="padding: 10px; text-align: right; color: #48bb78; border-top: 2px solid #e0e0e0;">
+                                                Total: ${residentesVioletas2.length}
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        `;
                     }
                     
-                    // Calcular residentes activos por residencia
-                    const residentesVioletas1 = residentesActivos.filter(r => r.id_residencia === 1).length;
-                    const residentesVioletas2 = residentesActivos.filter(r => r.id_residencia === 2).length;
+                    // Otras residencias (por si hay más en el futuro)
+                    if (residentesOtrasResidencias.length > 0) {
+                        const residenciasAgrupadas = {};
+                        residentesOtrasResidencias.forEach(res => {
+                            const residenciaId = res.id_residencia;
+                            if (!residenciasAgrupadas[residenciaId]) {
+                                residenciasAgrupadas[residenciaId] = [];
+                            }
+                            residenciasAgrupadas[residenciaId].push(res);
+                        });
+                        
+                        Object.keys(residenciasAgrupadas).forEach(residenciaId => {
+                            const residentesResidencia = residenciasAgrupadas[residenciaId];
+                            const nombreResidencia = residentesResidencia[0].nombre_residencia || `Residencia ${residenciaId}`;
+                            
+                            html += `
+                                <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #718096;">
+                                    <h4 style="color: #718096; margin-bottom: 15px; font-size: 18px; font-weight: 600;">${nombreResidencia} (${residentesResidencia.length})</h4>
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Habitación</th>
+                                                <th>Nombre</th>
+                                                <th>Contacto de Emergencia</th>
+                                                <th>Teléfono de Emergencia</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                            `;
+                            
+                            residentesResidencia.forEach(res => {
+                                html += `
+                                    <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
+                                        <td>${res.habitacion || '-'}</td>
+                                        <td>${res.nombre} ${res.apellido}</td>
+                                        <td>${res.contacto_emergencia || '-'}</td>
+                                        <td>${res.telefono_emergencia || '-'}</td>
+                                    </tr>
+                                `;
+                            });
+                            
+                            html += `
+                                        </tbody>
+                                        <tfoot>
+                                            <tr style="background: white; font-weight: 600;">
+                                                <td colspan="4" style="padding: 10px; text-align: right; color: #718096; border-top: 2px solid #e0e0e0;">
+                                                    Total: ${residentesResidencia.length}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            `;
+                        });
+                    }
+                    
+                    if (residentesActivos.length === 0) {
+                        html += '<p style="margin-top: 20px;">No hay residentes activos registrados.</p>';
+                    }
+                    
+                    // Lista de residentes inactivos (usuarios de baja)
+                    if (residentesInactivos.length > 0) {
+                        // Agrupar residentes inactivos por residencia
+                        const inactivosVioletas1 = residentesInactivos.filter(r => r.id_residencia === 1);
+                        const inactivosVioletas2 = residentesInactivos.filter(r => r.id_residencia === 2);
+                        const inactivosOtrasResidencias = residentesInactivos.filter(r => r.id_residencia !== 1 && r.id_residencia !== 2);
+                        
+                        html += `
+                            <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
+                                <h3 style="color: #dc3545; margin-bottom: 20px;"><img src="/static/icons/medical/user-x.svg" alt="Bajas" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Usuarios de Baja (${residentesInactivos.length})</h3>
+                        `;
+                        
+                        // Contenedor para Violetas 1 - Inactivos
+                        if (inactivosVioletas1.length > 0) {
+                            html += `
+                                <div style="margin-top: 20px; padding: 20px; background: #fff5f5; border-radius: 10px; border-left: 4px solid #dc3545;">
+                                    <h4 style="color: #dc3545; margin-bottom: 15px; font-size: 18px; font-weight: 600;">Violetas 1 (${inactivosVioletas1.length})</h4>
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Habitación</th>
+                                                <th>Nombre</th>
+                                                <th>Motivo de Baja</th>
+                                                <th>Fecha de Baja</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                            `;
+                            
+                            inactivosVioletas1.forEach(res => {
+                                const fechaBaja = res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : '-';
+                                html += `
+                                    <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
+                                        <td>${res.habitacion || '-'}</td>
+                                        <td>${res.nombre} ${res.apellido}</td>
+                                        <td>${res.motivo_baja || '-'}</td>
+                                        <td>${fechaBaja}</td>
+                                    </tr>
+                                `;
+                            });
+                            
+                            html += `
+                                        </tbody>
+                                        <tfoot>
+                                            <tr style="background: white; font-weight: 600;">
+                                                <td colspan="4" style="padding: 10px; text-align: right; color: #dc3545; border-top: 2px solid #e0e0e0;">
+                                                    Total: ${inactivosVioletas1.length}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            `;
+                        }
+                        
+                        // Contenedor para Violetas 2 - Inactivos
+                        if (inactivosVioletas2.length > 0) {
+                            html += `
+                                <div style="margin-top: 20px; padding: 20px; background: #fff5f5; border-radius: 10px; border-left: 4px solid #dc3545;">
+                                    <h4 style="color: #dc3545; margin-bottom: 15px; font-size: 18px; font-weight: 600;">Violetas 2 (${inactivosVioletas2.length})</h4>
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Habitación</th>
+                                                <th>Nombre</th>
+                                                <th>Motivo de Baja</th>
+                                                <th>Fecha de Baja</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                            `;
+                            
+                            inactivosVioletas2.forEach(res => {
+                                const fechaBaja = res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : '-';
+                                html += `
+                                    <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
+                                        <td>${res.habitacion || '-'}</td>
+                                        <td>${res.nombre} ${res.apellido}</td>
+                                        <td>${res.motivo_baja || '-'}</td>
+                                        <td>${fechaBaja}</td>
+                                    </tr>
+                                `;
+                            });
+                            
+                            html += `
+                                        </tbody>
+                                        <tfoot>
+                                            <tr style="background: white; font-weight: 600;">
+                                                <td colspan="4" style="padding: 10px; text-align: right; color: #dc3545; border-top: 2px solid #e0e0e0;">
+                                                    Total: ${inactivosVioletas2.length}
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            `;
+                        }
+                        
+                        // Otras residencias inactivas (por si hay más en el futuro)
+                        if (inactivosOtrasResidencias.length > 0) {
+                            const residenciasAgrupadas = {};
+                            inactivosOtrasResidencias.forEach(res => {
+                                const residenciaId = res.id_residencia;
+                                if (!residenciasAgrupadas[residenciaId]) {
+                                    residenciasAgrupadas[residenciaId] = [];
+                                }
+                                residenciasAgrupadas[residenciaId].push(res);
+                            });
+                            
+                            Object.keys(residenciasAgrupadas).forEach(residenciaId => {
+                                const residentesResidencia = residenciasAgrupadas[residenciaId];
+                                const nombreResidencia = residentesResidencia[0].nombre_residencia || `Residencia ${residenciaId}`;
+                                
+                                html += `
+                                    <div style="margin-top: 20px; padding: 20px; background: #fff5f5; border-radius: 10px; border-left: 4px solid #dc3545;">
+                                        <h4 style="color: #dc3545; margin-bottom: 15px; font-size: 18px; font-weight: 600;">${nombreResidencia} (${residentesResidencia.length})</h4>
+                                        <table class="data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Habitación</th>
+                                                    <th>Nombre</th>
+                                                    <th>Motivo de Baja</th>
+                                                    <th>Fecha de Baja</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                `;
+                                
+                                residentesResidencia.forEach(res => {
+                                    const fechaBaja = res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : '-';
+                                    html += `
+                                        <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
+                                            <td>${res.habitacion || '-'}</td>
+                                            <td>${res.nombre} ${res.apellido}</td>
+                                            <td>${res.motivo_baja || '-'}</td>
+                                            <td>${fechaBaja}</td>
+                                        </tr>
+                                    `;
+                                });
+                                
+                                html += `
+                                            </tbody>
+                                            <tfoot>
+                                                <tr style="background: white; font-weight: 600;">
+                                                    <td colspan="4" style="padding: 10px; text-align: right; color: #dc3545; border-top: 2px solid #e0e0e0;">
+                                                        Total: ${residentesResidencia.length}
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                `;
+                            });
+                        }
+                        
+                        html += `</div>`;
+                    }
+                    
+                    // Calcular totales para el resumen
                     const totalResidentes = residentesActivos.length + residentesInactivos.length;
                     
                     html += `
@@ -1467,11 +1687,11 @@
                             <h3 style="color: white; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/users.svg" alt="Total" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px; filter: brightness(0) invert(1);"> Resumen Total</h3>
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
                                 <div style="background: rgba(255, 255, 255, 0.2); padding: 15px; border-radius: 8px;">
-                                    <div style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">${residentesVioletas1}</div>
+                                    <div style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">${residentesVioletas1.length}</div>
                                     <div style="font-size: 13px; opacity: 0.9;">Violetas 1 Activos</div>
                                 </div>
                                 <div style="background: rgba(255, 255, 255, 0.2); padding: 15px; border-radius: 8px;">
-                                    <div style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">${residentesVioletas2}</div>
+                                    <div style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">${residentesVioletas2.length}</div>
                                     <div style="font-size: 13px; opacity: 0.9;">Violetas 2 Activos</div>
                                 </div>
                                 <div style="background: rgba(255, 255, 255, 0.2); padding: 15px; border-radius: 8px;">
@@ -1617,31 +1837,105 @@
                 
                 if (cobrosRes.ok && proveedoresRes.ok) {
                     // Filtrar cobros previstos: pendientes y completados
-                    // Asegurar que es_cobro_previsto sea tratado como booleano
-                    const todosCobrosPrevistos = cobrosData.cobros ? cobrosData.cobros.filter(c => {
-                        // Aceptar true, 'true', True, 1, etc.
-                        const esPrevisto = c.es_cobro_previsto === true || 
-                                          c.es_cobro_previsto === 'true' || 
-                                          c.es_cobro_previsto === 'True' ||
-                                          c.es_cobro_previsto === 1;
-                        return esPrevisto;
-                    }) : [];
+                    // Usar estructura agrupada si está disponible
+                    const cobrosAgrupados = cobrosData.cobros_agrupados || [];
                     
-                    // Filtrar por estado (aceptar variaciones)
-                    // Cobros previstos pendientes: estado 'pendiente' o NULL/vacío
-                    // Mostrar TODOS los pendientes (desde fecha_ingreso del residente)
-                    const cobrosPrevistos = todosCobrosPrevistos.filter(c => {
-                        const estado = (c.estado || '').toLowerCase().trim();
-                        const esPendiente = estado === 'pendiente' || estado === '' || !c.estado;
-                        return esPendiente;
+                    // Si no hay estructura agrupada, crear una desde la lista plana
+                    let cobrosPorResidencia = {};
+                    if (cobrosAgrupados.length === 0 && cobrosData.cobros) {
+                        cobrosData.cobros.forEach(c => {
+                            // Intentar obtener id_residencia del nombre o usar un valor por defecto
+                            const nombreRes = c.nombre_residencia || '';
+                            let idRes = null;
+                            if (nombreRes.includes('Violetas 1') || nombreRes.includes('1')) {
+                                idRes = 1;
+                            } else if (nombreRes.includes('Violetas 2') || nombreRes.includes('2')) {
+                                idRes = 2;
+                            }
+                            
+                            if (idRes) {
+                                if (!cobrosPorResidencia[idRes]) {
+                                    cobrosPorResidencia[idRes] = {
+                                        id_residencia: idRes,
+                                        nombre_residencia: c.nombre_residencia || `Residencia ${idRes}`,
+                                        cobros: []
+                                    };
+                                }
+                                cobrosPorResidencia[idRes].cobros.push(c);
+                            }
+                        });
+                    } else {
+                        cobrosAgrupados.forEach(grupo => {
+                            cobrosPorResidencia[grupo.id_residencia] = grupo;
+                        });
+                    }
+                    
+                    // Filtrar y agrupar cobros previstos y completados por residencia
+                    const cobrosPrevistosPorResidencia = {};
+                    const cobrosCompletadosPorResidencia = {};
+                    
+                    Object.keys(cobrosPorResidencia).forEach(idRes => {
+                        const grupo = cobrosPorResidencia[idRes];
+                        
+                        // Filtrar previstos pendientes
+                        const previstos = grupo.cobros.filter(c => {
+                            const esPrevisto = c.es_cobro_previsto === true || 
+                                              c.es_cobro_previsto === 'true' || 
+                                              c.es_cobro_previsto === 'True' ||
+                                              c.es_cobro_previsto === 1;
+                            const estado = (c.estado || '').toLowerCase().trim();
+                            const esPendiente = estado === 'pendiente' || estado === '' || !c.estado;
+                            return esPrevisto && esPendiente;
+                        });
+                        
+                        // Ordenar previstos por fecha más cercana a hoy (ascendente - más cercanos primero)
+                        previstos.sort((a, b) => {
+                            const fechaA = a.fecha_prevista ? new Date(a.fecha_prevista) : new Date('9999-12-31');
+                            const fechaB = b.fecha_prevista ? new Date(b.fecha_prevista) : new Date('9999-12-31');
+                            return fechaA - fechaB;
+                        });
+                        
+                        // Filtrar completados
+                        const completados = grupo.cobros.filter(c => {
+                            const estado = (c.estado || '').toLowerCase().trim();
+                            return estado === 'cobrado';
+                        });
+                        
+                        // Ordenar completados por fecha de pago más cercana a hoy (descendente - más recientes primero)
+                        completados.sort((a, b) => {
+                            const fechaA = a.fecha_pago ? new Date(a.fecha_pago) : new Date('1970-01-01');
+                            const fechaB = b.fecha_pago ? new Date(b.fecha_pago) : new Date('1970-01-01');
+                            return fechaB - fechaA;
+                        });
+                        
+                        if (previstos.length > 0) {
+                            cobrosPrevistosPorResidencia[idRes] = {
+                                ...grupo,
+                                cobros: previstos
+                            };
+                        }
+                        
+                        if (completados.length > 0) {
+                            cobrosCompletadosPorResidencia[idRes] = {
+                                ...grupo,
+                                cobros: completados
+                            };
+                        }
                     });
+                    
+                    // Calcular totales
+                    const totalPrevistos = Object.values(cobrosPrevistosPorResidencia).reduce((sum, g) => sum + g.cobros.length, 0);
+                    const totalCompletados = Object.values(cobrosCompletadosPorResidencia).reduce((sum, g) => sum + g.cobros.length, 0);
+                    
+                    // Lista plana para compatibilidad (mantener para debug)
+                    const cobrosPrevistos = Object.values(cobrosPrevistosPorResidencia).flatMap(g => g.cobros);
                     
                     // Debug: mostrar información de todos los cobros previstos
                     console.log('🔍 Debug cobros previstos:', {
                         totalCobros: cobrosData.cobros?.length || 0,
-                        todosPrevistos: todosCobrosPrevistos.length,
+                        todosPrevistos: cobrosPrevistos.length,
                         pendientes: cobrosPrevistos.length,
-                        detalle: todosCobrosPrevistos.map(c => ({
+                        detalle: cobrosPrevistos.map(c => ({
                             id: c.id_pago,
                             residente: c.residente,
                             estado: c.estado,
@@ -1671,10 +1965,10 @@
                     // Debug: mostrar información detallada de todos los cobros
                     console.log('🔍 Debug completo de cobros:', {
                         totalCobros: cobrosData.cobros?.length || 0,
-                        todosPrevistos: todosCobrosPrevistos.length,
+                        todosPrevistos: cobrosPrevistos.length,
                         pendientes: cobrosPrevistos.length,
                         completados: cobrosCompletados.length,
-                        todosLosPrevistos: todosCobrosPrevistos.map(c => ({
+                        todosLosPrevistos: cobrosPrevistos.map(c => ({
                             id: c.id_pago,
                             residente: c.residente,
                             estado: c.estado,
@@ -1693,7 +1987,7 @@
                     
                     let html = `
                         <div class="module-content">
-                            <h3 style="color: #667eea; margin-bottom: 20px;"><img src="/static/icons/medical/money.svg" alt="Facturación" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Facturación</h3>
+                            <h3 style="color: #667eea; margin-bottom: 20px;"><span style="font-size: 24px; vertical-align: middle; margin-right: 8px;">€</span> Facturación</h3>
                             
                             <div class="tabs-container">
                                 <div class="tabs">
@@ -1704,49 +1998,65 @@
                                 <!-- Pestaña de Cobros -->
                                 <div id="tabCobros" class="tab-content active">
                                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                                        <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros Previstos (${cobrosPrevistos.length})</h4>
+                                        <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros Previstos (${totalPrevistos})</h4>
                                         <button class="add-btn" onclick="openModal('modalCobro')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Cobro</button>
                                     </div>
                                     <div style="margin-bottom: 30px;">
                     `;
                     
-                    if (cobrosPrevistos.length > 0) {
-                        html += `
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Residente</th>
-                                        <th>Monto</th>
-                                        <th>Concepto</th>
-                                        <th>Tipo Pago</th>
-                                        <th>Fecha Prevista</th>
-                                        <th>Estado</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                        `;
+                    if (totalPrevistos > 0) {
+                        // Ordenar residencias por ID
+                        const residenciasOrdenadas = Object.keys(cobrosPrevistosPorResidencia)
+                            .map(id => parseInt(id))
+                            .sort((a, b) => a - b);
                         
-                        cobrosPrevistos.forEach(cobro => {
-                            const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
-                            const concepto = cobro.concepto || '-';
-                            const tipoPago = cobro.metodo_pago || '-';
+                        residenciasOrdenadas.forEach(idRes => {
+                            const grupo = cobrosPrevistosPorResidencia[idRes];
                             html += `
-                                <tr style="cursor: pointer;" onclick="editarCobro(${cobro.id_pago})" title="Haz clic para editar">
-                                    <td style="color: #333;">${cobro.residente}</td>
-                                    <td style="color: #333;">€${parseFloat(cobro.monto).toFixed(2)}</td>
-                                    <td style="color: #333;">${concepto}</td>
-                                    <td style="color: #333;">${tipoPago}</td>
-                                    <td style="color: #333;">${fechaPrevista}</td>
-                                    <td><span style="color: #ffc107; font-weight: 600;">Pendiente</span></td>
-                                    <td onclick="event.stopPropagation();">
-                                        <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'cobrado')" style="padding: 4px 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Marcar como Cobrado</button>
-                                    </td>
-                                </tr>
+                                <div style="margin-bottom: 30px;">
+                                    <h5 style="color: #667eea; margin-bottom: 15px; padding: 10px; background: #f0f7ff; border-radius: 8px; border-left: 4px solid #667eea;">
+                                        🏢 ${grupo.nombre_residencia} (${grupo.cobros.length} cobros pendientes)
+                                    </h5>
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Residente</th>
+                                                <th>Monto</th>
+                                                <th>Concepto</th>
+                                                <th>Tipo Pago</th>
+                                                <th>Fecha Prevista</th>
+                                                <th>Estado</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                            `;
+                            
+                            grupo.cobros.forEach(cobro => {
+                                const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
+                                const concepto = cobro.concepto || '-';
+                                const tipoPago = cobro.metodo_pago || '-';
+                                html += `
+                                    <tr style="cursor: pointer;" onclick="editarCobro(${cobro.id_pago})" title="Haz clic para editar">
+                                        <td style="color: #333;">${cobro.residente}</td>
+                                        <td style="color: #333;">${Math.round(parseFloat(cobro.monto))}€</td>
+                                        <td style="color: #333;">${concepto}</td>
+                                        <td style="color: #333;">${tipoPago}</td>
+                                        <td style="color: #333;">${fechaPrevista}</td>
+                                        <td><span style="color: #ffc107; font-weight: 600;">Pendiente</span></td>
+                                        <td onclick="event.stopPropagation();">
+                                            <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'cobrado')" style="padding: 4px 8px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Marcar como Cobrado</button>
+                                        </td>
+                                    </tr>
+                                `;
+                            });
+                            
+                            html += `
+                                        </tbody>
+                                    </table>
+                                </div>
                             `;
                         });
-                        
-                        html += '</tbody></table>';
                     } else {
                         html += '<p style="color: #333;">No hay cobros previstos pendientes.</p>';
                     }
@@ -1755,49 +2065,65 @@
                                     </div>
                                     
                                     <div style="margin-bottom: 30px;">
-                                        <h4 style="color: #667eea; margin-bottom: 10px;"><img src="/static/icons/medical/check-circle.svg" alt="Completados" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros Completados (${cobrosCompletados.length})</h4>
+                                        <h4 style="color: #667eea; margin-bottom: 10px;"><img src="/static/icons/medical/check-circle.svg" alt="Completados" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros Completados (${totalCompletados})</h4>
                     `;
                     
-                    if (cobrosCompletados.length > 0) {
-                        html += `
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Residente</th>
-                                        <th>Monto</th>
-                                        <th>Concepto</th>
-                                        <th>Tipo Pago</th>
-                                        <th>Fecha Prevista</th>
-                                        <th>Fecha de Pago</th>
-                                        <th>Estado</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                        `;
+                    if (totalCompletados > 0) {
+                        // Ordenar residencias por ID
+                        const residenciasOrdenadas = Object.keys(cobrosCompletadosPorResidencia)
+                            .map(id => parseInt(id))
+                            .sort((a, b) => a - b);
                         
-                        cobrosCompletados.forEach(cobro => {
-                            const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
-                            const fechaPago = cobro.fecha_pago ? fechaISOToEspanol(cobro.fecha_pago) : '-';
-                            const concepto = cobro.concepto || 'Pago mensual habitación';
-                            const tipoPago = cobro.metodo_pago || '-';
+                        residenciasOrdenadas.forEach(idRes => {
+                            const grupo = cobrosCompletadosPorResidencia[idRes];
                             html += `
-                                <tr>
-                                    <td style="color: #333;">${cobro.residente}</td>
-                                    <td style="color: #333;">€${parseFloat(cobro.monto).toFixed(2)}</td>
-                                    <td style="color: #333;">${concepto}</td>
-                                    <td style="color: #333;">${tipoPago}</td>
-                                    <td style="color: #333;">${fechaPrevista}</td>
-                                    <td style="color: #333;">${fechaPago}</td>
-                                    <td><span style="color: #28a745; font-weight: 600;"><img src="/static/icons/medical/check-circle.svg" alt="Cobrado" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;"> Cobrado</span></td>
-                                    <td>
-                                        <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'pendiente')" style="padding: 4px 8px; background: #ffc107; color: #333; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Revertir</button>
-                                    </td>
-                                </tr>
+                                <div style="margin-bottom: 30px;">
+                                    <h5 style="color: #28a745; margin-bottom: 15px; padding: 10px; background: #f0fff4; border-radius: 8px; border-left: 4px solid #28a745;">
+                                        🏢 ${grupo.nombre_residencia} (${grupo.cobros.length} cobros completados)
+                                    </h5>
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Residente</th>
+                                                <th>Monto</th>
+                                                <th>Concepto</th>
+                                                <th>Tipo Pago</th>
+                                                <th>Fecha Prevista</th>
+                                                <th>Fecha de Pago</th>
+                                                <th>Estado</th>
+                                                <th>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                            `;
+                            
+                            grupo.cobros.forEach(cobro => {
+                                const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista) : '-';
+                                const fechaPago = cobro.fecha_pago ? fechaISOToEspanol(cobro.fecha_pago) : '-';
+                                const concepto = cobro.concepto || 'Pago mensual habitación';
+                                const tipoPago = cobro.metodo_pago || '-';
+                                html += `
+                                    <tr>
+                                        <td style="color: #333;">${cobro.residente}</td>
+                                        <td style="color: #333;">${Math.round(parseFloat(cobro.monto))}€</td>
+                                        <td style="color: #333;">${concepto}</td>
+                                        <td style="color: #333;">${tipoPago}</td>
+                                        <td style="color: #333;">${fechaPrevista}</td>
+                                        <td style="color: #333;">${fechaPago}</td>
+                                        <td><span style="color: #28a745; font-weight: 600;"><img src="/static/icons/medical/check-circle.svg" alt="Cobrado" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;"> Cobrado</span></td>
+                                        <td>
+                                            <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'pendiente')" style="padding: 4px 8px; background: #ffc107; color: #333; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Revertir</button>
+                                        </td>
+                                    </tr>
+                                `;
+                            });
+                            
+                            html += `
+                                        </tbody>
+                                    </table>
+                                </div>
                             `;
                         });
-                        
-                        html += '</tbody></table>';
                     } else {
                         html += '<p style="color: #333;">No hay cobros completados.</p>';
                     }
@@ -1848,7 +2174,7 @@
                                 <tr>
                                     <td>${pago.proveedor}</td>
                                     <td>${pago.concepto}</td>
-                                    <td>€${parseFloat(pago.monto || pago.monto_estimado || 0).toFixed(2)}</td>
+                                    <td>${Math.round(parseFloat(pago.monto || pago.monto_estimado || 0))}€</td>
                                     <td>${pago.fecha_prevista || pago.fecha_pago || '-'}</td>
                                     <td>${pago.estado}</td>
                                     <td>${tipo}</td>
@@ -2841,7 +3167,7 @@
                                             if (label) {
                                                 label += ': ';
                                             }
-                                            label += '€' + context.parsed.y.toFixed(2);
+                                            label += Math.round(context.parsed.y) + '€';
                                             return label;
                                         }
                                     }
@@ -2852,7 +3178,7 @@
                                     beginAtZero: true,
                                     ticks: {
                                         callback: function(value) {
-                                            return '€' + value.toFixed(0);
+                                            return Math.round(value) + '€';
                                         },
                                         font: {
                                             size: 11

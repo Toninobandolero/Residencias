@@ -322,6 +322,7 @@ def listar_residentes():
             
             campos_opcionales_str = ', ' + ', '.join(campos_opcionales)
             
+            # Construir query base
             query = f"""
                 SELECT r.id_residente, r.id_residencia, r.nombre, r.apellido, r.documento_identidad, 
                        r.fecha_nacimiento, r.telefono, r.direccion, r.contacto_emergencia,
@@ -332,6 +333,13 @@ def listar_residentes():
                        res.nombre as nombre_residencia
                 FROM residente r
                 JOIN residencia res ON r.id_residencia = res.id_residencia
+            """
+            
+            # Filtrar por residencia si NO es Admin (rol 1)
+            if g.id_rol != 1:
+                query += f" WHERE r.id_residencia = {g.id_residencia}"
+            
+            query += """
                 ORDER BY r.id_residencia, 
                          CASE 
                              WHEN r.habitacion ~ '^[0-9]+$' THEN r.habitacion::INTEGER
@@ -813,21 +821,62 @@ def listar_cobros():
         cursor = conn.cursor()
         
         try:
-            cursor.execute("""
-                SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
-                       p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
-                       p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion
-                FROM pago_residente p
-                JOIN residente r ON p.id_residente = r.id_residente
-                WHERE p.id_residencia = %s
-                ORDER BY COALESCE(p.fecha_prevista, p.fecha_pago) DESC, p.fecha_creacion DESC
-            """, (g.id_residencia,))
+            # Si es Admin (rol 1), ve todo. Si no, solo su residencia.
+            if g.id_rol == 1:
+                cursor.execute("""
+                    SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                           p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                           p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
+                           res.id_residencia, res.nombre as nombre_residencia
+                    FROM pago_residente p
+                    JOIN residente r ON p.id_residente = r.id_residente
+                    JOIN residencia res ON p.id_residencia = res.id_residencia
+                    ORDER BY res.id_residencia, 
+                             CASE 
+                                 WHEN p.fecha_prevista IS NOT NULL THEN p.fecha_prevista
+                                 WHEN p.fecha_pago IS NOT NULL THEN p.fecha_pago
+                                 ELSE '9999-12-31'::date
+                             END ASC,
+                             p.fecha_creacion DESC
+                """)
+            else:
+                cursor.execute("""
+                    SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                           p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                           p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
+                           res.id_residencia, res.nombre as nombre_residencia
+                    FROM pago_residente p
+                    JOIN residente r ON p.id_residente = r.id_residente
+                    JOIN residencia res ON p.id_residencia = res.id_residencia
+                    WHERE p.id_residencia = %s
+                    ORDER BY 
+                             CASE 
+                                 WHEN p.fecha_prevista IS NOT NULL THEN p.fecha_prevista
+                                 WHEN p.fecha_pago IS NOT NULL THEN p.fecha_pago
+                                 ELSE '9999-12-31'::date
+                             END ASC,
+                             p.fecha_creacion DESC
+                """, (g.id_residencia,))
             
             cobros = cursor.fetchall()
             
-            resultado = []
+            # Agrupar por residencia
+            cobros_por_residencia = {}
             for cobro in cobros:
-                resultado.append({
+                idx_residencia = 13
+                idx_nombre_residencia = 14
+                
+                id_residencia = cobro[idx_residencia]
+                nombre_residencia = cobro[idx_nombre_residencia] if len(cobro) > idx_nombre_residencia else f"Residencia {id_residencia}"
+                
+                if id_residencia not in cobros_por_residencia:
+                    cobros_por_residencia[id_residencia] = {
+                        'id_residencia': id_residencia,
+                        'nombre_residencia': nombre_residencia,
+                        'cobros': []
+                    }
+                
+                cobros_por_residencia[id_residencia]['cobros'].append({
                     'id_pago': cobro[0],
                     'id_residente': cobro[1],
                     'residente': cobro[2],
@@ -840,10 +889,19 @@ def listar_cobros():
                     'estado': cobro[9],
                     'es_cobro_previsto': cobro[10],
                     'observaciones': cobro[11],
-                    'fecha_creacion': cobro[12].isoformat() if cobro[12] else None
+                    'fecha_creacion': cobro[12].isoformat() if cobro[12] else None,
+                    'nombre_residencia': nombre_residencia
                 })
             
-            return jsonify({'cobros': resultado, 'total': len(resultado)}), 200
+            # Convertir a lista ordenada por id_residencia
+            resultado_agrupado = list(cobros_por_residencia.values())
+            resultado_agrupado.sort(key=lambda x: x['id_residencia'])
+            
+            return jsonify({
+                'cobros': [c for grupo in resultado_agrupado for c in grupo['cobros']],  # Lista plana para compatibilidad
+                'cobros_agrupados': resultado_agrupado,  # Estructura agrupada
+                'total': len(cobros)
+            }), 200
             
         finally:
             cursor.close()
@@ -984,13 +1042,20 @@ def generar_cobros_previstos():
             mes_siguiente = siguiente_mes.strftime('%Y-%m')
             
             # Limpiar TODOS los cobros previstos pendientes antes de regenerar
-            # Esto asegura que no haya duplicados ni conceptos antiguos
-            cursor.execute("""
-                DELETE FROM pago_residente
-                WHERE id_residencia = %s
-                  AND es_cobro_previsto = TRUE
-                  AND estado = 'pendiente'
-            """, (g.id_residencia,))
+            # Si es Admin, limpia de TODAS las residencias. Si no, solo de la suya.
+            if g.id_rol == 1:
+                cursor.execute("""
+                    DELETE FROM pago_residente
+                    WHERE es_cobro_previsto = TRUE
+                      AND estado = 'pendiente'
+                """)
+            else:
+                cursor.execute("""
+                    DELETE FROM pago_residente
+                    WHERE id_residencia = %s
+                      AND es_cobro_previsto = TRUE
+                      AND estado = 'pendiente'
+                """, (g.id_residencia,))
             
             cobros_eliminados = cursor.rowcount
             
@@ -1004,30 +1069,41 @@ def generar_cobros_previstos():
             else:
                 siguiente_mes = datetime(año_actual, mes_actual + 1, 1)
             
-            # Obtener todos los residentes activos con costo_habitacion
-            # IMPORTANTE: Incluir todos los residentes activos, luego filtrar por fecha_ingreso en el loop
-            cursor.execute("""
-                SELECT id_residente, nombre, apellido, costo_habitacion, metodo_pago_preferido, fecha_ingreso
-                FROM residente
-                WHERE id_residencia = %s 
-                  AND activo = TRUE 
-                  AND costo_habitacion IS NOT NULL 
-                  AND costo_habitacion > 0
-                  AND fecha_ingreso IS NOT NULL
-            """, (g.id_residencia,))
+            # Obtener residentes activos con costo_habitacion
+            # Si es Admin, obtiene de TODAS las residencias. Si no, solo de la suya.
+            if g.id_rol == 1:
+                cursor.execute("""
+                    SELECT id_residente, nombre, apellido, costo_habitacion, metodo_pago_preferido, fecha_ingreso, id_residencia
+                    FROM residente
+                    WHERE activo = TRUE 
+                      AND costo_habitacion IS NOT NULL 
+                      AND costo_habitacion > 0
+                      AND fecha_ingreso IS NOT NULL
+                """)
+            else:
+                cursor.execute("""
+                    SELECT id_residente, nombre, apellido, costo_habitacion, metodo_pago_preferido, fecha_ingreso, id_residencia
+                    FROM residente
+                    WHERE id_residencia = %s 
+                      AND activo = TRUE 
+                      AND costo_habitacion IS NOT NULL 
+                      AND costo_habitacion > 0
+                      AND fecha_ingreso IS NOT NULL
+                """, (g.id_residencia,))
             
             residentes = cursor.fetchall()
             
             # Verificar cuántos residentes hay en total (para diagnóstico)
-            cursor.execute("""
-                SELECT COUNT(*) FROM residente
-                WHERE id_residencia = %s AND activo = TRUE
-            """, (g.id_residencia,))
-            total_residentes_activos = cursor.fetchone()[0]
-            
-            # Logging para diagnóstico
-            app.logger.info(f"Generando cobros previstos para residencia {g.id_residencia}")
-            app.logger.info(f"Total residentes activos en residencia: {total_residentes_activos}")
+            if g.id_rol == 1:
+                cursor.execute("SELECT COUNT(*) FROM residente WHERE activo = TRUE")
+                total_residentes_activos = cursor.fetchone()[0]
+                app.logger.info(f"Generando cobros previstos GLOBAL (Admin)")
+            else:
+                cursor.execute("SELECT COUNT(*) FROM residente WHERE id_residencia = %s AND activo = TRUE", (g.id_residencia,))
+                total_residentes_activos = cursor.fetchone()[0]
+                app.logger.info(f"Generando cobros previstos para residencia {g.id_residencia}")
+
+            app.logger.info(f"Total residentes activos en alcance: {total_residentes_activos}")
             app.logger.info(f"Residentes candidatos encontrados (con costo y fecha_ingreso): {len(residentes)}")
             app.logger.info(f"Mes siguiente: {mes_siguiente}")
             
@@ -1053,6 +1129,7 @@ def generar_cobros_previstos():
                 costo_habitacion = float(residente[3])
                 metodo_pago = residente[4] or 'transferencia'  # Por defecto transferencia
                 fecha_ingreso = residente[5]  # fecha_ingreso del residente
+                residencia_del_residente = residente[6] # ID de la residencia del residente actual
                 
                 # Lógica simple: Si el residente ingresó en o antes de hoy, debe tener cobro previsto
                 # (a menos que ya tenga un cobro completado, lo cual se verifica más abajo)
@@ -1091,7 +1168,7 @@ def generar_cobros_previstos():
                       AND id_residencia = %s
                       AND mes_pagado = %s
                       AND estado = 'cobrado'
-                """, (id_residente, g.id_residencia, mes_pagado))
+                """, (id_residente, residencia_del_residente, mes_pagado))
                 
                 if cursor.fetchone():
                     # Ya tiene cobro completado en este mes, no generar previsto
@@ -1122,7 +1199,7 @@ def generar_cobros_previstos():
                         RETURNING id_pago
                     """, (
                         id_residente,
-                        g.id_residencia,
+                        residencia_del_residente,
                         costo_habitacion,
                         None,  # fecha_pago es NULL para cobros previstos
                         fecha_prevista.date(),
