@@ -1018,17 +1018,33 @@ def generar_cobros_previstos():
             
             residentes = cursor.fetchall()
             
+            # Verificar cuántos residentes hay en total (para diagnóstico)
+            cursor.execute("""
+                SELECT COUNT(*) FROM residente
+                WHERE id_residencia = %s AND activo = TRUE
+            """, (g.id_residencia,))
+            total_residentes_activos = cursor.fetchone()[0]
+            
+            # Logging para diagnóstico
+            app.logger.info(f"Generando cobros previstos para residencia {g.id_residencia}")
+            app.logger.info(f"Total residentes activos en residencia: {total_residentes_activos}")
+            app.logger.info(f"Residentes candidatos encontrados (con costo y fecha_ingreso): {len(residentes)}")
+            app.logger.info(f"Mes siguiente: {mes_siguiente}")
+            
             if not residentes:
                 return jsonify({
                     'mensaje': 'No hay residentes activos con costo_habitacion definido que deban tener cobros previstos',
                     'cobros_generados': 0,
                     'cobros_eliminados': cobros_eliminados,
-                    'mes_referencia': mes_siguiente
+                    'mes_referencia': mes_siguiente,
+                    'total_residentes_activos': total_residentes_activos,
+                    'residentes_candidatos': 0
                 }), 200
             
             cobros_generados = 0
             cobros_duplicados = 0
             errores = []
+            residentes_procesados = []
             
             for residente in residentes:
                 id_residente = residente[0]
@@ -1080,6 +1096,7 @@ def generar_cobros_previstos():
                 if cursor.fetchone():
                     # Ya tiene cobro completado en este mes, no generar previsto
                     cobros_duplicados += 1
+                    app.logger.info(f"Residente {nombre} {apellido} (ID: {id_residente}) ya tiene cobro completado para {mes_pagado}")
                     continue
                 
                 # NO verificar duplicados de previstos - permitir acumulación
@@ -1117,6 +1134,8 @@ def generar_cobros_previstos():
                     ))
                     
                     cobros_generados += 1
+                    residentes_procesados.append(f"{nombre} {apellido} (ID: {id_residente})")
+                    app.logger.info(f"Cobro previsto generado para {nombre} {apellido} (ID: {id_residente}): €{costo_habitacion}, mes: {mes_pagado}")
                     
                 except Exception as e:
                     errores.append(f"Error al crear cobro para {nombre} {apellido}: {str(e)}")
@@ -1131,8 +1150,11 @@ def generar_cobros_previstos():
                 'cobros_duplicados': cobros_duplicados,
                 'mes_referencia': mes_siguiente,
                 'total_residentes_procesados': len(residentes),
-                'total_residentes_candidatos': len(residentes)
+                'total_residentes_candidatos': len(residentes),
+                'residentes_procesados': residentes_procesados
             }
+            
+            app.logger.info(f"Resumen: {cobros_generados} cobros generados, {cobros_duplicados} duplicados, {len(residentes)} candidatos")
             
             if errores:
                 resultado['errores'] = errores
@@ -1263,80 +1285,120 @@ def ultimos_cobros_completados():
         cursor = conn.cursor()
         
         try:
+            # Verificar qué columnas existen en la tabla pago_residente
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'pago_residente'
+            """)
+            columnas_existentes = {row[0] for row in cursor.fetchall()}
+            
+            # Construir SELECT dinámicamente según columnas existentes
+            columnas_base = [
+                'p.id_pago', 'p.id_residente', 
+                "r.nombre || ' ' || r.apellido as residente",
+                'p.monto', 'p.fecha_pago', 'p.fecha_prevista', 'p.mes_pagado', 'p.concepto',
+                'p.metodo_pago', 'p.estado', 'p.es_cobro_previsto', 'p.fecha_creacion'
+            ]
+            
+            if 'observaciones' in columnas_existentes:
+                columnas_base.insert(-1, 'p.observaciones')
+            else:
+                columnas_base.insert(-1, 'NULL as observaciones')
+            
+            select_clause = ', '.join(columnas_base)
+            
             # Obtener último pago mensual de cada residente
             # Consideramos "mensual" los que tienen concepto que empieza con "Pago" seguido de un mes
-            cursor.execute("""
+            query_mensual = f"""
                 SELECT DISTINCT ON (p.id_residente)
-                    p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
-                    p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
-                    p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion
+                    {select_clause}
                 FROM pago_residente p
                 JOIN residente r ON p.id_residente = r.id_residente
                 WHERE p.id_residencia = %s
                   AND p.estado = 'cobrado'
                   AND p.fecha_pago IS NOT NULL
-                  AND (p.concepto ILIKE 'Pago %' OR p.concepto ILIKE 'Pago mensual%')
+                  AND (p.concepto ILIKE 'Pago %%' OR p.concepto ILIKE 'Pago mensual%%')
                 ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
-            """, (g.id_residencia,))
+            """
             
+            cursor.execute(query_mensual, (g.id_residencia,))
             ultimos_mensuales = cursor.fetchall()
             
             # Obtener último pago extra de cada residente
             # Consideramos "extra" los que NO son mensuales
-            cursor.execute("""
+            query_extra = f"""
                 SELECT DISTINCT ON (p.id_residente)
-                    p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
-                    p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
-                    p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion
+                    {select_clause}
                 FROM pago_residente p
                 JOIN residente r ON p.id_residente = r.id_residente
                 WHERE p.id_residencia = %s
                   AND p.estado = 'cobrado'
                   AND p.fecha_pago IS NOT NULL
-                  AND (p.concepto IS NULL OR (p.concepto NOT ILIKE 'Pago %' AND p.concepto NOT ILIKE 'Pago mensual%'))
+                  AND (p.concepto IS NULL OR (p.concepto NOT ILIKE 'Pago %%' AND p.concepto NOT ILIKE 'Pago mensual%%'))
                 ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
-            """, (g.id_residencia,))
+            """
             
+            cursor.execute(query_extra, (g.id_residencia,))
             ultimos_extras = cursor.fetchall()
             
             # Formatear resultados
             resultado = []
             
+            # Determinar índices basados en si observaciones existe
+            # Orden: id_pago(0), id_residente(1), residente(2), monto(3), fecha_pago(4), 
+            # fecha_prevista(5), mes_pagado(6), concepto(7), metodo_pago(8), estado(9), 
+            # es_cobro_previsto(10), observaciones(11 si existe), fecha_creacion(último)
+            tiene_observaciones = 'observaciones' in columnas_existentes
+            idx_fecha_creacion = 12 if tiene_observaciones else 11
+            
             for cobro in ultimos_mensuales:
-                resultado.append({
-                    'id_pago': cobro[0],
-                    'id_residente': cobro[1],
-                    'residente': cobro[2],
-                    'monto': float(cobro[3]),
-                    'fecha_pago': str(cobro[4]) if cobro[4] else None,
-                    'fecha_prevista': str(cobro[5]) if cobro[5] else None,
-                    'mes_pagado': cobro[6],
-                    'concepto': cobro[7],
-                    'metodo_pago': cobro[8],
-                    'estado': cobro[9],
-                    'es_cobro_previsto': cobro[10],
-                    'observaciones': cobro[11],
-                    'fecha_creacion': cobro[12].isoformat() if cobro[12] else None,
-                    'tipo': 'mensual'
-                })
+                try:
+                    if len(cobro) < 11:
+                        app.logger.warning(f"Cobro mensual con menos columnas de las esperadas: {len(cobro)}")
+                        continue
+                    
+                    resultado.append({
+                        'id_pago': cobro[0],
+                        'id_residente': cobro[1],
+                        'residente': cobro[2],
+                        'monto': float(cobro[3]) if cobro[3] is not None else 0.0,
+                        'fecha_pago': str(cobro[4]) if cobro[4] else None,
+                        'fecha_prevista': str(cobro[5]) if cobro[5] else None,
+                        'mes_pagado': cobro[6],
+                        'concepto': cobro[7],
+                        'metodo_pago': cobro[8],
+                        'estado': cobro[9],
+                        'es_cobro_previsto': cobro[10] if len(cobro) > 10 else False,
+                        'observaciones': cobro[11] if tiene_observaciones and len(cobro) > 11 else None,
+                        'fecha_creacion': cobro[idx_fecha_creacion].isoformat() if len(cobro) > idx_fecha_creacion and cobro[idx_fecha_creacion] else None,
+                        'tipo': 'mensual'
+                    })
+                except (IndexError, TypeError, AttributeError) as e:
+                    app.logger.error(f"Error al formatear cobro mensual: {str(e)}, tupla len: {len(cobro) if cobro else 0}")
+                    continue
             
             for cobro in ultimos_extras:
-                resultado.append({
-                    'id_pago': cobro[0],
-                    'id_residente': cobro[1],
-                    'residente': cobro[2],
-                    'monto': float(cobro[3]),
-                    'fecha_pago': str(cobro[4]) if cobro[4] else None,
-                    'fecha_prevista': str(cobro[5]) if cobro[5] else None,
-                    'mes_pagado': cobro[6],
-                    'concepto': cobro[7],
-                    'metodo_pago': cobro[8],
-                    'estado': cobro[9],
-                    'es_cobro_previsto': cobro[10],
-                    'observaciones': cobro[11],
-                    'fecha_creacion': cobro[12].isoformat() if cobro[12] else None,
-                    'tipo': 'extra'
-                })
+                try:
+                    resultado.append({
+                        'id_pago': cobro[0],
+                        'id_residente': cobro[1],
+                        'residente': cobro[2],
+                        'monto': float(cobro[3]) if cobro[3] is not None else 0.0,
+                        'fecha_pago': str(cobro[4]) if cobro[4] else None,
+                        'fecha_prevista': str(cobro[5]) if cobro[5] else None,
+                        'mes_pagado': cobro[6],
+                        'concepto': cobro[7],
+                        'metodo_pago': cobro[8],
+                        'estado': cobro[9],
+                        'es_cobro_previsto': cobro[10] if len(cobro) > 10 else False,
+                        'observaciones': cobro[11] if tiene_observaciones and len(cobro) > 11 else None,
+                        'fecha_creacion': cobro[idx_fecha_creacion].isoformat() if len(cobro) > idx_fecha_creacion and cobro[idx_fecha_creacion] else None,
+                        'tipo': 'extra'
+                    })
+                except (IndexError, TypeError, AttributeError) as e:
+                    app.logger.error(f"Error al formatear cobro extra: {str(e)}, tupla: {cobro}, len: {len(cobro) if cobro else 0}")
+                    continue
             
             return jsonify({'cobros': resultado, 'total': len(resultado)}), 200
             
@@ -1345,8 +1407,10 @@ def ultimos_cobros_completados():
             conn.close()
             
     except Exception as e:
+        import traceback
         app.logger.error(f"Error al obtener últimos cobros completados: {str(e)}")
-        return jsonify({'error': 'Error al obtener últimos cobros completados'}), 500
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': f'Error al obtener últimos cobros completados: {str(e)}'}), 500
 
 
 @app.route('/api/v1/facturacion/cobros/<int:id_pago>', methods=['GET'])
