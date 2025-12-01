@@ -22,15 +22,25 @@
 **Request:**
 ```json
 {
-  "email": "admin@violetas1.com",
-  "password": "admin123"
+  "email": "admin@residencias.com",
+  "password": "ContraseñaSegura123!"
 }
 ```
 
 **Response (200 OK):**
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "requiere_cambio_clave": false
+}
+```
+
+**Response si requiere cambio de contraseña:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "requiere_cambio_clave": true,
+  "mensaje": "Debes cambiar tu contraseña antes de continuar"
 }
 ```
 
@@ -49,15 +59,53 @@ Todas las peticiones protegidas requieren el header:
 Authorization: Bearer <token_jwt>
 ```
 
-**Payload del Token:**
+**⚠️ IMPORTANTE:** El token JWT **NO incluye** `id_residencia`. Solo contiene:
+
 ```json
 {
   "id_usuario": 1,
   "id_rol": 1,
-  "id_residencia": 1,
   "exp": 1732896000
 }
 ```
+
+**Motivo:** Los usuarios pueden tener acceso a múltiples residencias. Las residencias se cargan desde la tabla `usuario_residencia` en el middleware.
+
+### Cambiar Contraseña
+
+**Endpoint:** `POST /api/v1/usuario/cambio-clave`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Request:**
+```json
+{
+  "password_actual": "ContraseñaActual123!",
+  "password_nuevo": "NuevaContraseña456!"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "mensaje": "Contraseña actualizada exitosamente"
+}
+```
+
+**Validaciones:**
+- Contraseña actual debe ser correcta
+- Contraseña nueva debe cumplir política de seguridad:
+  - Mínimo 8 caracteres
+  - Al menos una mayúscula
+  - Al menos una minúscula
+  - Al menos un número
+  - Al menos un carácter especial
+- Contraseña nueva debe ser diferente a la actual
+
+---
 
 ---
 
@@ -414,6 +462,50 @@ Authorization: Bearer <token>
 
 ---
 
+## 👥 Endpoints de Usuarios
+
+### Crear Usuario (Solo Super Admin)
+
+**Endpoint:** `POST /api/v1/usuarios`
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Permisos requeridos:** Solo super_admin puede crear usuarios
+
+**Request:**
+```json
+{
+  "email": "admin1@violetas.com",
+  "password": "ContraseñaSegura123!",
+  "id_rol": 2,
+  "id_residencias": [1, 2],
+  "nombre": "Administrador",
+  "apellido": "Violetas"
+}
+```
+
+**Response (201 Created):**
+```json
+{
+  "id_usuario": 2,
+  "email": "admin1@violetas.com",
+  "id_rol": 2,
+  "mensaje": "Usuario creado exitosamente. Requiere cambio de contraseña en primer login."
+}
+```
+
+**Validaciones:**
+- Email único
+- Contraseña cumple política de seguridad
+- Rol existe y está activo
+- Al menos una residencia asignada
+- Residencias existen y están activas
+
+---
+
 ## 📄 Endpoints de Documentos
 
 ### Listar Documentos de Residente
@@ -660,11 +752,13 @@ python list_tables.py
 
 ## 📝 Notas Importantes
 
-1. **Filtrado automático**: Todas las consultas filtran por `id_residencia` del token
+1. **Filtrado automático**: Todas las consultas filtran por residencias asignadas (o acceso total si super_admin)
 2. **Validación**: Todos los endpoints validan entrada usando `validators.py`
 3. **Tokens**: Expiran después de 24 horas
 4. **Fechas**: Formato ISO 8601 (YYYY-MM-DD) o ISO 8601 con tiempo
 5. **Montos**: Decimales con 2 decimales (ej: 1200.00)
+6. **Multi-residencia**: Los usuarios pueden tener acceso a múltiples residencias
+7. **Super Admin**: Acceso total a todas las residencias (bypass de permisos)
 
 ---
 

@@ -9,7 +9,8 @@ import json
 from datetime import datetime, timedelta
 from functools import wraps
 from collections import defaultdict
-from flask import Flask, request, jsonify, g, send_from_directory
+from io import BytesIO
+from flask import Flask, request, jsonify, g, send_from_directory, Response
 from flask_cors import CORS
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -263,7 +264,7 @@ def before_request():
     # Rutas públicas que no requieren autenticación
     public_paths = ['/api/v1/login', '/health', '/']
     # Rutas que requieren autenticación pero permiten cambio de contraseña
-    rutas_cambio_clave = ['/api/v1/usuario/cambio-clave']
+    rutas_cambio_clave = ['/api/v1/usuario/cambio-clave', '/api/v1/usuarios/me']
     
     # Excluir archivos estáticos y favicon
     if request.path in public_paths or request.path.startswith('/static/') or request.path == '/favicon.ico':
@@ -4026,12 +4027,13 @@ def obtener_usuario_actual():
         cursor = conn.cursor()
         
         try:
+            # Consulta que maneja tanto usuarios con id_residencia como super_admin sin id_residencia
             cursor.execute("""
                 SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.id_residencia,
-                       r.nombre as nombre_rol, res.nombre as nombre_residencia, u.activo
+                       r.nombre as nombre_rol, res.nombre as nombre_residencia, u.activo, u.requiere_cambio_clave
                 FROM usuario u
                 JOIN rol r ON u.id_rol = r.id_rol
-                JOIN residencia res ON u.id_residencia = res.id_residencia
+                LEFT JOIN residencia res ON u.id_residencia = res.id_residencia
                 WHERE u.id_usuario = %s
             """, (g.id_usuario,))
             
@@ -4040,16 +4042,38 @@ def obtener_usuario_actual():
             if not usuario:
                 return jsonify({'error': 'Usuario no encontrado'}), 404
             
+            # Si es super_admin, obtener todas las residencias asignadas desde usuario_residencia
+            residencias = []
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                # Super admin: acceso total (sin residencias específicas asignadas)
+                residencias = []
+                cursor.execute("SELECT id_residencia, nombre FROM residencia WHERE activa = TRUE ORDER BY nombre")
+                todas_residencias = cursor.fetchall()
+                residencias = [{'id_residencia': r[0], 'nombre': r[1]} for r in todas_residencias]
+            else:
+                # Usuario normal: obtener residencias asignadas
+                cursor.execute("""
+                    SELECT ur.id_residencia, res.nombre
+                    FROM usuario_residencia ur
+                    JOIN residencia res ON ur.id_residencia = res.id_residencia
+                    WHERE ur.id_usuario = %s AND res.activa = TRUE
+                    ORDER BY res.nombre
+                """, (g.id_usuario,))
+                residencias_data = cursor.fetchall()
+                residencias = [{'id_residencia': r[0], 'nombre': r[1]} for r in residencias_data]
+            
             return jsonify({
                 'id_usuario': usuario[0],
                 'email': usuario[1],
                 'nombre': usuario[2],
                 'apellido': usuario[3],
                 'id_rol': usuario[4],
-                'id_residencia': usuario[5],
+                'id_residencia': usuario[5],  # Puede ser NULL para super_admin
                 'nombre_rol': usuario[6],
-                'nombre_residencia': usuario[7],
-                'activo': usuario[8]
+                'nombre_residencia': usuario[7] if usuario[7] else None,  # NULL para super_admin
+                'activo': usuario[8],
+                'requiere_cambio_clave': usuario[9] if len(usuario) > 9 else False,
+                'residencias': residencias  # Lista de residencias asignadas
             }), 200
             
         finally:
@@ -4058,6 +4082,8 @@ def obtener_usuario_actual():
             
     except Exception as e:
         app.logger.error(f"Error al obtener usuario actual: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
         return jsonify({'error': 'Error al obtener información del usuario'}), 500
 
 

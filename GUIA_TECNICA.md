@@ -28,10 +28,11 @@
 ```
 1. Usuario → Frontend → POST /api/v1/login
 2. Backend verifica credenciales en BD
-3. Backend genera token JWT
+3. Backend genera token JWT (solo id_usuario e id_rol)
 4. Frontend guarda token en localStorage
 5. Todas las peticiones incluyen: Authorization: Bearer <token>
-6. Backend valida token y filtra por id_residencia
+6. Backend valida token y carga residencias desde usuario_residencia
+7. Backend filtra por residencias asignadas (o bypass si super_admin)
 ```
 
 ### Middleware de Autenticación
@@ -40,7 +41,9 @@ El sistema usa `@app.before_request` para validar tokens JWT:
 
 - **Rutas públicas**: `/`, `/api/v1/login`, `/health`
 - **Rutas protegidas**: Todas las demás requieren token válido
-- **Filtrado automático**: Todas las consultas incluyen `WHERE id_residencia = g.id_residencia`
+- **Carga de residencias**: Desde tabla `usuario_residencia` (multi-residencia)
+- **Filtrado automático**: Todas las consultas incluyen `WHERE id_residencia IN (lista_de_ids)`
+- **Super Admin**: Acceso total (sin filtro)
 
 ---
 
@@ -155,8 +158,11 @@ psql -h DB_HOST -U DB_USER -d DB_NAME -f create_schema.sql
 
 **Tablas principales:**
 - `residencia` - Residencias (Violetas 1 y Violetas 2)
-- `rol` - Roles de usuario (Administrador, Director, Personal)
-- `usuario` - Usuarios del sistema
+- `rol` - Roles de usuario (super_admin, Administrador, Director, Personal)
+- `usuario` - Usuarios del sistema (ya NO incluye `id_residencia`)
+- `usuario_residencia` - Relación muchos a muchos (usuarios ↔ residencias)
+- `permiso` - Permisos granulares del sistema
+- `rol_permiso` - Relación entre roles y permisos
 - `residente` - Residentes
 - `pago_residente` - Pagos de residentes
 - `proveedor` - Proveedores
@@ -164,18 +170,21 @@ psql -h DB_HOST -U DB_USER -d DB_NAME -f create_schema.sql
 - `personal` - Personal de la residencia
 - `documento_residente` - Documentos adjuntos
 
-### Crear Usuario Inicial
+### Crear Super Administrador
 
-```python
-from db_utils import create_user
+El sistema requiere un super administrador inicial:
 
-create_user(
-    email="admin@violetas1.com",
-    password="admin123",
-    id_rol=1,  # Administrador
-    id_residencia=1  # Violetas 1
-)
+```powershell
+python init_database.py
 ```
+
+Este script:
+- Crea el usuario super_admin con `id_rol = 1`
+- Usa variables de entorno para email/contraseña
+- Requiere cambio de contraseña en primer login
+- Configura acceso total a todas las residencias
+
+Ver `GUIA_INSTALACION_Y_CONFIGURACION.md` para más detalles.
 
 ---
 
@@ -233,10 +242,11 @@ create_user(
    - Probar petición manualmente
 
 **Posibles causas:**
-- No hay residentes en la BD para tu `id_residencia`
+- No hay residentes en la BD para tus residencias asignadas
 - Token inválido o expirado
 - Error de conexión a la base de datos
-- El usuario tiene `id_residencia` diferente a los residentes
+- El usuario no tiene residencias asignadas en `usuario_residencia`
+- El usuario requiere cambio de contraseña
 
 ### El proxy no inicia
 
@@ -342,17 +352,34 @@ backup_YYYYMMDD_HHMMSS.sql
 
 ## 🔐 Seguridad
 
-### Filtrado por Residencia
+### Filtrado por Residencias
 
-**IMPERATIVO**: Todas las consultas filtran por `id_residencia`:
+**IMPERATIVO**: Todas las consultas filtran por residencias asignadas:
 
 ```python
-# Ejemplo en endpoint
-cursor.execute("""
-    SELECT * FROM residente 
-    WHERE id_residencia = %s
-""", (g.id_residencia,))
+# Ejemplo en endpoint (para usuarios normales)
+where_clause, params = build_residencia_filter('r.', 'id_residencia')
+if where_clause:
+    query = f"SELECT * FROM residente r {where_clause}"
+    cursor.execute(query, params)
+else:
+    # Super admin: sin filtro
+    cursor.execute("SELECT * FROM residente")
 ```
+
+### Sistema de Permisos
+
+El sistema usa decoradores `@permiso_requerido` para validar permisos:
+
+```python
+@app.route('/api/v1/residentes', methods=['GET'])
+@permiso_requerido('leer:residente')
+def listar_residentes():
+    # ...
+```
+
+- **Super Admin**: Bypass automático (no verifica permisos)
+- **Usuarios normales**: Verifica permiso en tabla `rol_permiso`
 
 ### Validación de Entrada
 
@@ -366,7 +393,8 @@ Todos los endpoints validan entrada usando `validators.py`:
 
 - Expiración: 24 horas
 - Algoritmo: HS256
-- Payload: `id_usuario`, `id_rol`, `id_residencia`, `exp`
+- Payload: `id_usuario`, `id_rol`, `exp` (⚠️ NO incluye `id_residencia`)
+- Residencias: Se cargan desde `usuario_residencia` en el middleware
 
 ---
 
