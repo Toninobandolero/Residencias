@@ -7,14 +7,60 @@ from datetime import datetime
 
 
 def validate_email(email):
-    """Valida formato de email."""
+    """
+    Valida formato de email, aceptando caracteres Unicode y dominios IDN (punycode).
+    
+    Acepta:
+    - Caracteres Unicode en la parte local (ñ, acentos, etc.)
+    - Dominios ASCII estándar
+    - Dominios IDN en formato punycode (xn--...)
+    - Ejemplo válido: contacto@xn--logroo-0wa.com (logroño.com)
+    """
     if not email:
         return False, "El email es requerido"
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if not re.match(pattern, email):
-        return False, "Formato de email inválido"
+    
+    try:
+        # Separar parte local y dominio
+        if '@' not in email:
+            return False, "Formato de email inválido"
+        
+        local, domain = email.rsplit('@', 1)
+        
+        # Validar parte local (puede contener caracteres Unicode)
+        if not local or len(local) > 64:
+            return False, "La parte local del email es inválida (máximo 64 caracteres)"
+        
+        # Validar que la parte local no tenga espacios ni caracteres prohibidos
+        # Permitir: letras (incluyendo Unicode), números, puntos, guiones, guiones bajos, +
+        # Usar regex Unicode para aceptar caracteres especiales del español
+        if re.search(r'[\s<>\[\](){}]', local):
+            return False, "La parte local del email contiene caracteres inválidos"
+        
+        # Validar dominio (puede ser ASCII estándar o punycode para IDN)
+        if not domain or len(domain) > 253:
+            return False, "El dominio del email es inválido (máximo 253 caracteres)"
+        
+        # Verificar que el dominio tenga al menos un punto
+        if '.' not in domain:
+            return False, "Formato de email inválido: el dominio debe tener al menos un punto"
+        
+        # Verificar TLD (última parte después del último punto)
+        tld = domain.split('.')[-1]
+        if len(tld) < 2:
+            return False, "El dominio del email debe tener un TLD válido (mínimo 2 caracteres)"
+        
+        # Aceptar dominios en formato punycode (xn--...) o ASCII estándar
+        # El dominio puede contener letras, números, guiones y puntos
+        domain_pattern = r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$|^xn--[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$'
+        if not re.match(domain_pattern, domain):
+            return False, "Formato de dominio inválido"
+        
+    except Exception as e:
+        return False, f"Formato de email inválido: {str(e)}"
+    
     if len(email) > 255:
         return False, "El email es demasiado largo (máximo 255 caracteres)"
+    
     return True, None
 
 
@@ -313,11 +359,9 @@ def validate_personal_data(data, is_update=False):
         # Validar formato de email si se proporciona (opcional)
         email = data.get('email')
         if email and email.strip():
-            pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-            if not re.match(pattern, email):
-                errors.append("Formato de email inválido")
-            if len(email) > 255:
-                errors.append("El email es demasiado largo (máximo 255 caracteres)")
+            valid, error = validate_email(email)
+            if not valid:
+                errors.append(error)
     
     if 'cargo' in data and data.get('cargo'):
         valid, error = validate_text(data.get('cargo'), 'Cargo', min_length=1, max_length=100, required=False)

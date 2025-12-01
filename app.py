@@ -37,6 +37,8 @@ if not JWT_SECRET_KEY:
     raise ValueError("JWT_SECRET_KEY debe estar definida como variable de entorno")
 
 app.config['JSON_SORT_KEYS'] = False
+app.config['JSON_AS_ASCII'] = False  # Permitir caracteres Unicode en JSON (ñ, acentos, etc.)
+app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
 # Constantes de seguridad
 SUPER_ADMIN_ROLE_ID = 1  # ID fijo del rol super_admin
@@ -264,7 +266,10 @@ def before_request():
     # Rutas públicas que no requieren autenticación
     public_paths = ['/api/v1/login', '/health', '/']
     # Rutas que requieren autenticación pero permiten cambio de contraseña
+    # Incluye rutas para permitir que el usuario actualice su propia información (incluyendo contraseña)
     rutas_cambio_clave = ['/api/v1/usuario/cambio-clave', '/api/v1/usuarios/me']
+    # Rutas que permiten actualización del propio usuario (incluyendo cambio de contraseña inicial)
+    rutas_actualizacion_propia = ['/api/v1/usuarios']
     
     # Excluir archivos estáticos y favicon
     if request.path in public_paths or request.path.startswith('/static/') or request.path == '/favicon.ico':
@@ -323,7 +328,13 @@ def before_request():
                 }), 403
         
         # Validar cambio de contraseña obligatorio (excepto para rutas permitidas)
-        if request.path not in rutas_cambio_clave:
+        # Permitir también actualización del propio usuario (para cambiar contraseña inicial)
+        # Solo permitir si es PUT a su propia cuenta (para cambiar contraseña en primer login)
+        es_actualizacion_propia = (request.path.startswith('/api/v1/usuarios/') and 
+                                   request.method == 'PUT' and 
+                                   request.path.split('/')[-1].isdigit() and
+                                   int(request.path.split('/')[-1]) == g.id_usuario)
+        if request.path not in rutas_cambio_clave and not es_actualizacion_propia:
             cursor.execute(
                 "SELECT requiere_cambio_clave FROM usuario WHERE id_usuario = %s",
                 (g.id_usuario,)
@@ -1125,6 +1136,63 @@ def crear_residente():
             
             resultado = cursor.fetchone()
             id_residente = resultado[0]
+            
+            # Generar automáticamente cobro del mes siguiente si tiene costo_habitacion
+            costo_habitacion = data.get('costo_habitacion')
+            if costo_habitacion and costo_habitacion > 0:
+                try:
+                    # Calcular mes siguiente
+                    hoy = datetime.now()
+                    if hoy.month == 12:
+                        siguiente_mes = datetime(hoy.year + 1, 1, 1)
+                    else:
+                        siguiente_mes = datetime(hoy.year, hoy.month + 1, 1)
+                    
+                    mes_siguiente_str = siguiente_mes.strftime('%Y-%m')
+                    fecha_prevista = siguiente_mes.date()  # Día 1 del mes siguiente
+                    
+                    meses_espanol = {
+                        1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+                        5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+                        9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+                    }
+                    nombre_mes = meses_espanol.get(siguiente_mes.month, 'mes')
+                    concepto = f"Pago {nombre_mes} {siguiente_mes.year}"
+                    metodo_pago = data.get('metodo_pago_preferido') or 'transferencia'
+                    
+                    # Verificar si ya existe un cobro para el mes siguiente
+                    cursor.execute("""
+                        SELECT id_pago FROM pago_residente
+                        WHERE id_residente = %s 
+                          AND id_residencia = %s
+                          AND mes_pagado = %s
+                    """, (id_residente, id_residencia, mes_siguiente_str))
+                    
+                    if not cursor.fetchone():
+                        # Crear el cobro previsto para el mes siguiente
+                        cursor.execute("""
+                            INSERT INTO pago_residente (
+                                id_residente, id_residencia, monto, fecha_pago, fecha_prevista,
+                                mes_pagado, concepto, metodo_pago, estado, es_cobro_previsto
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (
+                            id_residente,
+                            id_residencia,
+                            costo_habitacion,
+                            None,  # fecha_pago es NULL para cobros previstos
+                            fecha_prevista,
+                            mes_siguiente_str,
+                            concepto,
+                            metodo_pago,
+                            'pendiente',
+                            True
+                        ))
+                        app.logger.info(f"Cobro previsto generado automáticamente para nuevo residente {nombre} {apellido} (ID: {id_residente}): €{costo_habitacion}, mes: {mes_siguiente_str}")
+                except Exception as e:
+                    app.logger.error(f"Error al generar cobro previsto automático para nuevo residente {id_residente}: {str(e)}")
+                    # No fallar la creación del residente si falla la generación del cobro
+            
             conn.commit()
             
             return jsonify({
@@ -1503,6 +1571,77 @@ def actualizar_residente(id_residente):
             """
             
             cursor.execute(query, valores)
+            
+            # Si se actualizó costo_habitacion o el residente no tiene cobro previsto, generar cobro del mes siguiente
+            costo_habitacion = data.get('costo_habitacion')
+            id_residencia_final = data.get('id_residencia', id_residencia_actual)
+            
+            # Obtener el costo_habitacion actualizado o el existente
+            cursor.execute("""
+                SELECT costo_habitacion, metodo_pago_preferido FROM residente
+                WHERE id_residente = %s
+            """, (id_residente,))
+            residente_actualizado = cursor.fetchone()
+            costo_actual = float(residente_actualizado[0]) if residente_actualizado and residente_actualizado[0] else None
+            metodo_pago_actual = residente_actualizado[1] if residente_actualizado else None
+            
+            # Generar cobro del mes siguiente si:
+            # 1. Tiene costo_habitacion > 0
+            # 2. No tiene ya un cobro previsto para el mes siguiente
+            if costo_actual and costo_actual > 0:
+                try:
+                    # Calcular mes siguiente
+                    hoy = datetime.now()
+                    if hoy.month == 12:
+                        siguiente_mes = datetime(hoy.year + 1, 1, 1)
+                    else:
+                        siguiente_mes = datetime(hoy.year, hoy.month + 1, 1)
+                    
+                    mes_siguiente_str = siguiente_mes.strftime('%Y-%m')
+                    fecha_prevista = siguiente_mes.date()  # Día 1 del mes siguiente
+                    
+                    # Verificar si ya existe un cobro para el mes siguiente
+                    cursor.execute("""
+                        SELECT id_pago FROM pago_residente
+                        WHERE id_residente = %s 
+                          AND id_residencia = %s
+                          AND mes_pagado = %s
+                    """, (id_residente, id_residencia_final, mes_siguiente_str))
+                    
+                    if not cursor.fetchone():
+                        # Crear el cobro previsto para el mes siguiente
+                        meses_espanol = {
+                            1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+                            5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+                            9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+                        }
+                        nombre_mes = meses_espanol.get(siguiente_mes.month, 'mes')
+                        concepto = f"Pago {nombre_mes} {siguiente_mes.year}"
+                        metodo_pago = metodo_pago_actual or 'transferencia'
+                        
+                        cursor.execute("""
+                            INSERT INTO pago_residente (
+                                id_residente, id_residencia, monto, fecha_pago, fecha_prevista,
+                                mes_pagado, concepto, metodo_pago, estado, es_cobro_previsto
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (
+                            id_residente,
+                            id_residencia_final,
+                            costo_actual,
+                            None,  # fecha_pago es NULL para cobros previstos
+                            fecha_prevista,
+                            mes_siguiente_str,
+                            concepto,
+                            metodo_pago,
+                            'pendiente',
+                            True
+                        ))
+                        app.logger.info(f"Cobro previsto generado automáticamente para residente actualizado (ID: {id_residente}): €{costo_actual}, mes: {mes_siguiente_str}")
+                except Exception as e:
+                    app.logger.error(f"Error al generar cobro previsto automático para residente actualizado {id_residente}: {str(e)}")
+                    # No fallar la actualización del residente si falla la generación del cobro
+            
             conn.commit()
             
             return jsonify({'mensaje': 'Residente actualizado exitosamente'}), 200
@@ -1526,48 +1665,149 @@ def actualizar_residente(id_residente):
 
 @app.route('/api/v1/facturacion/cobros', methods=['GET'])
 def listar_cobros():
-    """Lista los pagos de residentes de la residencia del usuario."""
+    """
+    Lista los cobros del período cercano (Facturación):
+    - Todos los cobros pendientes
+    - El último cobro completado de cada residente
+    - Cobros completados del mes actual y mes anterior
+    - Todo lo demás va a Históricos
+    """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
-            # Si es Admin (rol 1), ve todo. Si no, solo su residencia.
-            if g.id_rol == 1:
-                cursor.execute("""
-                    SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
-                           p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
-                           p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
-                           res.id_residencia, res.nombre as nombre_residencia
-                    FROM pago_residente p
-                    JOIN residente r ON p.id_residente = r.id_residente
-                    JOIN residencia res ON p.id_residencia = res.id_residencia
-                    ORDER BY res.id_residencia, 
+            # Calcular fechas de referencia
+            hoy = datetime.now()
+            mes_actual_inicio = datetime(hoy.year, hoy.month, 1).date()
+            mes_anterior_inicio = (mes_actual_inicio - timedelta(days=1)).replace(day=1)
+            
+            # Construir filtro de residencias
+            where_clause, params = build_residencia_filter('p.', 'id_residencia')
+            
+            # NUEVA LÓGICA: Filtrar solo período cercano
+            # 1. Todos los cobros pendientes
+            # 2. Último cobro completado de cada residente
+            # 3. Cobros completados del mes actual y mes anterior
+            
+            if where_clause:
+                # Usuario normal: filtrar por residencias asignadas
+                # where_clause ya incluye "WHERE", así que lo usamos directamente
+                query = f"""
+                    WITH cobros_periodo_cercano AS (
+                        -- Todos los cobros pendientes
+                        SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                               p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                               p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
+                               res.id_residencia, res.nombre as nombre_residencia,
+                               1 as orden_prioridad
+                        FROM pago_residente p
+                        JOIN residente r ON p.id_residente = r.id_residente
+                        JOIN residencia res ON p.id_residencia = res.id_residencia
+                        {where_clause}
+                          AND p.estado = 'pendiente'
+                        
+                        UNION ALL
+                        
+                        -- Último cobro completado de cada residente
+                        SELECT DISTINCT ON (p.id_residente)
+                               p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                               p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                               p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
+                               res.id_residencia, res.nombre as nombre_residencia,
+                               2 as orden_prioridad
+                        FROM pago_residente p
+                        JOIN residente r ON p.id_residente = r.id_residente
+                        JOIN residencia res ON p.id_residencia = res.id_residencia
+                        {where_clause}
+                          AND p.estado = 'cobrado'
+                          AND p.fecha_pago IS NOT NULL
+                        ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
+                        
+                        UNION ALL
+                        
+                        -- Cobros completados del mes actual y mes anterior
+                        SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                               p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                               p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
+                               res.id_residencia, res.nombre as nombre_residencia,
+                               3 as orden_prioridad
+                        FROM pago_residente p
+                        JOIN residente r ON p.id_residente = r.id_residente
+                        JOIN residencia res ON p.id_residencia = res.id_residencia
+                        {where_clause}
+                          AND p.estado = 'cobrado'
+                          AND p.fecha_pago IS NOT NULL
+                          AND p.fecha_pago >= %s
+                    )
+                    SELECT * FROM cobros_periodo_cercano
+                    ORDER BY id_residencia, orden_prioridad,
                              CASE 
-                                 WHEN p.fecha_prevista IS NOT NULL THEN p.fecha_prevista
-                                 WHEN p.fecha_pago IS NOT NULL THEN p.fecha_pago
+                                 WHEN fecha_prevista IS NOT NULL THEN fecha_prevista
+                                 WHEN fecha_pago IS NOT NULL THEN fecha_pago
                                  ELSE '9999-12-31'::date
                              END ASC,
-                             p.fecha_creacion DESC
-                """)
+                             fecha_creacion DESC
+                """
+                # Agregar fecha del mes anterior a los params (duplicar params para cada UNION)
+                params_extended = list(params) * 2 + [mes_anterior_inicio]
+                cursor.execute(query, params_extended)
             else:
-                cursor.execute("""
-                    SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
-                           p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
-                           p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
-                           res.id_residencia, res.nombre as nombre_residencia
-                    FROM pago_residente p
-                    JOIN residente r ON p.id_residente = r.id_residente
-                    JOIN residencia res ON p.id_residencia = res.id_residencia
-                WHERE p.id_residencia = %s
-                    ORDER BY 
+                # Super admin: sin filtro (acceso total)
+                query = """
+                    WITH cobros_periodo_cercano AS (
+                        -- Todos los cobros pendientes
+                        SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                               p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                               p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
+                               res.id_residencia, res.nombre as nombre_residencia,
+                               1 as orden_prioridad
+                        FROM pago_residente p
+                        JOIN residente r ON p.id_residente = r.id_residente
+                        JOIN residencia res ON p.id_residencia = res.id_residencia
+                        WHERE p.estado = 'pendiente'
+                        
+                        UNION ALL
+                        
+                        -- Último cobro completado de cada residente
+                        SELECT DISTINCT ON (p.id_residente)
+                               p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                               p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                               p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
+                               res.id_residencia, res.nombre as nombre_residencia,
+                               2 as orden_prioridad
+                        FROM pago_residente p
+                        JOIN residente r ON p.id_residente = r.id_residente
+                        JOIN residencia res ON p.id_residencia = res.id_residencia
+                        WHERE p.estado = 'cobrado'
+                          AND p.fecha_pago IS NOT NULL
+                        ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
+                        
+                        UNION ALL
+                        
+                        -- Cobros completados del mes actual y mes anterior
+                        SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                               p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                               p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
+                               res.id_residencia, res.nombre as nombre_residencia,
+                               3 as orden_prioridad
+                        FROM pago_residente p
+                        JOIN residente r ON p.id_residente = r.id_residente
+                        JOIN residencia res ON p.id_residencia = res.id_residencia
+                        WHERE p.estado = 'cobrado'
+                          AND p.fecha_pago IS NOT NULL
+                          AND p.fecha_pago >= %s
+                    )
+                    SELECT * FROM cobros_periodo_cercano
+                    ORDER BY id_residencia, orden_prioridad,
                              CASE 
-                                 WHEN p.fecha_prevista IS NOT NULL THEN p.fecha_prevista
-                                 WHEN p.fecha_pago IS NOT NULL THEN p.fecha_pago
+                                 WHEN fecha_prevista IS NOT NULL THEN fecha_prevista
+                                 WHEN fecha_pago IS NOT NULL THEN fecha_pago
                                  ELSE '9999-12-31'::date
                              END ASC,
-                             p.fecha_creacion DESC
-            """, (g.id_residencia,))
+                             fecha_creacion DESC
+                """
+                cursor.execute(query, [mes_anterior_inicio])
             
             cobros = cursor.fetchall()
             
@@ -1722,16 +1962,16 @@ def crear_cobro():
 @app.route('/api/v1/facturacion/cobros/generar-previstos', methods=['POST'])
 def generar_cobros_previstos():
     """
-    Genera automáticamente cobros previstos para todos los residentes activos
+    Genera automáticamente cobros previstos para el MES SIGUIENTE para todos los residentes activos
     que tengan costo_habitacion definido.
     
-    Lógica: Si un residente NO tiene un cobro completado en el mes siguiente,
-    se genera un cobro previsto para ese mes.
+    NUEVA LÓGICA:
+    - Solo genera el cobro del mes siguiente (no histórico)
+    - Se cobra por adelantado el mes
+    - Fecha prevista: día 1 del mes siguiente
+    - Si el residente ya tiene un cobro (completado o previsto) para el mes siguiente, no se genera
     
-    La fecha prevista es siempre el día 1 del mes que se va a cobrar (mes siguiente),
-    independientemente del método de pago. Esto evita problemas con fechas del mes anterior.
-    
-    Por defecto genera para el mes siguiente al actual.
+    Para generar cobros históricos (desde fecha_ingreso), usar el endpoint generar-historicos.
     """
     try:
         data = request.get_json() or {}
@@ -1762,20 +2002,25 @@ def generar_cobros_previstos():
             mes_siguiente = siguiente_mes.strftime('%Y-%m')
             
             # Limpiar TODOS los cobros previstos pendientes antes de regenerar
-            # Si es Admin, limpia de TODAS las residencias. Si no, solo de la suya.
-            if g.id_rol == 1:
+            # Si es super_admin, limpia de TODAS las residencias. Si no, solo de las asignadas.
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
                 cursor.execute("""
                     DELETE FROM pago_residente
                     WHERE es_cobro_previsto = TRUE
                       AND estado = 'pendiente'
                 """)
             else:
-                cursor.execute("""
+                # Usuario normal: limpiar solo de sus residencias asignadas
+                if not g.residencias_acceso:
+                    return jsonify({'error': 'Usuario sin residencias asignadas'}), 403
+                
+                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                cursor.execute(f"""
                     DELETE FROM pago_residente
-                    WHERE id_residencia = %s
+                    WHERE id_residencia IN ({placeholders})
                       AND es_cobro_previsto = TRUE
                       AND estado = 'pendiente'
-                """, (g.id_residencia,))
+                """, tuple(g.residencias_acceso))
             
             cobros_eliminados = cursor.rowcount
             
@@ -1789,9 +2034,12 @@ def generar_cobros_previstos():
             else:
                 siguiente_mes = datetime(año_actual, mes_actual + 1, 1)
             
+            mes_siguiente_str = siguiente_mes.strftime('%Y-%m')
+            fecha_prevista = siguiente_mes.date()  # Día 1 del mes siguiente
+            
             # Obtener residentes activos con costo_habitacion
-            # Si es Admin, obtiene de TODAS las residencias. Si no, solo de la suya.
-            if g.id_rol == 1:
+            # Si es super_admin, obtiene de TODAS las residencias. Si no, solo de las asignadas.
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
                 cursor.execute("""
                     SELECT id_residente, nombre, apellido, costo_habitacion, metodo_pago_preferido, fecha_ingreso, id_residencia
                     FROM residente
@@ -1800,48 +2048,58 @@ def generar_cobros_previstos():
                       AND costo_habitacion > 0
                       AND fecha_ingreso IS NOT NULL
                 """)
-            else:
-                cursor.execute("""
-                    SELECT id_residente, nombre, apellido, costo_habitacion, metodo_pago_preferido, fecha_ingreso, id_residencia
-                FROM residente
-                WHERE id_residencia = %s 
-                  AND activo = TRUE 
-                  AND costo_habitacion IS NOT NULL 
-                  AND costo_habitacion > 0
-                      AND fecha_ingreso IS NOT NULL
-            """, (g.id_residencia,))
-            
-            residentes = cursor.fetchall()
-            
-            # Verificar cuántos residentes hay en total (para diagnóstico)
-            if g.id_rol == 1:
                 cursor.execute("SELECT COUNT(*) FROM residente WHERE activo = TRUE")
                 total_residentes_activos = cursor.fetchone()[0]
-                app.logger.info(f"Generando cobros previstos GLOBAL (Admin)")
+                app.logger.info(f"Generando cobros previstos GLOBAL (Super Admin) para mes siguiente: {mes_siguiente_str}")
             else:
-                cursor.execute("SELECT COUNT(*) FROM residente WHERE id_residencia = %s AND activo = TRUE", (g.id_residencia,))
+                # Usuario normal: filtrar por residencias asignadas
+                if not g.residencias_acceso:
+                    return jsonify({'error': 'Usuario sin residencias asignadas'}), 403
+                
+                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                cursor.execute(f"""
+                    SELECT id_residente, nombre, apellido, costo_habitacion, metodo_pago_preferido, fecha_ingreso, id_residencia
+                    FROM residente
+                    WHERE id_residencia IN ({placeholders})
+                      AND activo = TRUE 
+                      AND costo_habitacion IS NOT NULL 
+                      AND costo_habitacion > 0
+                      AND fecha_ingreso IS NOT NULL
+                """, tuple(g.residencias_acceso))
+                
+                cursor.execute(f"SELECT COUNT(*) FROM residente WHERE id_residencia IN ({placeholders}) AND activo = TRUE", tuple(g.residencias_acceso))
                 total_residentes_activos = cursor.fetchone()[0]
-                app.logger.info(f"Generando cobros previstos para residencia {g.id_residencia}")
+                app.logger.info(f"Generando cobros previstos para residencias: {g.residencias_acceso}, mes siguiente: {mes_siguiente_str}")
+            
+            residentes = cursor.fetchall()
 
             app.logger.info(f"Total residentes activos en alcance: {total_residentes_activos}")
             app.logger.info(f"Residentes candidatos encontrados (con costo y fecha_ingreso): {len(residentes)}")
-            app.logger.info(f"Mes siguiente: {mes_siguiente}")
+            app.logger.info(f"Mes siguiente a generar: {mes_siguiente_str}")
             
             if not residentes:
                 return jsonify({
                     'mensaje': 'No hay residentes activos con costo_habitacion definido que deban tener cobros previstos',
                     'cobros_generados': 0,
                     'cobros_eliminados': cobros_eliminados,
-                    'mes_referencia': mes_siguiente,
+                    'mes_referencia': mes_siguiente_str,
                     'total_residentes_activos': total_residentes_activos,
                     'residentes_candidatos': 0
                 }), 200
             
             cobros_generados = 0
             cobros_duplicados = 0
+            cobros_ya_existentes = 0
             errores = []
             residentes_procesados = []
             
+            meses_espanol = {
+                1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+                5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+                9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+            }
+            
+            # NUEVA LÓGICA: Solo generar cobro para el mes siguiente
             for residente in residentes:
                 id_residente = residente[0]
                 nombre = residente[1]
@@ -1851,50 +2109,35 @@ def generar_cobros_previstos():
                 fecha_ingreso = residente[5]  # fecha_ingreso del residente
                 residencia_del_residente = residente[6] # ID de la residencia del residente actual
                 
-                # Lógica simple: Si el residente ingresó en o antes de hoy, debe tener cobro previsto
-                # (a menos que ya tenga un cobro completado, lo cual se verifica más abajo)
-                # No necesitamos validar fecha_ingreso aquí porque:
-                # - Si ingresó hoy o antes, debe tener cobro previsto
-                # - Si ingresó en el futuro (imposible por validación), no debería estar activo
-                # La única excepción es si ya tiene un cobro completado para ese mes
+                if not fecha_ingreso:
+                    app.logger.warning(f"Residente {nombre} {apellido} (ID: {id_residente}) no tiene fecha_ingreso, saltando")
+                    continue
                 
-                # Calcular fecha prevista - todos los métodos usan el día 1 del mes que se va a cobrar
-                # Esto evita problemas con fechas del mes anterior
-                
-                # Todos los métodos de pago usan el día 1 del mes que se va a cobrar (mes siguiente)
-                # Esto evita problemas con fechas del mes anterior
-                fecha_prevista = datetime(siguiente_mes.year, siguiente_mes.month, 1)
-                mes_pagado = siguiente_mes.strftime('%Y-%m')
-                
-                # Verificar si el residente ya tiene un cobro COMPLETADO en este mes
-                # Si tiene cobro completado, NO generar cobro previsto
+                # Verificar si ya existe un cobro (completado o previsto) para el mes siguiente
                 cursor.execute("""
-                    SELECT id_pago FROM pago_residente
+                    SELECT id_pago, estado FROM pago_residente
                     WHERE id_residente = %s 
                       AND id_residencia = %s
                       AND mes_pagado = %s
-                      AND estado = 'cobrado'
-                """, (id_residente, residencia_del_residente, mes_pagado))
+                """, (id_residente, residencia_del_residente, mes_siguiente_str))
                 
-                if cursor.fetchone():
-                    # Ya tiene cobro completado en este mes, no generar previsto
-                    cobros_duplicados += 1
-                    app.logger.info(f"Residente {nombre} {apellido} (ID: {id_residente}) ya tiene cobro completado para {mes_pagado}")
+                cobro_existente = cursor.fetchone()
+                
+                if cobro_existente:
+                    # Ya existe un cobro para el mes siguiente
+                    if cobro_existente[1] == 'cobrado':
+                        cobros_ya_existentes += 1
+                        app.logger.debug(f"Residente {nombre} {apellido} (ID: {id_residente}) ya tiene cobro completado para {mes_siguiente_str}")
+                    else:
+                        cobros_duplicados += 1
+                        app.logger.debug(f"Residente {nombre} {apellido} (ID: {id_residente}) ya tiene cobro previsto para {mes_siguiente_str}")
                     continue
                 
-                # NO verificar duplicados de previstos - permitir acumulación
-                # Los cobros previstos se acumulan si no se completan
-                
                 # Generar concepto con el nombre del mes
-                meses_espanol = {
-                    1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
-                    5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
-                    9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
-                }
                 nombre_mes = meses_espanol.get(siguiente_mes.month, 'mes')
-                concepto = f"Pago {nombre_mes}"
+                concepto = f"Pago {nombre_mes} {siguiente_mes.year}"
                 
-                # Crear el cobro previsto
+                # Crear el cobro previsto para el mes siguiente
                 try:
                     cursor.execute("""
                         INSERT INTO pago_residente (
@@ -1908,8 +2151,8 @@ def generar_cobros_previstos():
                         residencia_del_residente,
                         costo_habitacion,
                         None,  # fecha_pago es NULL para cobros previstos
-                        fecha_prevista.date(),
-                        mes_pagado,
+                        fecha_prevista,  # Día 1 del mes siguiente
+                        mes_siguiente_str,
                         concepto,
                         metodo_pago,
                         'pendiente',
@@ -1917,27 +2160,28 @@ def generar_cobros_previstos():
                     ))
                     
                     cobros_generados += 1
+                    app.logger.info(f"Cobro previsto generado para {nombre} {apellido} (ID: {id_residente}): €{costo_habitacion}, mes: {mes_siguiente_str}")
                     residentes_procesados.append(f"{nombre} {apellido} (ID: {id_residente})")
-                    app.logger.info(f"Cobro previsto generado para {nombre} {apellido} (ID: {id_residente}): €{costo_habitacion}, mes: {mes_pagado}")
                     
                 except Exception as e:
-                    errores.append(f"Error al crear cobro para {nombre} {apellido}: {str(e)}")
-                    app.logger.error(f"Error al crear cobro previsto para residente {id_residente}: {str(e)}")
+                    errores.append(f"Error al crear cobro para {nombre} {apellido} mes {mes_siguiente_str}: {str(e)}")
+                    app.logger.error(f"Error al crear cobro previsto para residente {id_residente} mes {mes_siguiente_str}: {str(e)}")
             
             conn.commit()
             
             resultado = {
-                'mensaje': f'Cobros previstos generados exitosamente',
+                'mensaje': f'Cobros previstos generados exitosamente para el mes siguiente ({mes_siguiente_str})',
                 'cobros_generados': cobros_generados,
                 'cobros_eliminados': cobros_eliminados,
                 'cobros_duplicados': cobros_duplicados,
-                'mes_referencia': mes_siguiente,
+                'cobros_ya_existentes': cobros_ya_existentes,
+                'mes_actual': mes_actual.strftime('%Y-%m'),
                 'total_residentes_procesados': len(residentes),
                 'total_residentes_candidatos': len(residentes),
                 'residentes_procesados': residentes_procesados
             }
             
-            app.logger.info(f"Resumen: {cobros_generados} cobros generados, {cobros_duplicados} duplicados, {len(residentes)} candidatos")
+            app.logger.info(f"Resumen: {cobros_generados} cobros generados, {cobros_duplicados} duplicados (previstos), {cobros_ya_existentes} ya existentes (cobrados), {len(residentes)} residentes procesados")
             
             if errores:
                 resultado['errores'] = errores
@@ -2049,8 +2293,14 @@ def estadisticas_cobros():
                     })
 
             else:
+                # Usuario normal: filtrar por residencias asignadas
+                if not g.residencias_acceso:
+                    return jsonify({'historico': [], 'estimaciones': []}), 200
+                
+                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                
                 # Obtener cobros históricos (cobrados) agrupados por mes
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT 
                         CASE 
                             WHEN metodo_pago ILIKE 'remesa' 
@@ -2062,7 +2312,7 @@ def estadisticas_cobros():
                         SUM(monto) as total_cobrado,
                         COUNT(*) as cantidad
                     FROM pago_residente
-                    WHERE id_residencia = %s 
+                    WHERE id_residencia IN ({placeholders})
                       AND estado = 'cobrado'
                       AND fecha_pago IS NOT NULL
                     GROUP BY 
@@ -2075,12 +2325,12 @@ def estadisticas_cobros():
                         END
                     ORDER BY mes DESC
                     LIMIT 12
-                """, (g.id_residencia,))
+                """, tuple(g.residencias_acceso))
                 
                 historico = cursor.fetchall()
                 
                 # Obtener estimaciones futuras
-                cursor.execute("""
+                cursor.execute(f"""
                     SELECT 
                         CASE 
                             WHEN metodo_pago ILIKE 'remesa' AND mes_pagado IS NOT NULL
@@ -2090,7 +2340,7 @@ def estadisticas_cobros():
                         SUM(monto) as total_previsto,
                         COUNT(*) as cantidad
                     FROM pago_residente
-                    WHERE id_residencia = %s 
+                    WHERE id_residencia IN ({placeholders})
                       AND es_cobro_previsto = TRUE
                       AND estado = 'pendiente'
                       AND fecha_prevista IS NOT NULL
@@ -2102,7 +2352,7 @@ def estadisticas_cobros():
                         END
                     ORDER BY mes ASC
                     LIMIT 6
-                """, (g.id_residencia,))
+                """, tuple(g.residencias_acceso))
                 
                 estimaciones = cursor.fetchall()
                 
@@ -2111,8 +2361,7 @@ def estadisticas_cobros():
                     historico_data.append({
                         'mes': row[0],
                         'total': float(row[1]),
-                        'cantidad': row[2],
-                        'id_residencia': g.id_residencia
+                        'cantidad': row[2]
                     })
                 
                 estimaciones_data = []
@@ -2120,8 +2369,7 @@ def estadisticas_cobros():
                     estimaciones_data.append({
                         'mes': row[0],
                         'total': float(row[1]),
-                        'cantidad': row[2],
-                        'id_residencia': g.id_residencia
+                        'cantidad': row[2]
                     })
             
             return jsonify({
@@ -2534,9 +2782,30 @@ def listar_pagos_proveedores():
         cursor = conn.cursor()
         
         try:
-            # Ya está actualizado con filtros IN en el código anterior, pero verificar
-            # Este código debería estar usando el filtro IN ya implementado
+            # Construir query con filtros por residencias de acceso
+            query = """
+                SELECT p.id_pago, p.proveedor, p.concepto, p.monto, p.fecha_pago, 
+                       p.fecha_prevista, p.metodo_pago, p.estado, p.numero_factura,
+                       p.observaciones, p.fecha_creacion, res.id_residencia, res.nombre as nombre_residencia
+                FROM pago_proveedor p
+                JOIN residencia res ON p.id_residencia = res.id_residencia
+                WHERE 1=1
+            """
+            params = []
             
+            # Filtrar por residencias de acceso (excepto super_admin)
+            if g.id_rol != SUPER_ADMIN_ROLE_ID:
+                if g.residencias_acceso:
+                    placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                    query += f" AND p.id_residencia IN ({placeholders})"
+                    params.extend(g.residencias_acceso)
+                else:
+                    # Usuario sin residencias
+                    return jsonify({'pagos': [], 'total': 0}), 200
+            
+            query += " ORDER BY COALESCE(p.fecha_pago, p.fecha_prevista, p.fecha_creacion::date) DESC, p.fecha_creacion DESC"
+            
+            cursor.execute(query, params)
             pagos = cursor.fetchall()
             
             resultado = []
@@ -2545,14 +2814,16 @@ def listar_pagos_proveedores():
                     'id_pago': pago[0],
                     'proveedor': pago[1],
                     'concepto': pago[2],
-                    'monto': float(pago[3]),
+                    'monto': float(pago[3]) if pago[3] else 0,
                     'fecha_pago': str(pago[4]) if pago[4] else None,
                     'fecha_prevista': str(pago[5]) if pago[5] else None,
                     'metodo_pago': pago[6],
                     'estado': pago[7],
                     'numero_factura': pago[8],
                     'observaciones': pago[9],
-                    'fecha_creacion': pago[10].isoformat() if pago[10] else None
+                    'fecha_creacion': pago[10].isoformat() if pago[10] else None,
+                    'id_residencia': pago[11],
+                    'nombre_residencia': pago[12]
                 })
             
             return jsonify({'pagos': resultado, 'total': len(resultado)}), 200
@@ -2563,7 +2834,9 @@ def listar_pagos_proveedores():
             
     except Exception as e:
         app.logger.error(f"Error al listar pagos a proveedores: {str(e)}")
-        return jsonify({'error': 'Error al obtener pagos'}), 500
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': f'Error al obtener pagos: {str(e)}'}), 500
 
 
 @app.route('/api/v1/facturacion/proveedores', methods=['POST'])
@@ -2849,20 +3122,35 @@ def actualizar_pago_proveedor(id_pago):
 # ============================================================================
 
 @app.route('/api/v1/proveedores', methods=['GET'])
+@permiso_requerido('leer:proveedor')
 def listar_proveedores():
-    """Lista los proveedores de la residencia del usuario."""
+    """Lista los proveedores de las residencias del usuario."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
-            cursor.execute("""
-                SELECT id_proveedor, nombre, nif_cif, direccion, telefono, email,
-                       contacto, tipo_servicio, activo, observaciones, fecha_creacion
-                FROM proveedor
-                WHERE id_residencia = %s
-                ORDER BY nombre
-            """, (g.id_residencia,))
+            # Construir filtro de residencias
+            where_clause, params = build_residencia_filter('', 'id_residencia')
+            
+            if where_clause:
+                # Usuario normal: filtrar por residencias asignadas
+                query = f"""
+                    SELECT id_proveedor, id_residencia, nombre, nif_cif, direccion, telefono, email,
+                           contacto, tipo_servicio, activo, observaciones, fecha_creacion
+                    FROM proveedor
+                    {where_clause}
+                    ORDER BY nombre
+                """
+                cursor.execute(query, params)
+            else:
+                # Super admin: sin filtro (acceso total)
+                cursor.execute("""
+                    SELECT id_proveedor, id_residencia, nombre, nif_cif, direccion, telefono, email,
+                           contacto, tipo_servicio, activo, observaciones, fecha_creacion
+                    FROM proveedor
+                    ORDER BY nombre
+                """)
             
             proveedores = cursor.fetchall()
             
@@ -2870,16 +3158,17 @@ def listar_proveedores():
             for prov in proveedores:
                 resultado.append({
                     'id_proveedor': prov[0],
-                    'nombre': prov[1],
-                    'nif_cif': prov[2],
-                    'direccion': prov[3],
-                    'telefono': prov[4],
-                    'email': prov[5],
-                    'contacto': prov[6],
-                    'tipo_servicio': prov[7],
-                    'activo': prov[8],
-                    'observaciones': prov[9],
-                    'fecha_creacion': prov[10].isoformat() if prov[10] else None
+                    'id_residencia': prov[1],
+                    'nombre': prov[2],
+                    'nif_cif': prov[3],
+                    'direccion': prov[4],
+                    'telefono': prov[5],
+                    'email': prov[6],
+                    'contacto': prov[7],
+                    'tipo_servicio': prov[8],
+                    'activo': prov[9],
+                    'observaciones': prov[10],
+                    'fecha_creacion': prov[11].isoformat() if prov[11] else None
                 })
             
             return jsonify({'proveedores': resultado, 'total': len(resultado)}), 200
@@ -2890,10 +3179,13 @@ def listar_proveedores():
             
     except Exception as e:
         app.logger.error(f"Error al listar proveedores: {str(e)}")
-        return jsonify({'error': 'Error al obtener proveedores'}), 500
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': 'Error al obtener proveedores', 'details': str(e)}), 500
 
 
 @app.route('/api/v1/proveedores', methods=['POST'])
+@permiso_requerido('escribir:proveedor')
 def crear_proveedor():
     """Crea un nuevo proveedor."""
     try:
@@ -2919,6 +3211,32 @@ def crear_proveedor():
             if not valid:
                 return jsonify({'error': error}), 400
         
+        # Obtener id_residencia del request o usar la primera residencia asignada
+        id_residencia = data.get('id_residencia')
+        
+        # Convertir a int si es string
+        if id_residencia:
+            try:
+                id_residencia = int(id_residencia)
+            except (ValueError, TypeError):
+                return jsonify({'error': 'id_residencia debe ser un número válido'}), 400
+        
+        # Si no se proporciona id_residencia, usar la primera residencia asignada (si solo hay una)
+        if not id_residencia:
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                return jsonify({'error': 'id_residencia es requerido para super_admin'}), 400
+            elif not g.residencias_acceso or len(g.residencias_acceso) == 0:
+                return jsonify({'error': 'Usuario sin residencias asignadas'}), 403
+            elif len(g.residencias_acceso) == 1:
+                id_residencia = g.residencias_acceso[0]
+            else:
+                return jsonify({'error': 'id_residencia es requerido cuando el usuario tiene acceso a múltiples residencias'}), 400
+        
+        # Validar que el usuario tiene acceso a la residencia especificada
+        if g.id_rol != SUPER_ADMIN_ROLE_ID:
+            if id_residencia not in g.residencias_acceso:
+                return jsonify({'error': 'No tienes permisos para crear proveedores en esta residencia'}), 403
+        
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -2929,7 +3247,7 @@ def crear_proveedor():
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_proveedor
             """, (
-                g.id_residencia,
+                id_residencia,
                 nombre,
                 data.get('nif_cif'),
                 data.get('direccion'),
@@ -3988,12 +4306,21 @@ def listar_residencias():
         cursor = conn.cursor()
         
         try:
-            cursor.execute("""
-                SELECT id_residencia, nombre, direccion, telefono, activa
-                FROM residencia
-                WHERE activa = TRUE
-                ORDER BY id_residencia
-            """)
+            # Si es superadmin, mostrar todas las residencias (activas e inactivas)
+            # Si no es superadmin, solo mostrar activas
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                cursor.execute("""
+                    SELECT id_residencia, nombre, direccion, telefono, activa, fecha_creacion
+                    FROM residencia
+                    ORDER BY id_residencia
+                """)
+            else:
+                cursor.execute("""
+                    SELECT id_residencia, nombre, direccion, telefono, activa, fecha_creacion
+                    FROM residencia
+                    WHERE activa = TRUE
+                    ORDER BY id_residencia
+                """)
             
             residencias = cursor.fetchall()
             
@@ -4004,10 +4331,12 @@ def listar_residencias():
                         'nombre': r[1],
                         'direccion': r[2],
                         'telefono': r[3],
-                        'activa': r[4]
+                        'activa': r[4],
+                        'fecha_creacion': r[5].isoformat() if r[5] else None
                     }
                     for r in residencias
-                ]
+                ],
+                'total': len(residencias)
             }), 200
             
         finally:
@@ -4017,6 +4346,273 @@ def listar_residencias():
     except Exception as e:
         app.logger.error(f"Error al listar residencias: {str(e)}")
         return jsonify({'error': 'Error al obtener residencias'}), 500
+
+
+@app.route('/api/v1/residencias', methods=['POST'])
+@permiso_requerido('escribir:residencia')
+def crear_residencia():
+    """Crea una nueva residencia. Solo superadmin."""
+    # Verificar que es superadmin
+    if g.id_rol != SUPER_ADMIN_ROLE_ID:
+        return jsonify({'error': 'Solo el super administrador puede crear residencias'}), 403
+    
+    try:
+        data = request.get_json()
+        
+        # Validar datos requeridos
+        if not data or 'nombre' not in data:
+            return jsonify({'error': 'El nombre es requerido'}), 400
+        
+        nombre = data.get('nombre', '').strip()
+        direccion = data.get('direccion', '').strip() if data.get('direccion') else None
+        telefono = data.get('telefono', '').strip() if data.get('telefono') else None
+        activa = data.get('activa', True)
+        
+        # Validar nombre
+        if not nombre or len(nombre) < 2:
+            return jsonify({'error': 'El nombre debe tener al menos 2 caracteres'}), 400
+        
+        if len(nombre) > 255:
+            return jsonify({'error': 'El nombre es demasiado largo (máximo 255 caracteres)'}), 400
+        
+        # Validar teléfono si se proporciona
+        if telefono and len(telefono) > 50:
+            return jsonify({'error': 'El teléfono es demasiado largo (máximo 50 caracteres)'}), 400
+        
+        # Validar dirección si se proporciona
+        if direccion and len(direccion) > 500:
+            return jsonify({'error': 'La dirección es demasiado larga (máximo 500 caracteres)'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que no exista una residencia con el mismo nombre
+            cursor.execute("""
+                SELECT id_residencia FROM residencia WHERE LOWER(nombre) = LOWER(%s)
+            """, (nombre,))
+            
+            if cursor.fetchone():
+                return jsonify({'error': 'Ya existe una residencia con ese nombre'}), 400
+            
+            # Crear la residencia
+            cursor.execute("""
+                INSERT INTO residencia (nombre, direccion, telefono, activa)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id_residencia, nombre, direccion, telefono, activa, fecha_creacion
+            """, (nombre, direccion, telefono, activa))
+            
+            residencia = cursor.fetchone()
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Residencia creada exitosamente',
+                'residencia': {
+                    'id_residencia': residencia[0],
+                    'nombre': residencia[1],
+                    'direccion': residencia[2],
+                    'telefono': residencia[3],
+                    'activa': residencia[4],
+                    'fecha_creacion': residencia[5].isoformat() if residencia[5] else None
+                }
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al crear residencia: {str(e)}")
+            return jsonify({'error': 'Error al crear la residencia'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al crear residencia: {str(e)}")
+        return jsonify({'error': 'Error al procesar la solicitud'}), 500
+
+
+@app.route('/api/v1/residencias/<int:id_residencia>', methods=['PUT'])
+@permiso_requerido('escribir:residencia')
+def actualizar_residencia(id_residencia):
+    """Actualiza una residencia existente. Solo superadmin."""
+    # Verificar que es superadmin
+    if g.id_rol != SUPER_ADMIN_ROLE_ID:
+        return jsonify({'error': 'Solo el super administrador puede actualizar residencias'}), 403
+    
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'No se proporcionaron datos'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que la residencia existe
+            cursor.execute("""
+                SELECT id_residencia, nombre FROM residencia WHERE id_residencia = %s
+            """, (id_residencia,))
+            
+            residencia_existente = cursor.fetchone()
+            if not residencia_existente:
+                return jsonify({'error': 'Residencia no encontrada'}), 404
+            
+            # Preparar campos a actualizar
+            updates = []
+            params = []
+            
+            if 'nombre' in data:
+                nombre = data.get('nombre', '').strip()
+                if not nombre or len(nombre) < 2:
+                    return jsonify({'error': 'El nombre debe tener al menos 2 caracteres'}), 400
+                if len(nombre) > 255:
+                    return jsonify({'error': 'El nombre es demasiado largo (máximo 255 caracteres)'}), 400
+                
+                # Verificar que no exista otra residencia con el mismo nombre
+                cursor.execute("""
+                    SELECT id_residencia FROM residencia 
+                    WHERE LOWER(nombre) = LOWER(%s) AND id_residencia != %s
+                """, (nombre, id_residencia))
+                
+                if cursor.fetchone():
+                    return jsonify({'error': 'Ya existe otra residencia con ese nombre'}), 400
+                
+                updates.append("nombre = %s")
+                params.append(nombre)
+            
+            if 'direccion' in data:
+                direccion = data.get('direccion', '').strip() if data.get('direccion') else None
+                if direccion and len(direccion) > 500:
+                    return jsonify({'error': 'La dirección es demasiado larga (máximo 500 caracteres)'}), 400
+                updates.append("direccion = %s")
+                params.append(direccion)
+            
+            if 'telefono' in data:
+                telefono = data.get('telefono', '').strip() if data.get('telefono') else None
+                if telefono and len(telefono) > 50:
+                    return jsonify({'error': 'El teléfono es demasiado largo (máximo 50 caracteres)'}), 400
+                updates.append("telefono = %s")
+                params.append(telefono)
+            
+            if 'activa' in data:
+                activa = bool(data.get('activa'))
+                updates.append("activa = %s")
+                params.append(activa)
+            
+            if not updates:
+                return jsonify({'error': 'No se proporcionaron campos para actualizar'}), 400
+            
+            # Ejecutar actualización
+            params.append(id_residencia)
+            query = f"""
+                UPDATE residencia 
+                SET {', '.join(updates)}
+                WHERE id_residencia = %s
+                RETURNING id_residencia, nombre, direccion, telefono, activa, fecha_creacion
+            """
+            
+            cursor.execute(query, params)
+            residencia = cursor.fetchone()
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Residencia actualizada exitosamente',
+                'residencia': {
+                    'id_residencia': residencia[0],
+                    'nombre': residencia[1],
+                    'direccion': residencia[2],
+                    'telefono': residencia[3],
+                    'activa': residencia[4],
+                    'fecha_creacion': residencia[5].isoformat() if residencia[5] else None
+                }
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al actualizar residencia: {str(e)}")
+            return jsonify({'error': 'Error al actualizar la residencia'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al actualizar residencia: {str(e)}")
+        return jsonify({'error': 'Error al procesar la solicitud'}), 500
+
+
+@app.route('/api/v1/residencias/<int:id_residencia>', methods=['DELETE'])
+@permiso_requerido('escribir:residencia')
+def eliminar_residencia(id_residencia):
+    """Elimina (desactiva) una residencia. Solo superadmin."""
+    # Verificar que es superadmin
+    if g.id_rol != SUPER_ADMIN_ROLE_ID:
+        return jsonify({'error': 'Solo el super administrador puede eliminar residencias'}), 403
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que la residencia existe
+            cursor.execute("""
+                SELECT id_residencia, nombre FROM residencia WHERE id_residencia = %s
+            """, (id_residencia,))
+            
+            residencia = cursor.fetchone()
+            if not residencia:
+                return jsonify({'error': 'Residencia no encontrada'}), 404
+            
+            # Verificar si hay residentes activos en esta residencia
+            cursor.execute("""
+                SELECT COUNT(*) FROM residente 
+                WHERE id_residencia = %s AND activo = TRUE
+            """, (id_residencia,))
+            
+            residentes_activos = cursor.fetchone()[0]
+            
+            # Verificar si hay usuarios asignados a esta residencia
+            cursor.execute("""
+                SELECT COUNT(*) FROM usuario_residencia 
+                WHERE id_residencia = %s
+            """, (id_residencia,))
+            
+            usuarios_asignados = cursor.fetchone()[0]
+            
+            # En lugar de eliminar físicamente, desactivamos la residencia
+            cursor.execute("""
+                UPDATE residencia 
+                SET activa = FALSE
+                WHERE id_residencia = %s
+                RETURNING id_residencia, nombre, activa
+            """, (id_residencia,))
+            
+            residencia_actualizada = cursor.fetchone()
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Residencia desactivada exitosamente',
+                'residencia': {
+                    'id_residencia': residencia_actualizada[0],
+                    'nombre': residencia_actualizada[1],
+                    'activa': residencia_actualizada[2]
+                },
+                'advertencias': {
+                    'residentes_activos': residentes_activos,
+                    'usuarios_asignados': usuarios_asignados
+                }
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al eliminar residencia: {str(e)}")
+            return jsonify({'error': 'Error al eliminar la residencia'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al eliminar residencia: {str(e)}")
+        return jsonify({'error': 'Error al procesar la solicitud'}), 500
 
 
 @app.route('/api/v1/usuarios/me', methods=['GET'])
@@ -4138,9 +4734,9 @@ def listar_usuarios():
 
 @app.route('/api/v1/usuarios/<int:id_usuario>', methods=['PUT'])
 def actualizar_usuario(id_usuario):
-    """Actualiza un usuario. Los usuarios pueden actualizar su propia información, los admins pueden actualizar cualquiera."""
-    # Verificar permisos: solo el propio usuario o un admin puede actualizar
-    if g.id_rol != 1 and g.id_usuario != id_usuario:
+    """Actualiza un usuario. Los usuarios pueden actualizar su propia información, los super_admin pueden actualizar cualquiera."""
+    # Verificar permisos: solo el propio usuario o un super_admin puede actualizar
+    if g.id_rol != SUPER_ADMIN_ROLE_ID and g.id_usuario != id_usuario:
         return jsonify({'error': 'No tienes permisos para actualizar este usuario'}), 403
     
     try:
@@ -4160,9 +4756,9 @@ def actualizar_usuario(id_usuario):
             if not usuario_existente:
                 return jsonify({'error': 'Usuario no encontrado'}), 404
             
-            # Si no es admin, solo puede actualizar ciertos campos
-            if g.id_rol != 1:
-                # Usuario normal solo puede actualizar nombre, apellido y contraseña
+            # Si no es super_admin, solo puede actualizar ciertos campos (y solo su propia cuenta)
+            if g.id_rol != SUPER_ADMIN_ROLE_ID:
+                # Usuario normal solo puede actualizar nombre, apellido y contraseña (solo su propia cuenta)
                 updates = []
                 params = []
                 
@@ -4176,10 +4772,13 @@ def actualizar_usuario(id_usuario):
                 
                 if 'password' in data:
                     password = data.get('password')
-                    if len(password) < 6:
-                        return jsonify({'error': 'La contraseña debe tener al menos 6 caracteres'}), 400
+                    # Validar fuerza de contraseña
+                    is_valid, error_msg = validate_password_strength(password)
+                    if not is_valid:
+                        return jsonify({'error': error_msg}), 400
                     password_hash = generate_password_hash(password)
                     updates.append("password_hash = %s")
+                    updates.append("requiere_cambio_clave = FALSE")  # Marcar que ya cambió la contraseña
                     params.append(password_hash)
                 
                 if not updates:
@@ -4191,6 +4790,9 @@ def actualizar_usuario(id_usuario):
                     SET {', '.join(updates)}
                     WHERE id_usuario = %s
                 """, params)
+                conn.commit()
+                
+                return jsonify({'mensaje': 'Información actualizada exitosamente'}), 200
                 
             else:
                 # Admin puede actualizar todos los campos excepto la contraseña (se maneja por separado)
@@ -4239,10 +4841,13 @@ def actualizar_usuario(id_usuario):
                 
                 if 'password' in data:
                     password = data.get('password')
-                    if len(password) < 6:
-                        return jsonify({'error': 'La contraseña debe tener al menos 6 caracteres'}), 400
+                    # Validar fuerza de contraseña
+                    is_valid, error_msg = validate_password_strength(password)
+                    if not is_valid:
+                        return jsonify({'error': error_msg}), 400
                     password_hash = generate_password_hash(password)
                     updates.append("password_hash = %s")
+                    updates.append("requiere_cambio_clave = FALSE")  # Marcar que ya cambió la contraseña
                     params.append(password_hash)
                 
                 if not updates:
@@ -4310,8 +4915,22 @@ def listar_documentacion():
         cursor = conn.cursor()
         
         try:
-            # Construir query base
-            query = """
+            # Construir filtro de residencias
+            residencias_filtro = ""
+            params = []
+            
+            if g.id_rol != SUPER_ADMIN_ROLE_ID:
+                if g.residencias_acceso:
+                    placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                    residencias_filtro = f" AND id_residencia IN ({placeholders})"
+                    params.extend(g.residencias_acceso)
+                else:
+                    # Usuario sin residencias
+                    return jsonify({'documentos': [], 'total': 0}), 200
+            
+            # Construir query unificada: documentos unificados + documentos legacy de residentes
+            # Primero: documentos de la tabla unificada 'documento'
+            query_unificados = f"""
                 SELECT d.id_documento, d.tipo_entidad, d.id_entidad, d.id_residencia,
                        d.categoria_documento, d.tipo_documento, d.nombre_archivo, d.descripcion,
                        d.fecha_subida, d.url_archivo, d.tamaño_bytes, d.tipo_mime,
@@ -4320,37 +4939,89 @@ def listar_documentacion():
                 FROM documento d
                 JOIN residencia res ON d.id_residencia = res.id_residencia
                 WHERE d.activo = TRUE
+                {residencias_filtro}
             """
             
-            params = []
+            params_unificados = params.copy()
             
-            # Filtrar por residencias de acceso (excepto super_admin)
-            if g.id_rol != SUPER_ADMIN_ROLE_ID:
-                if g.residencias_acceso:
-                    placeholders = ','.join(['%s'] * len(g.residencias_acceso))
-                    query += f" AND d.id_residencia IN ({placeholders})"
-                    params.extend(g.residencias_acceso)
-                else:
-                    # Usuario sin residencias
-                    return jsonify({'documentos': [], 'total': 0}), 200
-            
-            # Filtros opcionales
+            # Filtros opcionales para documentos unificados
             if tipo_entidad:
-                query += " AND d.tipo_entidad = %s"
-                params.append(tipo_entidad)
+                query_unificados += " AND d.tipo_entidad = %s"
+                params_unificados.append(tipo_entidad)
             
             if categoria:
-                query += " AND d.categoria_documento = %s"
-                params.append(categoria)
+                query_unificados += " AND d.categoria_documento = %s"
+                params_unificados.append(categoria)
             
             if id_entidad:
-                query += " AND d.id_entidad = %s"
-                params.append(id_entidad)
+                query_unificados += " AND d.id_entidad = %s"
+                params_unificados.append(id_entidad)
             
-            query += " ORDER BY d.fecha_subida DESC"
+            # Segundo: documentos legacy de residentes (tabla documento_residente)
+            # Construir filtro de residencias para documento_residente
+            residencias_filtro_legacy = ""
+            if residencias_filtro:
+                # Construir el filtro con el alias correcto
+                if g.id_rol != SUPER_ADMIN_ROLE_ID and g.residencias_acceso:
+                    placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                    residencias_filtro_legacy = f" AND dr.id_residencia IN ({placeholders})"
             
-            cursor.execute(query, params)
-            documentos = cursor.fetchall()
+            query_legacy = f"""
+                SELECT dr.id_documento, 'residente' as tipo_entidad, dr.id_residente as id_entidad, 
+                       dr.id_residencia,
+                       COALESCE(dr.categoria_documento, 'otra') as categoria_documento, 
+                       dr.tipo_documento, dr.nombre_archivo, dr.descripcion,
+                       dr.fecha_subida, dr.url_archivo, dr.tamaño_bytes, dr.tipo_mime,
+                       NULL as id_usuario_subida, TRUE as activo,
+                       res.nombre as nombre_residencia
+                FROM documento_residente dr
+                JOIN residencia res ON dr.id_residencia = res.id_residencia
+                WHERE 1=1
+                {residencias_filtro_legacy}
+            """
+            
+            params_legacy = params.copy()
+            
+            # Filtros opcionales para documentos legacy
+            if tipo_entidad:
+                if tipo_entidad == 'residente':
+                    # Solo incluir documentos legacy si el filtro es 'residente'
+                    pass  # Ya está incluido
+                else:
+                    # Si el filtro es otro tipo, no incluir documentos legacy
+                    query_legacy = None
+            else:
+                # Si no hay filtro de tipo, incluir documentos legacy
+                pass
+            
+            if categoria and query_legacy:
+                # Para documentos legacy, mapear categorías si es necesario
+                # Si el documento_residente no tiene categoria_documento, se asume 'otra'
+                if categoria == 'otra':
+                    # Incluir documentos sin categoría o con categoría 'otra'
+                    query_legacy += " AND (dr.categoria_documento IS NULL OR dr.categoria_documento = 'otra')"
+                else:
+                    query_legacy += " AND dr.categoria_documento = %s"
+                    params_legacy.append(categoria)
+            
+            if id_entidad and query_legacy:
+                query_legacy += " AND dr.id_residente = %s"
+                params_legacy.append(id_entidad)
+            
+            # Ejecutar consultas y combinar resultados
+            documentos = []
+            
+            # Consultar documentos unificados
+            cursor.execute(query_unificados, params_unificados)
+            documentos.extend(cursor.fetchall())
+            
+            # Consultar documentos legacy (solo si no hay filtro de tipo o si es 'residente')
+            if query_legacy and (not tipo_entidad or tipo_entidad == 'residente'):
+                cursor.execute(query_legacy, params_legacy)
+                documentos.extend(cursor.fetchall())
+            
+            # Ordenar por fecha_subida descendente
+            documentos.sort(key=lambda x: x[8] if x[8] else datetime.min, reverse=True)
             
             # Obtener nombres de las entidades
             resultado = []
@@ -4543,14 +5214,27 @@ def eliminar_documento_unificado(id_documento):
         cursor = conn.cursor()
         
         try:
-            # Obtener información del documento
+            # Buscar primero en la tabla unificada 'documento'
             cursor.execute("""
-                SELECT id_documento, url_archivo, id_residencia, tipo_entidad, id_entidad
+                SELECT id_documento, url_archivo, id_residencia, tipo_entidad, id_entidad, 'documento' as tabla_origen
                 FROM documento 
                 WHERE id_documento = %s AND activo = TRUE
             """, (id_documento,))
             
             doc = cursor.fetchone()
+            tabla_origen = 'documento'
+            
+            # Si no se encuentra, buscar en documento_residente (legacy)
+            if not doc:
+                cursor.execute("""
+                    SELECT id_documento, url_archivo, id_residencia, 'residente' as tipo_entidad, id_residente as id_entidad, 'documento_residente' as tabla_origen
+                    FROM documento_residente 
+                    WHERE id_documento = %s
+                """, (id_documento,))
+                
+                doc = cursor.fetchone()
+                tabla_origen = 'documento_residente'
+            
             if not doc:
                 return jsonify({'error': 'Documento no encontrado'}), 404
             
@@ -4565,13 +5249,22 @@ def eliminar_documento_unificado(id_documento):
             if doc[1]:  # Si hay url_archivo
                 delete_document(doc[1])
             
-            # Marcar como inactivo (soft delete)
-            cursor.execute("""
-                UPDATE documento
-                SET activo = FALSE
-                WHERE id_documento = %s
-                RETURNING id_documento
-            """, (id_documento,))
+            # Eliminar según la tabla de origen
+            if tabla_origen == 'documento':
+                # Marcar como inactivo (soft delete)
+                cursor.execute("""
+                    UPDATE documento
+                    SET activo = FALSE
+                    WHERE id_documento = %s
+                    RETURNING id_documento
+                """, (id_documento,))
+            else:
+                # Eliminar físicamente de documento_residente
+                cursor.execute("""
+                    DELETE FROM documento_residente
+                    WHERE id_documento = %s
+                    RETURNING id_documento
+                """, (id_documento,))
             
             conn.commit()
             
@@ -4600,12 +5293,23 @@ def descargar_documento_unificado(id_documento):
         cursor = conn.cursor()
         
         try:
+            # Buscar primero en la tabla unificada 'documento'
             cursor.execute("""
                 SELECT url_archivo, id_residencia FROM documento
                 WHERE id_documento = %s AND activo = TRUE
             """, (id_documento,))
             
             doc = cursor.fetchone()
+            
+            # Si no se encuentra, buscar en documento_residente (legacy)
+            if not doc:
+                cursor.execute("""
+                    SELECT url_archivo, id_residencia FROM documento_residente
+                    WHERE id_documento = %s
+                """, (id_documento,))
+                
+                doc = cursor.fetchone()
+            
             if not doc:
                 return jsonify({'error': 'Documento no encontrado'}), 404
             
@@ -4655,6 +5359,483 @@ def listar_tipos_entidad():
         {'valor': 'personal', 'nombre': 'Personal'}
     ]
     return jsonify({'tipos': tipos}), 200
+
+
+# ============================================================================
+# ENDPOINTS DE HISTÓRICOS - COBROS Y PAGOS
+# ============================================================================
+
+@app.route('/api/v1/historicos', methods=['GET'])
+def listar_historicos():
+    """
+    Lista todos los cobros y pagos históricos con filtros opcionales.
+    
+    Query params:
+    - tipo: 'cobros', 'pagos', 'todos' (default: 'todos')
+    - fecha_desde: Fecha inicio (YYYY-MM-DD)
+    - fecha_hasta: Fecha fin (YYYY-MM-DD)
+    - id_residencia: ID de residencia (opcional)
+    - estado: 'pendiente', 'cobrado', 'pagado' (opcional)
+    - exportar: 'pdf', 'excel' (opcional, si se especifica genera el archivo)
+    """
+    try:
+        tipo = request.args.get('tipo', 'todos')  # 'cobros', 'pagos', 'todos'
+        fecha_desde = request.args.get('fecha_desde')
+        fecha_hasta = request.args.get('fecha_hasta')
+        id_residencia_filtro = request.args.get('id_residencia', type=int)
+        estado_filtro = request.args.get('estado')
+        exportar = request.args.get('exportar')  # 'pdf' o 'excel'
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cobros = []
+            pagos = []
+            
+            # Obtener cobros (pago_residente)
+            if tipo in ['cobros', 'todos']:
+                query_cobros = """
+                    SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                           p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                           p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, 
+                           p.fecha_creacion, res.id_residencia, res.nombre as nombre_residencia
+                    FROM pago_residente p
+                    JOIN residente r ON p.id_residente = r.id_residente
+                    JOIN residencia res ON p.id_residencia = res.id_residencia
+                    WHERE 1=1
+                """
+                params_cobros = []
+                
+                # Filtrar por residencias de acceso
+                if g.id_rol != SUPER_ADMIN_ROLE_ID:
+                    if g.residencias_acceso:
+                        placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                        query_cobros += f" AND p.id_residencia IN ({placeholders})"
+                        params_cobros.extend(g.residencias_acceso)
+                    else:
+                        query_cobros += " AND FALSE"  # Sin acceso
+                
+                if id_residencia_filtro:
+                    query_cobros += " AND p.id_residencia = %s"
+                    params_cobros.append(id_residencia_filtro)
+                
+                if fecha_desde:
+                    query_cobros += " AND (p.fecha_pago >= %s OR p.fecha_prevista >= %s OR (p.fecha_pago IS NULL AND p.fecha_prevista IS NULL AND p.fecha_creacion::date >= %s))"
+                    params_cobros.extend([fecha_desde, fecha_desde, fecha_desde])
+                
+                if fecha_hasta:
+                    query_cobros += " AND (p.fecha_pago <= %s OR p.fecha_prevista <= %s OR (p.fecha_pago IS NULL AND p.fecha_prevista IS NULL AND p.fecha_creacion::date <= %s))"
+                    params_cobros.extend([fecha_hasta, fecha_hasta, fecha_hasta])
+                
+                if estado_filtro:
+                    query_cobros += " AND p.estado = %s"
+                    params_cobros.append(estado_filtro)
+                
+                query_cobros += " ORDER BY COALESCE(p.fecha_pago, p.fecha_prevista, p.fecha_creacion::date) DESC, p.fecha_creacion DESC"
+                
+                cursor.execute(query_cobros, params_cobros)
+                cobros_raw = cursor.fetchall()
+                
+                for cobro in cobros_raw:
+                    cobros.append({
+                        'id_pago': cobro[0],
+                        'id_residente': cobro[1],
+                        'residente': cobro[2],
+                        'monto': float(cobro[3]) if cobro[3] else 0,
+                        'fecha_pago': cobro[4].isoformat() if cobro[4] else None,
+                        'fecha_prevista': cobro[5].isoformat() if cobro[5] else None,
+                        'mes_pagado': cobro[6],
+                        'concepto': cobro[7],
+                        'metodo_pago': cobro[8],
+                        'estado': cobro[9],
+                        'es_cobro_previsto': cobro[10],
+                        'observaciones': cobro[11],
+                        'fecha_creacion': cobro[12].isoformat() if cobro[12] else None,
+                        'id_residencia': cobro[13],
+                        'nombre_residencia': cobro[14],
+                        'tipo': 'cobro'
+                    })
+            
+            # Obtener pagos (pago_proveedor)
+            if tipo in ['pagos', 'todos']:
+                query_pagos = """
+                    SELECT p.id_pago, p.proveedor, p.concepto, p.monto, p.fecha_pago, 
+                           p.fecha_prevista, p.metodo_pago, p.estado, p.numero_factura,
+                           p.es_estimacion, p.observaciones, p.fecha_creacion,
+                           res.id_residencia, res.nombre as nombre_residencia
+                    FROM pago_proveedor p
+                    JOIN residencia res ON p.id_residencia = res.id_residencia
+                    WHERE 1=1
+                """
+                params_pagos = []
+                
+                # Filtrar por residencias de acceso
+                if g.id_rol != SUPER_ADMIN_ROLE_ID:
+                    if g.residencias_acceso:
+                        placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                        query_pagos += f" AND p.id_residencia IN ({placeholders})"
+                        params_pagos.extend(g.residencias_acceso)
+                    else:
+                        query_pagos += " AND FALSE"  # Sin acceso
+                
+                if id_residencia_filtro:
+                    query_pagos += " AND p.id_residencia = %s"
+                    params_pagos.append(id_residencia_filtro)
+                
+                if fecha_desde:
+                    query_pagos += " AND (p.fecha_pago >= %s OR p.fecha_prevista >= %s OR (p.fecha_pago IS NULL AND p.fecha_prevista IS NULL AND p.fecha_creacion::date >= %s))"
+                    params_pagos.extend([fecha_desde, fecha_desde, fecha_desde])
+                
+                if fecha_hasta:
+                    query_pagos += " AND (p.fecha_pago <= %s OR p.fecha_prevista <= %s OR (p.fecha_pago IS NULL AND p.fecha_prevista IS NULL AND p.fecha_creacion::date <= %s))"
+                    params_pagos.extend([fecha_hasta, fecha_hasta, fecha_hasta])
+                
+                if estado_filtro:
+                    query_pagos += " AND p.estado = %s"
+                    params_pagos.append(estado_filtro)
+                
+                query_pagos += " ORDER BY COALESCE(p.fecha_pago, p.fecha_prevista, p.fecha_creacion::date) DESC, p.fecha_creacion DESC"
+                
+                cursor.execute(query_pagos, params_pagos)
+                pagos_raw = cursor.fetchall()
+                
+                for pago in pagos_raw:
+                    pagos.append({
+                        'id_pago': pago[0],
+                        'proveedor': pago[1],
+                        'concepto': pago[2],
+                        'monto': float(pago[3]) if pago[3] else 0,
+                        'fecha_pago': pago[4].isoformat() if pago[4] else None,
+                        'fecha_prevista': pago[5].isoformat() if pago[5] else None,
+                        'metodo_pago': pago[6],
+                        'estado': pago[7],
+                        'numero_factura': pago[8],
+                        'es_estimacion': pago[9],
+                        'observaciones': pago[10],
+                        'fecha_creacion': pago[11].isoformat() if pago[11] else None,
+                        'id_residencia': pago[12],
+                        'nombre_residencia': pago[13],
+                        'tipo': 'pago'
+                    })
+            
+            # Si se solicita exportación, generar archivo
+            if exportar == 'pdf':
+                return generar_pdf_historicos(cobros, pagos, fecha_desde, fecha_hasta)
+            elif exportar == 'excel':
+                return generar_excel_historicos(cobros, pagos, fecha_desde, fecha_hasta)
+            
+            # Retornar JSON
+            return jsonify({
+                'cobros': cobros,
+                'pagos': pagos,
+                'total_cobros': len(cobros),
+                'total_pagos': len(pagos),
+                'total_cobros_monto': sum(c['monto'] for c in cobros),
+                'total_pagos_monto': sum(p['monto'] for p in pagos),
+                'filtros': {
+                    'tipo': tipo,
+                    'fecha_desde': fecha_desde,
+                    'fecha_hasta': fecha_hasta,
+                    'id_residencia': id_residencia_filtro,
+                    'estado': estado_filtro
+                }
+            }), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al listar históricos: {str(e)}")
+        return jsonify({'error': 'Error al obtener históricos'}), 500
+
+
+def generar_pdf_historicos(cobros, pagos, fecha_desde=None, fecha_hasta=None):
+    """Genera un PDF con los históricos de cobros y pagos."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Título
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.HexColor('#667eea'),
+            spaceAfter=30,
+            alignment=1  # Centrado
+        )
+        elements.append(Paragraph("Histórico de Cobros y Pagos", title_style))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Información de filtros
+        if fecha_desde or fecha_hasta:
+            filtro_text = "Período: "
+            if fecha_desde:
+                filtro_text += f"Desde {fecha_desde}"
+            if fecha_hasta:
+                filtro_text += f" Hasta {fecha_hasta}"
+            elements.append(Paragraph(filtro_text, styles['Normal']))
+            elements.append(Spacer(1, 0.1*inch))
+        
+        # Cobros
+        if cobros:
+            elements.append(Paragraph(f"<b>COBROS A RESIDENTES ({len(cobros)})</b>", styles['Heading2']))
+            elements.append(Spacer(1, 0.1*inch))
+            
+            data_cobros = [['Residente', 'Monto', 'Fecha Pago', 'Estado', 'Concepto']]
+            for cobro in cobros:
+                fecha = cobro.get('fecha_pago') or cobro.get('fecha_prevista') or '-'
+                if fecha and fecha != '-':
+                    fecha = fecha.split('T')[0] if 'T' in str(fecha) else fecha
+                data_cobros.append([
+                    cobro.get('residente', '-'),
+                    f"€{cobro.get('monto', 0):.2f}",
+                    fecha,
+                    cobro.get('estado', '-'),
+                    cobro.get('concepto', '-')[:50]
+                ])
+            
+            table_cobros = Table(data_cobros, colWidths=[2*inch, 1*inch, 1*inch, 1*inch, 2*inch])
+            table_cobros.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+            ]))
+            elements.append(table_cobros)
+            elements.append(Spacer(1, 0.2*inch))
+            
+            # Total cobros
+            total_cobros = sum(c.get('monto', 0) for c in cobros)
+            elements.append(Paragraph(f"<b>Total Cobros: €{total_cobros:.2f}</b>", styles['Normal']))
+            elements.append(Spacer(1, 0.2*inch))
+        
+        # Pagos
+        if pagos:
+            if cobros:
+                elements.append(PageBreak())
+            elements.append(Paragraph(f"<b>PAGOS A PROVEEDORES ({len(pagos)})</b>", styles['Heading2']))
+            elements.append(Spacer(1, 0.1*inch))
+            
+            data_pagos = [['Proveedor', 'Monto', 'Fecha Pago', 'Estado', 'Concepto']]
+            for pago in pagos:
+                fecha = pago.get('fecha_pago') or pago.get('fecha_prevista') or '-'
+                if fecha and fecha != '-':
+                    fecha = fecha.split('T')[0] if 'T' in str(fecha) else fecha
+                data_pagos.append([
+                    pago.get('proveedor', '-'),
+                    f"€{pago.get('monto', 0):.2f}",
+                    fecha,
+                    pago.get('estado', '-'),
+                    pago.get('concepto', '-')[:50]
+                ])
+            
+            table_pagos = Table(data_pagos, colWidths=[2*inch, 1*inch, 1*inch, 1*inch, 2*inch])
+            table_pagos.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey])
+            ]))
+            elements.append(table_pagos)
+            elements.append(Spacer(1, 0.2*inch))
+            
+            # Total pagos
+            total_pagos = sum(p.get('monto', 0) for p in pagos)
+            elements.append(Paragraph(f"<b>Total Pagos: €{total_pagos:.2f}</b>", styles['Normal']))
+        
+        # Pie de página
+        elements.append(Spacer(1, 0.3*inch))
+        fecha_generacion = datetime.now().strftime('%d/%m/%Y %H:%M')
+        elements.append(Paragraph(f"Generado el {fecha_generacion}", styles['Normal']))
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename=historicos_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+            }
+        )
+        
+    except ImportError:
+        app.logger.error("reportlab no está instalado. Instale con: pip install reportlab")
+        return jsonify({'error': 'Generación de PDF no disponible. Instale reportlab.'}), 500
+    except Exception as e:
+        app.logger.error(f"Error al generar PDF: {str(e)}")
+        return jsonify({'error': f'Error al generar PDF: {str(e)}'}), 500
+
+
+def generar_excel_historicos(cobros, pagos, fecha_desde=None, fecha_hasta=None):
+    """Genera un archivo Excel con los históricos de cobros y pagos."""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Históricos"
+        
+        # Estilos
+        header_fill = PatternFill(start_color="667eea", end_color="667eea", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF", size=12)
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        row = 1
+        
+        # Título
+        ws.merge_cells(f'A{row}:E{row}')
+        cell = ws[f'A{row}']
+        cell.value = "Histórico de Cobros y Pagos"
+        cell.font = Font(bold=True, size=16, color="667eea")
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        row += 2
+        
+        # Filtros
+        if fecha_desde or fecha_hasta:
+            filtro_text = "Período: "
+            if fecha_desde:
+                filtro_text += f"Desde {fecha_desde}"
+            if fecha_hasta:
+                filtro_text += f" Hasta {fecha_hasta}"
+            ws[f'A{row}'] = filtro_text
+            row += 2
+        
+        # Cobros
+        if cobros:
+            ws[f'A{row}'] = f"COBROS A RESIDENTES ({len(cobros)})"
+            ws[f'A{row}'].font = Font(bold=True, size=14)
+            row += 1
+            
+            # Encabezados
+            headers = ['Residente', 'Monto', 'Fecha Pago', 'Estado', 'Concepto', 'Método Pago', 'Residencia']
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=row, column=col)
+                cell.value = header
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.border = border
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            row += 1
+            
+            # Datos
+            for cobro in cobros:
+                fecha = cobro.get('fecha_pago') or cobro.get('fecha_prevista') or ''
+                if fecha and 'T' in str(fecha):
+                    fecha = fecha.split('T')[0]
+                
+                ws.cell(row=row, column=1, value=cobro.get('residente', ''))
+                ws.cell(row=row, column=2, value=f"€{cobro.get('monto', 0):.2f}")
+                ws.cell(row=row, column=3, value=fecha)
+                ws.cell(row=row, column=4, value=cobro.get('estado', ''))
+                ws.cell(row=row, column=5, value=cobro.get('concepto', ''))
+                ws.cell(row=row, column=6, value=cobro.get('metodo_pago', ''))
+                ws.cell(row=row, column=7, value=cobro.get('nombre_residencia', ''))
+                
+                for col in range(1, 8):
+                    ws.cell(row=row, column=col).border = border
+                row += 1
+            
+            # Total
+            total_cobros = sum(c.get('monto', 0) for c in cobros)
+            ws.cell(row=row, column=1, value="TOTAL COBROS").font = Font(bold=True)
+            ws.cell(row=row, column=2, value=f"€{total_cobros:.2f}").font = Font(bold=True)
+            row += 2
+        
+        # Pagos
+        if pagos:
+            ws[f'A{row}'] = f"PAGOS A PROVEEDORES ({len(pagos)})"
+            ws[f'A{row}'].font = Font(bold=True, size=14)
+            row += 1
+            
+            # Encabezados
+            headers = ['Proveedor', 'Monto', 'Fecha Pago', 'Estado', 'Concepto', 'Nº Factura', 'Residencia']
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=row, column=col)
+                cell.value = header
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.border = border
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            row += 1
+            
+            # Datos
+            for pago in pagos:
+                fecha = pago.get('fecha_pago') or pago.get('fecha_prevista') or ''
+                if fecha and 'T' in str(fecha):
+                    fecha = fecha.split('T')[0]
+                
+                ws.cell(row=row, column=1, value=pago.get('proveedor', ''))
+                ws.cell(row=row, column=2, value=f"€{pago.get('monto', 0):.2f}")
+                ws.cell(row=row, column=3, value=fecha)
+                ws.cell(row=row, column=4, value=pago.get('estado', ''))
+                ws.cell(row=row, column=5, value=pago.get('concepto', ''))
+                ws.cell(row=row, column=6, value=pago.get('numero_factura', ''))
+                ws.cell(row=row, column=7, value=pago.get('nombre_residencia', ''))
+                
+                for col in range(1, 8):
+                    ws.cell(row=row, column=col).border = border
+                row += 1
+            
+            # Total
+            total_pagos = sum(p.get('monto', 0) for p in pagos)
+            ws.cell(row=row, column=1, value="TOTAL PAGOS").font = Font(bold=True)
+            ws.cell(row=row, column=2, value=f"€{total_pagos:.2f}").font = Font(bold=True)
+        
+        # Ajustar ancho de columnas
+        ws.column_dimensions['A'].width = 25
+        ws.column_dimensions['B'].width = 15
+        ws.column_dimensions['C'].width = 15
+        ws.column_dimensions['D'].width = 15
+        ws.column_dimensions['E'].width = 30
+        ws.column_dimensions['F'].width = 15
+        ws.column_dimensions['G'].width = 20
+        
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        return Response(
+            buffer.getvalue(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={
+                'Content-Disposition': f'attachment; filename=historicos_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+            }
+        )
+        
+    except ImportError:
+        app.logger.error("openpyxl no está instalado. Instale con: pip install openpyxl")
+        return jsonify({'error': 'Generación de Excel no disponible. Instale openpyxl.'}), 500
+    except Exception as e:
+        app.logger.error(f"Error al generar Excel: {str(e)}")
+        return jsonify({'error': f'Error al generar Excel: {str(e)}'}), 500
 
 
 if __name__ == '__main__':

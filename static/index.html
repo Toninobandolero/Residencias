@@ -652,7 +652,10 @@
                         <img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 20px; height: 20px; margin-right: 8px;"> Personal
                     </button>
                     <button class="module-btn" onclick="showModule('documentacion')">
-                        <img src="/static/icons/medical/file-text.svg" alt="Documentación" style="width: 20px; height: 20px; margin-right: 8px;"> Documentación
+                        <img src="/static/icons/medical/file-medical.svg" alt="Documentación" style="width: 20px; height: 20px; margin-right: 8px;"> Documentación
+                    </button>
+                    <button class="module-btn" onclick="showModule('historicos')">
+                        <img src="/static/icons/medical/calendar-medical.svg" alt="Históricos" style="width: 20px; height: 20px; margin-right: 8px;"> Históricos
                     </button>
                 </div>
             </div>
@@ -1457,6 +1460,63 @@
         </div>
     </div>
 
+    <!-- Modal para Gestión de Residencias (Solo SuperAdmin) -->
+    <div id="modalResidencias" class="modal">
+        <div class="modal-content" style="max-width: 1200px; max-height: 90vh;">
+            <div class="modal-header">
+                <h2 id="modalResidenciasTitulo">
+                    <img src="/static/icons/medical/hospital.svg" alt="Residencias" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Gestión de Residencias
+                </h2>
+                <button class="close-modal" onclick="closeModal('modalResidencias')">&times;</button>
+            </div>
+            <div id="residenciasContent" style="max-height: calc(90vh - 100px); overflow-y: auto; padding: 0 5px;">
+                <!-- Contenido dinámico -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Crear/Editar Residencia -->
+    <div id="modalResidencia" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalResidenciaTitulo">
+                    <img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Residencia
+                </h2>
+                <button class="close-modal" onclick="closeModal('modalResidencia')">&times;</button>
+            </div>
+            <form id="formResidencia" onsubmit="saveResidencia(event)">
+                <input type="hidden" id="residencia_id_residencia" name="id_residencia" value="">
+                <div id="residenciaAlert" class="alert" style="display: none;"></div>
+                
+                <div class="form-section">
+                    <h3>Información de la Residencia</h3>
+                    <div class="form-group">
+                        <label for="residencia_nombre">Nombre *</label>
+                        <input type="text" id="residencia_nombre" name="nombre" required placeholder="Ej: Violetas 3" maxlength="255">
+                    </div>
+                    <div class="form-group">
+                        <label for="residencia_direccion">Dirección</label>
+                        <input type="text" id="residencia_direccion" name="direccion" placeholder="Calle, número, ciudad" maxlength="500">
+                    </div>
+                    <div class="form-group">
+                        <label for="residencia_telefono">Teléfono</label>
+                        <input type="text" id="residencia_telefono" name="telefono" placeholder="612345678" maxlength="50">
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="residencia_activa" name="activa" checked style="width: auto; margin-right: 8px;"> Residencia Activa
+                        </label>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="saveResidenciaBtn" style="flex: 1;">Guardar</button>
+                    <button type="button" onclick="closeModal('modalResidencia')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Modal para Editar Mi Cuenta -->
     <div id="modalMiCuenta" class="modal">
         <div class="modal-content">
@@ -1668,7 +1728,7 @@
                         <img src="/static/icons/medical/settings.svg" alt="Configuración" style="width: 32px; height: 32px;"> Configuración
                     </h2>
                     
-                    <div style="display: grid; grid-template-columns: ${esAdmin ? '1fr 1fr' : '1fr'}; gap: 30px; margin-bottom: 30px;">
+                    <div style="display: grid; grid-template-columns: ${esAdmin ? '1fr 1fr 1fr' : '1fr'}; gap: 30px; margin-bottom: 30px;">
                         ${esAdmin ? `
                         <div style="background: #f7fafc; padding: 25px; border-radius: 15px; border: 2px solid #e0e0e0;">
                             <h3 style="color: #667eea; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
@@ -1677,6 +1737,15 @@
                             <p style="color: #666; margin-bottom: 20px;">Administra los usuarios del sistema, sus roles y permisos.</p>
                             <button class="add-btn" onclick="loadUsuarios()" style="width: 100%; padding: 12px; font-size: 16px;">
                                 <img src="/static/icons/medical/users.svg" alt="Usuarios" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px; filter: brightness(0) invert(1);"> Ver Usuarios
+                            </button>
+                        </div>
+                        <div style="background: #f7fafc; padding: 25px; border-radius: 15px; border: 2px solid #e0e0e0;">
+                            <h3 style="color: #667eea; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                                <img src="/static/icons/medical/hospital.svg" alt="Residencias" style="width: 24px; height: 24px;"> Gestión de Residencias
+                            </h3>
+                            <p style="color: #666; margin-bottom: 20px;">Administra las residencias del sistema, crea nuevas o edita existentes.</p>
+                            <button class="add-btn" onclick="loadResidencias()" style="width: 100%; padding: 12px; font-size: 16px;">
+                                <img src="/static/icons/medical/hospital.svg" alt="Residencias" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px; filter: brightness(0) invert(1);"> Ver Residencias
                             </button>
                         </div>
                         ` : ''}
@@ -1749,6 +1818,8 @@
                 loadPersonal();
             } else if (module === 'documentacion') {
                 loadDocumentacion();
+            } else if (module === 'historicos') {
+                loadHistoricos();
             }
         }
 
@@ -2210,18 +2281,31 @@
                     return;
                 }
                 
-                // Verificar si hay residentes que necesitan cobros previstos
-                // Lógica: Si un residente NO tiene cobro completado en el mes actual,
-                // debe tener un cobro previsto
-                const mesActual = new Date().toISOString().slice(0, 7); // YYYY-MM
+                // NUEVA LÓGICA: Verificar si hay residentes que necesitan cobros previstos para el mes siguiente
+                // El sistema ahora genera automáticamente solo el cobro del mes siguiente (no histórico)
+                // Los cobros históricos se generan manualmente desde el módulo Históricos
+                
+                // Verificar si hay cobros previstos pendientes para el mes siguiente
+                const mesSiguiente = new Date();
+                mesSiguiente.setMonth(mesSiguiente.getMonth() + 1);
+                const mesSiguienteStr = mesSiguiente.toISOString().slice(0, 7); // YYYY-MM
+                
                 const tieneCobrosPrevistos = cobrosRes.ok && cobrosData.cobros && cobrosData.cobros.length > 0 && 
                                             cobrosData.cobros.some(c => {
-                                                if (!c || !c.es_cobro_previsto) return false;
+                                                const esPrevisto = c.es_cobro_previsto === true || 
+                                                                  c.es_cobro_previsto === 'true' || 
+                                                                  c.es_cobro_previsto === 'True' ||
+                                                                  c.es_cobro_previsto === 1;
+                                                if (!esPrevisto) return false;
+                                                const estado = (c.estado || '').toLowerCase().trim();
+                                                const esPendiente = estado === 'pendiente' || estado === '' || !c.estado;
+                                                if (!esPendiente) return false;
+                                                // Verificar que sea del mes siguiente
                                                 const mesCobro = c.mes_pagado || (c.fecha_prevista ? c.fecha_prevista.slice(0, 7) : null);
-                                                return mesCobro === mesActual;
+                                                return mesCobro === mesSiguienteStr;
                                             });
                 
-                // Verificar si hay cobros con conceptos antiguos o si no hay cobros previstos
+                // Verificar si hay cobros con conceptos antiguos (para compatibilidad)
                 const tieneConceptosAntiguos = cobrosData.cobros && cobrosData.cobros.some(c => {
                     const esPrevisto = c.es_cobro_previsto === true || 
                                       c.es_cobro_previsto === 'true' || 
@@ -2236,7 +2320,10 @@
                     return concepto.includes('mensual habitación') || concepto.includes('pepe') || concepto.includes('maría');
                 });
                 
-                // Si no hay cobros previstos o hay conceptos antiguos, regenerar
+                // Generar cobros automáticamente si:
+                // 1. No hay cobros previstos pendientes para el mes siguiente (residentes nuevos o sin cobros)
+                // 2. Hay conceptos antiguos que necesitan actualizarse
+                // La lógica del backend ahora genera solo el cobro del mes siguiente (no histórico)
                 if (cobrosRes.ok && (!tieneCobrosPrevistos || tieneConceptosAntiguos)) {
                     try {
                         console.log('Generando cobros previstos automáticamente...');
@@ -2290,7 +2377,12 @@
                 }
                 
                 if (cobrosRes.ok && proveedoresRes.ok) {
-                    // Filtrar cobros previstos: pendientes y completados
+                    // NUEVA LÓGICA: El backend ahora devuelve solo el período cercano:
+                    // - Todos los cobros pendientes
+                    // - El último cobro completado de cada residente
+                    // - Cobros completados del mes actual y mes anterior
+                    // Todo lo demás va a Históricos
+                    
                     // Usar estructura agrupada si está disponible
                     const cobrosAgrupados = cobrosData.cobros_agrupados || [];
                     
@@ -2325,6 +2417,7 @@
                     }
                     
                     // Filtrar y agrupar cobros previstos y completados por residencia
+                    // Nota: Estos son solo del período cercano (mes siguiente, mes actual, mes anterior)
                     const cobrosPrevistosPorResidencia = {};
                     const cobrosCompletadosPorResidencia = {};
                     
@@ -2452,8 +2545,13 @@
                                 <!-- Pestaña de Cobros -->
                                 <div id="tabCobros" class="tab-content active">
                                     <div style="margin-bottom: 20px;">
-                                        <h4 style="color: #667eea; margin: 0; margin-bottom: 15px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros Previstos (${totalPrevistos})</h4>
-                                        <button class="add-btn" onclick="openModal('modalCobro')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Cobro</button>
+                                        <h4 style="color: #667eea; margin: 0; margin-bottom: 15px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros del Período Cercano - Pendientes (${totalPrevistos})</h4>
+                                        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                                            <button class="add-btn" onclick="openModal('modalCobro')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Cobro</button>
+                                        </div>
+                                        <p style="font-size: 12px; color: #666; margin-top: -10px; margin-bottom: 15px;">
+                                            💡 <strong>Nota:</strong> Se muestran los cobros pendientes del mes siguiente y los cobros completados recientes. Para ver el historial completo, usa el módulo <strong>Históricos</strong>.
+                                        </p>
                                     </div>
                                     <div style="margin-bottom: 30px;">
                     `;
@@ -2493,9 +2591,12 @@
                                 const tipoPago = cobro.metodo_pago || '-';
                                 totalGrupo += parseFloat(cobro.monto) || 0;
                                 
-                                // Verificar si la fecha prevista ya pasó
+                                // Verificar si la fecha prevista ya pasó (solo para pagos pendientes)
                                 let fechaPrevistaStyle = 'color: #333;';
-                                if (cobro.fecha_prevista) {
+                                const estado = (cobro.estado || '').toLowerCase().trim();
+                                const esPendiente = estado === 'pendiente' || estado === '' || !cobro.estado;
+                                
+                                if (esPendiente && cobro.fecha_prevista) {
                                     const fechaPrevistaDate = new Date(cobro.fecha_prevista);
                                     const hoy = new Date();
                                     hoy.setHours(0, 0, 0, 0);
@@ -2582,8 +2683,12 @@
                                 totalGrupo += parseFloat(cobro.monto) || 0;
                                 
                                 // Verificar si la fecha prevista ya pasó (aunque esté cobrado, para referencia histórica)
+                                // Verificar si la fecha prevista ya pasó (solo para pagos pendientes)
                                 let fechaPrevistaStyle = 'color: #333;';
-                                if (cobro.fecha_prevista) {
+                                const estado = (cobro.estado || '').toLowerCase().trim();
+                                const esPendiente = estado === 'pendiente' || estado === '' || !cobro.estado;
+                                
+                                if (esPendiente && cobro.fecha_prevista) {
                                     const fechaPrevistaDate = new Date(cobro.fecha_prevista);
                                     const hoy = new Date();
                                     hoy.setHours(0, 0, 0, 0);
@@ -2640,12 +2745,12 @@
                                 
                                 <!-- Pestaña de Pagos a Proveedores -->
                                 <div id="tabPagos" class="tab-content">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                                        <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/package.svg" alt="Proveedores" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Pagos a Proveedores (${proveedoresData.total || 0})</h4>
+                                    <div style="margin-bottom: 20px;">
+                                        <h4 style="color: #667eea; margin: 0; margin-bottom: 15px;"><img src="/static/icons/medical/package.svg" alt="Proveedores" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Pagos a Proveedores (${proveedoresData.total || 0})</h4>
                                         <div style="display: flex; gap: 10px;">
+                                            <button class="add-btn" onclick="openModalProveedor()" style="padding: 8px 16px; font-size: 14px;">+ Pago Proveedor</button>
                                             <button class="add-btn" onclick="abrirModalListaProveedores()" style="padding: 8px 16px; font-size: 14px; background: #17a2b8;">Ver Proveedores</button>
                                             <button class="add-btn" onclick="resetProveedorForm(); openModal('modalProveedor');" style="padding: 8px 16px; font-size: 14px; background: #6c757d;">+ Proveedor</button>
-                                            <button class="add-btn" onclick="openModalProveedor()" style="padding: 8px 16px; font-size: 14px;">+ Pago Proveedor</button>
                                         </div>
                                     </div>
                     `;
@@ -3973,6 +4078,12 @@
                 observaciones: formData.get('observaciones') || null
             };
             
+            // Agregar id_residencia si se proporciona en el formulario
+            const id_residencia = formData.get('id_residencia');
+            if (id_residencia) {
+                data.id_residencia = parseInt(id_residencia);
+            }
+            
             // Limpiar valores vacíos
             Object.keys(data).forEach(key => {
                 if (data[key] === '' || data[key] === null) {
@@ -4728,9 +4839,9 @@
                                 
                                 <!-- Pestaña de Personal -->
                                 <div id="tabPersonal" class="tab-content active">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                                        <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Personal (${data.total || 0})</h4>
-                                        <button class="add-btn" onclick="openModal('modalPersonal')" style="padding: 8px 16px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Personal</button>
+                                    <div style="margin-bottom: 20px;">
+                                        <h4 style="color: #667eea; margin: 0; margin-bottom: 15px;"><img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Personal (${data.total || 0})</h4>
+                                        <button class="add-btn" onclick="openModal('modalPersonal')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Personal</button>
                                     </div>
                     `;
                     
@@ -4853,11 +4964,14 @@
                 loadResidenciasForSelect();
             }
             
-            // Si es el modal de agregar residente, establecer residencia por defecto según el token
+            // Si es el modal de agregar residente, cargar residencias desde la API
             if (modalId === 'modalResidente') {
                 const token = localStorage.getItem('violetas_token');
                 const selectResidencia = document.getElementById('res_id_residencia');
                 const selectHabitacion = document.getElementById('res_habitacion');
+                
+                // Cargar residencias desde la API
+                await loadResidenciasIntoSelect('res_id_residencia');
                 
                 if (token) {
                     try {
@@ -4952,10 +5066,13 @@
                 }
             }
             
-            // Si es el modal de agregar personal, establecer residencia por defecto según el token
+            // Si es el modal de agregar personal, cargar residencias desde la API
             if (modalId === 'modalPersonal') {
                 const token = localStorage.getItem('violetas_token');
                 const selectResidencia = document.getElementById('per_id_residencia');
+                
+                // Cargar residencias desde la API
+                await loadResidenciasIntoSelect('per_id_residencia');
                 
                 if (token) {
                     try {
@@ -5082,7 +5199,7 @@
             document.getElementById(modalId).style.display = 'none';
             
             // Restaurar todos los botones de guardado al cerrar cualquier modal
-            const saveButtonIds = ['saveResidenteBtn', 'savePersonalBtn', 'saveTurnoExtraBtn', 'saveCobroBtn', 'saveProveedorBtn', 'savePagoProveedorBtn', 'updateResidenteBtn'];
+            const saveButtonIds = ['saveResidenteBtn', 'savePersonalBtn', 'saveTurnoExtraBtn', 'saveCobroBtn', 'saveProveedorBtn', 'savePagoProveedorBtn', 'updateResidenteBtn', 'saveResidenciaBtn', 'saveUsuarioBtn', 'saveMiCuentaBtn'];
             const buttonTexts = {
                 'saveResidenteBtn': 'Guardar',
                 'savePersonalBtn': 'Guardar',
@@ -5090,7 +5207,10 @@
                 'saveCobroBtn': 'Guardar',
                 'saveProveedorBtn': 'Guardar',
                 'savePagoProveedorBtn': 'Guardar',
-                'updateResidenteBtn': 'Actualizar'
+                'updateResidenteBtn': 'Actualizar',
+                'saveResidenciaBtn': 'Guardar',
+                'saveUsuarioBtn': 'Guardar',
+                'saveMiCuentaBtn': 'Guardar Cambios'
             };
             
             saveButtonIds.forEach(btnId => {
@@ -6559,9 +6679,9 @@
                 
                 if (response.ok) {
                     let html = `
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/calendar-medical.svg" alt="Turnos" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Turnos Extra (${data.total || 0})</h4>
-                            <button class="add-btn" onclick="openModal('modalTurnoExtra')" style="padding: 8px 16px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Turno Extra</button>
+                        <div style="margin-bottom: 20px;">
+                            <h4 style="color: #667eea; margin: 0; margin-bottom: 15px;"><img src="/static/icons/medical/calendar-medical.svg" alt="Turnos" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Turnos Extra (${data.total || 0})</h4>
+                            <button class="add-btn" onclick="openModal('modalTurnoExtra')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Turno Extra</button>
                         </div>
                         
                         <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
@@ -7043,9 +7163,13 @@
             }
         }
         
-        async function loadResidenciasForSelect() {
-            const select = document.getElementById('usuario_id_residencia');
+        // Función genérica para cargar residencias en cualquier select
+        async function loadResidenciasIntoSelect(selectId, currentValue = null) {
+            const select = document.getElementById(selectId);
+            if (!select) return;
+            
             const token = localStorage.getItem('violetas_token');
+            if (!token) return;
             
             try {
                 const response = await fetch(`${API_URL}/api/v1/residencias`, {
@@ -7054,15 +7178,22 @@
                 
                 if (response.ok) {
                     const data = await response.json();
-                    const currentValue = select.value;
+                    const selectedValue = currentValue !== null ? currentValue : select.value;
                     select.innerHTML = '<option value="">Seleccione una residencia</option>';
                     data.residencias.forEach(res => {
-                        select.innerHTML += `<option value="${res.id_residencia}" ${res.id_residencia == currentValue ? 'selected' : ''}>${res.nombre}</option>`;
+                        // Solo mostrar residencias activas (excepto para super_admin que puede ver todas)
+                        if (res.activa || g?.id_rol === 1) {
+                            select.innerHTML += `<option value="${res.id_residencia}" ${res.id_residencia == selectedValue ? 'selected' : ''}>${res.nombre}</option>`;
+                        }
                     });
                 }
             } catch (error) {
                 console.error('Error al cargar residencias:', error);
             }
+        }
+        
+        async function loadResidenciasForSelect() {
+            await loadResidenciasIntoSelect('usuario_id_residencia');
         }
         
         async function saveUsuario(event) {
@@ -7071,7 +7202,18 @@
             const token = localStorage.getItem('violetas_token');
             const form = event.target;
             const saveBtn = document.getElementById('saveUsuarioBtn');
-            const originalText = saveBtn.textContent;
+            const originalText = saveBtn ? saveBtn.textContent : 'Guardar';
+            
+            // Resetear botón al inicio por si acaso
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+            
+            if (!saveBtn) {
+                console.error('Botón de guardar no encontrado');
+                return;
+            }
             
             const formData = new FormData(form);
             const idUsuario = formData.get('id_usuario');
@@ -7128,27 +7270,26 @@
                     }
                 } catch (parseError) {
                     showUsuarioModalError(`Error del servidor (${response.status}). Por favor, intenta de nuevo.`);
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = originalText;
+                    resetSaveButton('saveUsuarioBtn', originalText);
                     return;
                 }
                 
                 if (response.ok) {
                     showUsuarioModalSuccess(idUsuario ? 'Usuario actualizado exitosamente' : 'Usuario creado exitosamente');
+                    // Resetear botón antes de cerrar
+                    resetSaveButton('saveUsuarioBtn', originalText);
                     setTimeout(() => {
                         closeModal('modalUsuario');
                         loadUsuarios();
                     }, 1500);
                 } else {
                     showUsuarioModalError(result.error || 'Error al guardar el usuario');
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = originalText;
+                    resetSaveButton('saveUsuarioBtn', originalText);
                 }
             } catch (error) {
                 console.error('Error al guardar usuario:', error);
                 showUsuarioModalError('Error de conexión: ' + error.message);
-                saveBtn.disabled = false;
-                saveBtn.textContent = originalText;
+                resetSaveButton('saveUsuarioBtn', originalText);
             }
         }
         
@@ -7172,6 +7313,348 @@
         
         function hideUsuarioModalAlert() {
             const alert = document.getElementById('usuarioAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
+        
+        // ============================================================================
+        // GESTIÓN DE RESIDENCIAS (Solo SuperAdmin)
+        // ============================================================================
+        
+        async function loadResidencias() {
+            const token = localStorage.getItem('violetas_token');
+            const content = document.getElementById('residenciasContent');
+            
+            if (!token) {
+                alert('No hay sesión activa');
+                return;
+            }
+            
+            try {
+                content.innerHTML = '<p style="text-align: center; padding: 20px;">Cargando residencias...</p>';
+                
+                const response = await fetch(`${API_URL}/api/v1/residencias`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Error al cargar residencias');
+                }
+                
+                const data = await response.json();
+                const residencias = data.residencias || [];
+                
+                let html = `
+                    <div style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                        <h3 style="color: #667eea; margin: 0; font-size: 18px;">
+                            <img src="/static/icons/medical/hospital.svg" alt="Residencias" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;"> 
+                            Lista de Residencias
+                        </h3>
+                        <button class="add-btn" onclick="nuevaResidencia()" style="padding: 10px 20px; font-size: 14px; white-space: nowrap;">
+                            <img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Nueva Residencia
+                        </button>
+                    </div>
+                    <div style="overflow-x: auto; background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <table class="data-table" style="width: 100%; min-width: 700px;">
+                            <thead>
+                                <tr>
+                                    <th style="min-width: 50px; padding: 10px 8px; font-size: 13px;">ID</th>
+                                    <th style="min-width: 140px; padding: 10px 8px; font-size: 13px;">Nombre</th>
+                                    <th style="min-width: 180px; padding: 10px 8px; font-size: 13px;">Dirección</th>
+                                    <th style="min-width: 110px; padding: 10px 8px; font-size: 13px;">Teléfono</th>
+                                    <th style="min-width: 100px; padding: 10px 8px; font-size: 13px;">Estado</th>
+                                    <th style="min-width: 140px; padding: 10px 8px; font-size: 13px; text-align: center;">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                if (residencias.length === 0) {
+                    html += `
+                        <tr>
+                            <td colspan="6" style="text-align: center; padding: 30px; color: #666;">
+                                <p style="margin: 0; font-size: 14px;">No hay residencias registradas</p>
+                                <p style="margin: 8px 0 0 0; font-size: 12px; color: #999;">Haz clic en "Nueva Residencia" para crear una</p>
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    residencias.forEach(residencia => {
+                        const estadoBadge = residencia.activa 
+                            ? '<span style="background: #28a745; color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; display: inline-block; white-space: nowrap;">✓ Activa</span>'
+                            : '<span style="background: #dc3545; color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; display: inline-block; white-space: nowrap;">✗ Inactiva</span>';
+                        
+                        const direccion = residencia.direccion && residencia.direccion.trim() 
+                            ? `<span style="color: #333; font-size: 13px;">${residencia.direccion.length > 40 ? residencia.direccion.substring(0, 40) + '...' : residencia.direccion}</span>` 
+                            : '<span style="color: #999; font-style: italic; font-size: 12px;">Sin dirección</span>';
+                        
+                        const telefono = residencia.telefono && residencia.telefono.trim() 
+                            ? `<span style="color: #333; font-size: 13px;">${residencia.telefono}</span>` 
+                            : '<span style="color: #999; font-style: italic; font-size: 12px;">Sin teléfono</span>';
+                        
+                        html += `
+                            <tr style="border-bottom: 1px solid #e0e0e0;">
+                                <td style="padding: 10px 8px; font-weight: 600; color: #667eea; font-size: 13px;">#${residencia.id_residencia}</td>
+                                <td style="padding: 10px 8px;">
+                                    <strong style="color: #333; font-size: 14px;">${residencia.nombre || '<span style="color: #999; font-size: 12px;">Sin nombre</span>'}</strong>
+                                </td>
+                                <td style="padding: 10px 8px; color: #555; font-size: 13px;">${direccion}</td>
+                                <td style="padding: 10px 8px; color: #555; font-size: 13px;">${telefono}</td>
+                                <td style="padding: 10px 8px;">${estadoBadge}</td>
+                                <td style="padding: 10px 8px; text-align: center;">
+                                    <div style="display: flex; gap: 6px; justify-content: center; align-items: center; flex-wrap: wrap;">
+                                        <button onclick="editarResidencia(${residencia.id_residencia})" style="background: #667eea; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s; white-space: nowrap;" onmouseover="this.style.background='#5568d3'; this.style.transform='translateY(-1px)'" onmouseout="this.style.background='#667eea'; this.style.transform='translateY(0)'">
+                                            <img src="/static/icons/medical/settings.svg" alt="Editar" style="width: 14px; height: 14px; filter: brightness(0) invert(1);"> Editar
+                                        </button>
+                                        ${residencia.activa ? `
+                                        <button onclick="eliminarResidencia(${residencia.id_residencia}, '${residencia.nombre.replace(/'/g, "\\'")}')" style="background: #dc3545; color: white; border: none; padding: 6px 10px; border-radius: 5px; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; transition: all 0.2s; white-space: nowrap;" onmouseover="this.style.background='#c82333'; this.style.transform='translateY(-1px)'" onmouseout="this.style.background='#dc3545'; this.style.transform='translateY(0)'">
+                                            <img src="/static/icons/medical/user-x.svg" alt="Desactivar" style="width: 14px; height: 14px; filter: brightness(0) invert(1);"> Desactivar
+                                        </button>
+                                        ` : ''}
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="margin-top: 20px; padding: 15px; background: #f7fafc; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <p style="margin: 0; color: #666; font-size: 14px;">
+                            <strong style="color: #667eea;">Total:</strong> <span style="font-weight: 600; font-size: 16px;">${residencias.length}</span> residencia${residencias.length !== 1 ? 's' : ''}
+                        </p>
+                        <p style="margin: 0; color: #999; font-size: 12px;">
+                            ${residencias.filter(r => r.activa).length} activa${residencias.filter(r => r.activa).length !== 1 ? 's' : ''} | 
+                            ${residencias.filter(r => !r.activa).length} inactiva${residencias.filter(r => !r.activa).length !== 1 ? 's' : ''}
+                        </p>
+                    </div>
+                `;
+                
+                content.innerHTML = html;
+                openModal('modalResidencias');
+                
+            } catch (error) {
+                console.error('Error al cargar residencias:', error);
+                content.innerHTML = `
+                    <div class="alert error">
+                        Error al cargar residencias: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        function nuevaResidencia() {
+            resetResidenciaForm();
+            document.getElementById('modalResidenciaTitulo').innerHTML = `
+                <img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Nueva Residencia
+            `;
+            openModal('modalResidencia');
+        }
+        
+        async function editarResidencia(idResidencia) {
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residencias`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Error al obtener residencias');
+                }
+                
+                const data = await response.json();
+                const residencia = data.residencias.find(r => r.id_residencia === idResidencia);
+                
+                if (!residencia) {
+                    alert('Residencia no encontrada');
+                    return;
+                }
+                
+                document.getElementById('residencia_id_residencia').value = residencia.id_residencia;
+                document.getElementById('residencia_nombre').value = residencia.nombre || '';
+                document.getElementById('residencia_direccion').value = residencia.direccion || '';
+                document.getElementById('residencia_telefono').value = residencia.telefono || '';
+                document.getElementById('residencia_activa').checked = residencia.activa !== false;
+                
+                document.getElementById('modalResidenciaTitulo').innerHTML = `
+                    <img src="/static/icons/medical/settings.svg" alt="Editar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Residencia
+                `;
+                
+                hideResidenciaAlert();
+                openModal('modalResidencia');
+                
+            } catch (error) {
+                console.error('Error al obtener residencia:', error);
+                alert('Error al obtener información de la residencia: ' + error.message);
+            }
+        }
+        
+        function resetResidenciaForm() {
+            document.getElementById('formResidencia').reset();
+            document.getElementById('residencia_id_residencia').value = '';
+            document.getElementById('residencia_activa').checked = true;
+            hideResidenciaAlert();
+        }
+        
+        // Función helper para resetear botones de guardado
+        function resetSaveButton(buttonId, defaultText = 'Guardar') {
+            const btn = document.getElementById(buttonId);
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = defaultText;
+            }
+        }
+        
+        async function saveResidencia(event) {
+            event.preventDefault();
+            const token = localStorage.getItem('violetas_token');
+            
+            const saveBtn = document.getElementById('saveResidenciaBtn');
+            const originalText = saveBtn ? saveBtn.textContent : 'Guardar';
+            
+            // Resetear botón al inicio por si acaso
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+            
+            if (!token) {
+                showResidenciaError('No hay sesión activa');
+                resetSaveButton('saveResidenciaBtn', originalText);
+                return;
+            }
+            
+            if (!saveBtn) {
+                console.error('Botón de guardar no encontrado');
+                return;
+            }
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Guardando...';
+            
+            hideResidenciaAlert();
+            
+            try {
+                const idResidencia = document.getElementById('residencia_id_residencia').value;
+                const data = {
+                    nombre: document.getElementById('residencia_nombre').value.trim(),
+                    direccion: document.getElementById('residencia_direccion').value.trim() || null,
+                    telefono: document.getElementById('residencia_telefono').value.trim() || null,
+                    activa: document.getElementById('residencia_activa').checked
+                };
+                
+                const url = idResidencia
+                    ? `${API_URL}/api/v1/residencias/${idResidencia}`
+                    : `${API_URL}/api/v1/residencias`;
+                const method = idResidencia ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                let result;
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        result = await response.json();
+                    } else {
+                        const text = await response.text();
+                        throw new Error(`Error del servidor (${response.status}): ${text.substring(0, 100)}`);
+                    }
+                } catch (parseError) {
+                    showResidenciaError(`Error del servidor (${response.status}). Por favor, intenta de nuevo.`);
+                    resetSaveButton('saveResidenciaBtn', originalText);
+                    return;
+                }
+                
+                if (response.ok) {
+                    showResidenciaSuccess(idResidencia ? 'Residencia actualizada exitosamente' : 'Residencia creada exitosamente');
+                    // Resetear botón antes de cerrar
+                    resetSaveButton('saveResidenciaBtn', originalText);
+                    setTimeout(() => {
+                        closeModal('modalResidencia');
+                        loadResidencias();
+                    }, 1500);
+                } else {
+                    showResidenciaError(result.error || 'Error al guardar la residencia');
+                    resetSaveButton('saveResidenciaBtn', originalText);
+                }
+            } catch (error) {
+                console.error('Error al guardar residencia:', error);
+                showResidenciaError('Error de conexión: ' + error.message);
+                resetSaveButton('saveResidenciaBtn', originalText);
+            }
+        }
+        
+        async function eliminarResidencia(idResidencia, nombre) {
+            if (!confirm(`¿Estás seguro de que deseas desactivar la residencia "${nombre}"?\n\nEsta acción desactivará la residencia (no se eliminará físicamente).`)) {
+                return;
+            }
+            
+            const token = localStorage.getItem('violetas_token');
+            
+            if (!token) {
+                alert('No hay sesión activa');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residencias/${idResidencia}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                let result;
+                try {
+                    result = await response.json();
+                } catch (e) {
+                    throw new Error(`Error del servidor (${response.status})`);
+                }
+                
+                if (response.ok) {
+                    alert(`Residencia "${nombre}" desactivada exitosamente.`);
+                    loadResidencias();
+                } else {
+                    alert(result.error || 'Error al desactivar la residencia');
+                }
+            } catch (error) {
+                console.error('Error al eliminar residencia:', error);
+                alert('Error de conexión: ' + error.message);
+            }
+        }
+        
+        function showResidenciaError(message) {
+            const alert = document.getElementById('residenciaAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function showResidenciaSuccess(message) {
+            const alert = document.getElementById('residenciaAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function hideResidenciaAlert() {
+            const alert = document.getElementById('residenciaAlert');
             if (alert) {
                 alert.style.display = 'none';
             }
@@ -7208,7 +7691,18 @@
             const token = localStorage.getItem('violetas_token');
             const form = event.target;
             const saveBtn = document.getElementById('saveMiCuentaBtn');
-            const originalText = saveBtn.textContent;
+            const originalText = saveBtn ? saveBtn.textContent : 'Guardar Cambios';
+            
+            // Resetear botón al inicio por si acaso
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+            
+            if (!saveBtn) {
+                console.error('Botón de guardar no encontrado');
+                return;
+            }
             
             const formData = new FormData(form);
             const password = formData.get('password');
@@ -7236,6 +7730,7 @@
                 idUsuario = payload.id_usuario;
             } catch (e) {
                 showMiCuentaModalError('Error al obtener información del usuario');
+                resetSaveButton('saveMiCuentaBtn', originalText);
                 return;
             }
             
@@ -7264,26 +7759,34 @@
                     }
                 } catch (parseError) {
                     showMiCuentaModalError(`Error del servidor (${response.status}). Por favor, intenta de nuevo.`);
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = originalText;
+                    resetSaveButton('saveMiCuentaBtn', originalText);
                     return;
                 }
                 
                 if (response.ok) {
-                    showMiCuentaModalSuccess('Información actualizada exitosamente');
-                    setTimeout(() => {
-                        closeModal('modalMiCuenta');
-                    }, 1500);
+                    // Si se cambió la contraseña, recargar la página para obtener nuevo token
+                    if (data.password && data.password.trim()) {
+                        showMiCuentaModalSuccess('Contraseña actualizada exitosamente. Recargando...');
+                        // No resetear botón aquí porque se va a recargar la página
+                        setTimeout(() => {
+                            window.location.reload(); // Recargar para obtener nuevo token y estado
+                        }, 1500);
+                    } else {
+                        showMiCuentaModalSuccess('Información actualizada exitosamente');
+                        // Resetear botón antes de cerrar
+                        resetSaveButton('saveMiCuentaBtn', originalText);
+                        setTimeout(() => {
+                            closeModal('modalMiCuenta');
+                        }, 1500);
+                    }
                 } else {
                     showMiCuentaModalError(result.error || 'Error al actualizar la información');
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = originalText;
+                    resetSaveButton('saveMiCuentaBtn', originalText);
                 }
             } catch (error) {
                 console.error('Error al guardar información:', error);
                 showMiCuentaModalError('Error de conexión: ' + error.message);
-                saveBtn.disabled = false;
-                saveBtn.textContent = originalText;
+                resetSaveButton('saveMiCuentaBtn', originalText);
             }
         }
         
@@ -7352,7 +7855,7 @@
                     let html = `
                         <div class="module-content">
                             <h2 style="color: #667eea; margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
-                                <img src="/static/icons/medical/file-text.svg" alt="Documentación" style="width: 32px; height: 32px;"> Documentación
+                                <img src="/static/icons/medical/file-medical.svg" alt="Documentación" style="width: 32px; height: 32px;"> Documentación
                             </h2>
                             
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
@@ -7693,6 +8196,293 @@
             const alert = document.getElementById('documentoAlert');
             if (alert) {
                 alert.style.display = 'none';
+            }
+        }
+
+        // ========================================================================
+        // FUNCIONES DEL MÓDULO DE HISTÓRICOS
+        // ========================================================================
+        
+        async function loadHistoricos() {
+            const content = document.getElementById('moduleContent');
+            const token = localStorage.getItem('violetas_token');
+            
+            content.innerHTML = `
+                <div class="module-content">
+                    <div style="text-align: center; padding: 40px;">
+                        <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                        <p style="margin-top: 15px; color: #666;">Cargando históricos...</p>
+                    </div>
+                </div>
+            `;
+            
+            try {
+                // Obtener filtros de la URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const tipoFiltro = urlParams.get('tipo') || 'todos';
+                const fechaDesdeFiltro = urlParams.get('fecha_desde') || '';
+                const fechaHastaFiltro = urlParams.get('fecha_hasta') || '';
+                const estadoFiltro = urlParams.get('estado') || '';
+                
+                // Construir URL con filtros
+                let url = `${API_URL}/api/v1/historicos`;
+                const params = new URLSearchParams();
+                params.append('tipo', tipoFiltro);
+                if (fechaDesdeFiltro) params.append('fecha_desde', fechaDesdeFiltro);
+                if (fechaHastaFiltro) params.append('fecha_hasta', fechaHastaFiltro);
+                if (estadoFiltro) params.append('estado', estadoFiltro);
+                url += '?' + params.toString();
+                
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    let html = `
+                        <div class="module-content">
+                            <h2 style="color: #667eea; margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+                                <img src="/static/icons/medical/calendar-medical.svg" alt="Históricos" style="width: 32px; height: 32px;"> Históricos de Cobros y Pagos
+                            </h2>
+                            
+                            <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+                                <h3 style="color: #667eea; margin-bottom: 15px;">Filtros</h3>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Tipo</label>
+                                        <select id="filtroTipoHistorico" onchange="aplicarFiltrosHistoricos()" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                            <option value="todos">Todos</option>
+                                            <option value="cobros">Solo Cobros</option>
+                                            <option value="pagos">Solo Pagos</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Fecha Desde</label>
+                                        <input type="date" id="filtroFechaDesde" onchange="aplicarFiltrosHistoricos()" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Fecha Hasta</label>
+                                        <input type="date" id="filtroFechaHasta" onchange="aplicarFiltrosHistoricos()" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                    </div>
+                                    <div>
+                                        <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Estado</label>
+                                        <select id="filtroEstadoHistorico" onchange="aplicarFiltrosHistoricos()" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                            <option value="">Todos</option>
+                                            <option value="pendiente">Pendiente</option>
+                                            <option value="cobrado">Cobrado</option>
+                                            <option value="pagado">Pagado</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                    <button onclick="exportarHistoricos('pdf')" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+                                        <img src="/static/icons/medical/file-medical.svg" alt="PDF" style="width: 18px; height: 18px; filter: brightness(0) invert(1);"> Exportar PDF
+                                    </button>
+                                    <button onclick="exportarHistoricos('excel')" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+                                        <img src="/static/icons/medical/file-medical.svg" alt="Excel" style="width: 18px; height: 18px; filter: brightness(0) invert(1);"> Exportar Excel
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                                <div style="background: #e8f5e9; padding: 15px; border-radius: 8px; border-left: 4px solid #4caf50;">
+                                    <h3 style="color: #2e7d32; margin: 0 0 10px 0;">Cobros a Residentes</h3>
+                                    <p style="font-size: 24px; font-weight: bold; color: #2e7d32; margin: 0;">${data.total_cobros || 0} registros</p>
+                                    <p style="font-size: 18px; color: #2e7d32; margin: 5px 0 0 0;">Total: €${(data.total_cobros_monto || 0).toFixed(2)}</p>
+                                </div>
+                                <div style="background: #fff3e0; padding: 15px; border-radius: 8px; border-left: 4px solid #ff9800;">
+                                    <h3 style="color: #e65100; margin: 0 0 10px 0;">Pagos a Proveedores</h3>
+                                    <p style="font-size: 24px; font-weight: bold; color: #e65100; margin: 0;">${data.total_pagos || 0} registros</p>
+                                    <p style="font-size: 18px; color: #e65100; margin: 5px 0 0 0;">Total: €${(data.total_pagos_monto || 0).toFixed(2)}</p>
+                                </div>
+                            </div>
+                    `;
+                    
+                    // Aplicar valores de filtros DESPUÉS de insertar el HTML
+                    setTimeout(() => {
+                        const filtroTipo = document.getElementById('filtroTipoHistorico');
+                        const filtroFechaDesde = document.getElementById('filtroFechaDesde');
+                        const filtroFechaHasta = document.getElementById('filtroFechaHasta');
+                        const filtroEstado = document.getElementById('filtroEstadoHistorico');
+                        
+                        if (filtroTipo) filtroTipo.value = tipoFiltro;
+                        if (filtroFechaDesde && fechaDesdeFiltro) filtroFechaDesde.value = fechaDesdeFiltro;
+                        if (filtroFechaHasta && fechaHastaFiltro) filtroFechaHasta.value = fechaHastaFiltro;
+                        if (filtroEstado && estadoFiltro) filtroEstado.value = estadoFiltro;
+                    }, 100);
+                    
+                    // Mostrar cobros
+                    if (data.cobros && data.cobros.length > 0) {
+                        html += `
+                            <div style="margin-bottom: 30px;">
+                                <h3 style="color: #667eea; margin-bottom: 15px; padding: 10px; background: #f0f7ff; border-radius: 8px; border-left: 4px solid #667eea;">
+                                    Cobros a Residentes (${data.cobros.length})
+                                </h3>
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Residente</th>
+                                            <th>Monto</th>
+                                            <th>Fecha Pago</th>
+                                            <th>Fecha Prevista</th>
+                                            <th>Estado</th>
+                                            <th>Concepto</th>
+                                            <th>Método Pago</th>
+                                            <th>Residencia</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                        `;
+                        
+                        data.cobros.forEach(cobro => {
+                            const fechaPago = cobro.fecha_pago ? fechaISOToEspanol(cobro.fecha_pago.split('T')[0]) : '-';
+                            const fechaPrevista = cobro.fecha_prevista ? fechaISOToEspanol(cobro.fecha_prevista.split('T')[0]) : '-';
+                            const estadoColor = cobro.estado === 'cobrado' ? '#4caf50' : cobro.estado === 'pendiente' ? '#ff9800' : '#757575';
+                            
+                            html += `
+                                <tr>
+                                    <td>${cobro.residente || '-'}</td>
+                                    <td style="font-weight: bold; color: #2e7d32;">€${cobro.monto.toFixed(2)}</td>
+                                    <td>${fechaPago}</td>
+                                    <td>${fechaPrevista}</td>
+                                    <td><span style="padding: 4px 8px; background: ${estadoColor}; color: white; border-radius: 4px; font-size: 12px;">${cobro.estado || '-'}</span></td>
+                                    <td>${cobro.concepto || '-'}</td>
+                                    <td>${cobro.metodo_pago || '-'}</td>
+                                    <td>${cobro.nombre_residencia || '-'}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    }
+                    
+                    // Mostrar pagos
+                    if (data.pagos && data.pagos.length > 0) {
+                        html += `
+                            <div style="margin-bottom: 30px;">
+                                <h3 style="color: #667eea; margin-bottom: 15px; padding: 10px; background: #f0f7ff; border-radius: 8px; border-left: 4px solid #667eea;">
+                                    Pagos a Proveedores (${data.pagos.length})
+                                </h3>
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Proveedor</th>
+                                            <th>Monto</th>
+                                            <th>Fecha Pago</th>
+                                            <th>Fecha Prevista</th>
+                                            <th>Estado</th>
+                                            <th>Concepto</th>
+                                            <th>Nº Factura</th>
+                                            <th>Residencia</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                        `;
+                        
+                        data.pagos.forEach(pago => {
+                            const fechaPago = pago.fecha_pago ? fechaISOToEspanol(pago.fecha_pago.split('T')[0]) : '-';
+                            const fechaPrevista = pago.fecha_prevista ? fechaISOToEspanol(pago.fecha_prevista.split('T')[0]) : '-';
+                            const estadoColor = pago.estado === 'pagado' ? '#4caf50' : pago.estado === 'pendiente' ? '#ff9800' : '#757575';
+                            
+                            html += `
+                                <tr>
+                                    <td>${pago.proveedor || '-'}</td>
+                                    <td style="font-weight: bold; color: #e65100;">€${pago.monto.toFixed(2)}</td>
+                                    <td>${fechaPago}</td>
+                                    <td>${fechaPrevista}</td>
+                                    <td><span style="padding: 4px 8px; background: ${estadoColor}; color: white; border-radius: 4px; font-size: 12px;">${pago.estado || '-'}</span></td>
+                                    <td>${pago.concepto || '-'}</td>
+                                    <td>${pago.numero_factura || '-'}</td>
+                                    <td>${pago.nombre_residencia || '-'}</td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    }
+                    
+                    if ((!data.cobros || data.cobros.length === 0) && (!data.pagos || data.pagos.length === 0)) {
+                        html += '<p style="color: #666; text-align: center; padding: 40px;">No hay registros históricos para los filtros seleccionados.</p>';
+                    }
+                    
+                    html += '</div>';
+                    content.innerHTML = html;
+                } else {
+                    const error = await response.json();
+                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: ${error.error || 'Error desconocido'}</p></div>`;
+                }
+            } catch (error) {
+                console.error('Error al cargar históricos:', error);
+                content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}</p></div>`;
+            }
+        }
+        
+        function aplicarFiltrosHistoricos() {
+            const tipo = document.getElementById('filtroTipoHistorico').value;
+            const fechaDesde = document.getElementById('filtroFechaDesde').value;
+            const fechaHasta = document.getElementById('filtroFechaHasta').value;
+            const estado = document.getElementById('filtroEstadoHistorico').value;
+            
+            // Actualizar URL sin recargar página
+            const params = new URLSearchParams();
+            params.append('tipo', tipo);
+            if (fechaDesde) params.append('fecha_desde', fechaDesde);
+            if (fechaHasta) params.append('fecha_hasta', fechaHasta);
+            if (estado) params.append('estado', estado);
+            
+            window.history.pushState({}, '', params.toString() ? `?${params.toString()}` : window.location.pathname);
+            
+            // Recargar históricos con filtros
+            loadHistoricos();
+        }
+        
+        async function exportarHistoricos(formato) {
+            const tipo = document.getElementById('filtroTipoHistorico').value;
+            const fechaDesde = document.getElementById('filtroFechaDesde').value;
+            const fechaHasta = document.getElementById('filtroFechaHasta').value;
+            const estado = document.getElementById('filtroEstadoHistorico').value;
+            
+            let url = `${API_URL}/api/v1/historicos?exportar=${formato}`;
+            const params = new URLSearchParams();
+            params.append('tipo', tipo);
+            if (fechaDesde) params.append('fecha_desde', fechaDesde);
+            if (fechaHasta) params.append('fecha_hasta', fechaHasta);
+            if (estado) params.append('estado', estado);
+            url += '&' + params.toString();
+            
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = `historicos_${new Date().toISOString().split('T')[0]}.${formato === 'pdf' ? 'pdf' : 'xlsx'}`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(downloadUrl);
+                } else {
+                    const error = await response.json();
+                    alert('Error al exportar: ' + (error.error || 'Error desconocido'));
+                }
+            } catch (error) {
+                console.error('Error al exportar:', error);
+                alert('Error de conexión: ' + error.message);
             }
         }
 

@@ -59,13 +59,14 @@ def get_db_connection():
         raise ValueError(f"Faltan variables de entorno requeridas: {', '.join(missing)}")
     
     try:
-        # Crear conexión
+        # Crear conexión con codificación UTF-8 explícita
         connection = psycopg2.connect(
             host=db_host,
             database=db_name,
             user=db_user,
             password=db_password,
-            port=db_port
+            port=db_port,
+            client_encoding='UTF8'  # Asegurar codificación UTF-8 para caracteres especiales (ñ, acentos, etc.)
         )
         return connection
     except OperationalError as e:
