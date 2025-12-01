@@ -1184,7 +1184,7 @@
                 <input type="hidden" id="cobro_id_pago" name="id_pago" value="">
                 <!-- SECCIÓN: Información del Cobro -->
                 <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
-                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">💳 Información del Cobro</h3>
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/bill.svg" alt="Cobro" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;"> Información del Cobro</h3>
                     <div class="form-group">
                         <label for="cobro_id_residente">Residente *</label>
                         <select id="cobro_id_residente" name="id_residente" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
@@ -1308,7 +1308,7 @@
                 
                 <!-- SECCIÓN: Información del Pago -->
                 <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
-                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">💳 Información del Pago</h3>
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/money.svg" alt="Pago" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;"> Información del Pago</h3>
                     <div class="form-group">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                             <label for="pago_id_proveedor">Proveedor *</label>
@@ -2997,6 +2997,25 @@
                 document.getElementById('cobro_fecha_prevista').value = fecha_prevista_es;
             }
             
+            // Si el concepto es "Pago mensual habitación", generar el concepto basado en la fecha prevista
+            if (concepto === 'Pago mensual habitación' && fecha_prevista_es) {
+                const mesesEspanol = {
+                    1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+                    5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+                    9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+                };
+                
+                const partes = fecha_prevista_es.split('/');
+                if (partes.length === 3) {
+                    const mes = parseInt(partes[1]);
+                    const año = parseInt(partes[2]);
+                    const nombreMes = mesesEspanol[mes] || 'mes';
+                    // Formato: "Diciembre 25", "Enero 26" (solo mes y año, sin "Pago")
+                    const añoCorto = año.toString().slice(-2); // Últimos 2 dígitos del año
+                    concepto = `${nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)} ${añoCorto}`;
+                }
+            }
+            
             // Determinar si es cobro previsto: si NO tiene fecha_pago, es previsto
             const es_cobro_previsto = !fecha_pago_es || fecha_pago_es.trim() === '';
             
@@ -3152,26 +3171,44 @@
                     // Establecer el concepto en el select o en "otros"
                     const selectConcepto = document.getElementById('cobro_concepto');
                     const campoOtros = document.getElementById('cobro_concepto_otros');
-                    const concepto = cobro.concepto || '';
+                    let concepto = cobro.concepto || '';
                     
                     // Cargar servicios extra del residente para tener todas las opciones disponibles
                     await cargarServiciosExtraResidente(idResidenteSeleccionado);
                     
-                    // Verificar si el concepto está en las opciones del select
-                    const opciones = Array.from(selectConcepto.options).map(opt => opt.value);
-                    if (opciones.includes(concepto)) {
-                        selectConcepto.value = concepto;
+                    // Verificar si el concepto es un pago mensual (formato: "[Mes] [Año]" o "Pago [Mes] [Año]")
+                    // Ejemplos: "Enero 26", "Diciembre 25", "Pago Enero 26", etc.
+                    const mesesEspanol = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
+                                        'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+                    const conceptoLower = concepto.toLowerCase();
+                    // Puede empezar con "pago " o directamente con el mes
+                    const esPagoMensual = concepto && mesesEspanol.some(mes => {
+                        return conceptoLower.startsWith(mes) || 
+                               (conceptoLower.startsWith('pago ') && conceptoLower.includes(mes));
+                    });
+                    
+                    if (esPagoMensual) {
+                        // Si es un pago mensual, seleccionar "Pago mensual habitación"
+                        selectConcepto.value = 'Pago mensual habitación';
                         campoOtros.style.display = 'none';
                         campoOtros.value = '';
-                    } else if (concepto) {
-                        // Si no está en las opciones, usar "otros"
-                        selectConcepto.value = 'otros';
-                        campoOtros.style.display = 'block';
-                        campoOtros.value = concepto;
                     } else {
-                        selectConcepto.value = '';
-                        campoOtros.style.display = 'none';
-                        campoOtros.value = '';
+                        // Verificar si el concepto está en las opciones del select
+                        const opciones = Array.from(selectConcepto.options).map(opt => opt.value);
+                        if (opciones.includes(concepto)) {
+                            selectConcepto.value = concepto;
+                            campoOtros.style.display = 'none';
+                            campoOtros.value = '';
+                        } else if (concepto) {
+                            // Si no está en las opciones, usar "otros"
+                            selectConcepto.value = 'otros';
+                            campoOtros.style.display = 'block';
+                            campoOtros.value = concepto;
+                        } else {
+                            selectConcepto.value = '';
+                            campoOtros.style.display = 'none';
+                            campoOtros.value = '';
+                        }
                     }
                     
                     document.getElementById('cobro_metodo_pago').value = cobro.metodo_pago || '';

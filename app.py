@@ -1157,7 +1157,9 @@ def crear_residente():
                         9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
                     }
                     nombre_mes = meses_espanol.get(siguiente_mes.month, 'mes')
-                    concepto = f"Pago {nombre_mes} {siguiente_mes.year}"
+                    # Formato: "Diciembre 25", "Enero 26" (solo mes y año corto, sin "Pago")
+                    año_corto = str(siguiente_mes.year)[-2:]  # Últimos 2 dígitos
+                    concepto = f"{nombre_mes.capitalize()} {año_corto}"
                     metodo_pago = data.get('metodo_pago_preferido') or 'transferencia'
                     
                     # Verificar si ya existe un cobro para el mes siguiente con concepto "Pago [mes]"
@@ -1167,7 +1169,11 @@ def crear_residente():
                         WHERE id_residente = %s 
                           AND id_residencia = %s
                           AND mes_pagado = %s
-                          AND concepto ILIKE 'Pago %%'
+                          AND (concepto ILIKE 'enero %%' OR concepto ILIKE 'febrero %%' OR concepto ILIKE 'marzo %%' 
+                               OR concepto ILIKE 'abril %%' OR concepto ILIKE 'mayo %%' OR concepto ILIKE 'junio %%'
+                               OR concepto ILIKE 'julio %%' OR concepto ILIKE 'agosto %%' OR concepto ILIKE 'septiembre %%'
+                               OR concepto ILIKE 'octubre %%' OR concepto ILIKE 'noviembre %%' OR concepto ILIKE 'diciembre %%'
+                               OR concepto ILIKE 'Pago %%')
                     """, (id_residente, id_residencia, mes_siguiente_str))
                     
                     if not cursor.fetchone():
@@ -1609,7 +1615,11 @@ def actualizar_residente(id_residente):
                         WHERE id_residente = %s 
                           AND id_residencia = %s
                           AND mes_pagado = %s
-                          AND concepto ILIKE 'Pago %%'
+                          AND (concepto ILIKE 'enero %%' OR concepto ILIKE 'febrero %%' OR concepto ILIKE 'marzo %%' 
+                               OR concepto ILIKE 'abril %%' OR concepto ILIKE 'mayo %%' OR concepto ILIKE 'junio %%'
+                               OR concepto ILIKE 'julio %%' OR concepto ILIKE 'agosto %%' OR concepto ILIKE 'septiembre %%'
+                               OR concepto ILIKE 'octubre %%' OR concepto ILIKE 'noviembre %%' OR concepto ILIKE 'diciembre %%'
+                               OR concepto ILIKE 'Pago %%')
                     """, (id_residente, id_residencia_final, mes_siguiente_str))
                     
                     if not cursor.fetchone():
@@ -1620,7 +1630,9 @@ def actualizar_residente(id_residente):
                             9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
                         }
                         nombre_mes = meses_espanol.get(siguiente_mes.month, 'mes')
-                        concepto = f"Pago {nombre_mes} {siguiente_mes.year}"
+                        # Formato: "Diciembre 25", "Enero 26" (solo mes y año corto, sin "Pago")
+                    año_corto = str(siguiente_mes.year)[-2:]  # Últimos 2 dígitos
+                    concepto = f"{nombre_mes.capitalize()} {año_corto}"
                         metodo_pago = metodo_pago_actual or 'transferencia'
                         
                         cursor.execute("""
@@ -1848,7 +1860,9 @@ def listar_cobros():
                 9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
             }
             nombre_mes = meses_espanol.get(siguiente_mes.month, 'mes')
-            concepto_siguiente = f"Pago {nombre_mes} {siguiente_mes.year}"
+            # Formato: "Diciembre 25", "Enero 26" (solo mes y año corto, sin "Pago")
+            año_corto = str(siguiente_mes.year)[-2:]  # Últimos 2 dígitos
+            concepto_siguiente = f"{nombre_mes.capitalize()} {año_corto}"
             
             # Identificar residentes con cobros completados pero sin cobro pendiente para el mes siguiente
             # Obtener residentes activos con costo_habitacion que tienen cobros completados
@@ -1874,7 +1888,11 @@ def listar_cobros():
                               WHERE p2.id_residente = r.id_residente
                                 AND p2.id_residencia = r.id_residencia
                                 AND p2.mes_pagado = %s
-                                AND p2.concepto ILIKE 'Pago %%'
+                                AND (p2.concepto ILIKE 'enero %%' OR p2.concepto ILIKE 'febrero %%' OR p2.concepto ILIKE 'marzo %%' 
+                                     OR p2.concepto ILIKE 'abril %%' OR p2.concepto ILIKE 'mayo %%' OR p2.concepto ILIKE 'junio %%'
+                                     OR p2.concepto ILIKE 'julio %%' OR p2.concepto ILIKE 'agosto %%' OR p2.concepto ILIKE 'septiembre %%'
+                                     OR p2.concepto ILIKE 'octubre %%' OR p2.concepto ILIKE 'noviembre %%' OR p2.concepto ILIKE 'diciembre %%'
+                                     OR p2.concepto ILIKE 'Pago %%')
                           )
                     """
                     cursor.execute(query_residentes, list(params) + [mes_siguiente_str])
@@ -2054,24 +2072,68 @@ def crear_cobro():
                 else:
                     estado_final = 'pendiente'
             
-            # Prevenir duplicados: Si el concepto empieza con "Pago", verificar que no exista otro cobro
-            # con el mismo id_residente, mes_pagado y concepto "Pago [mes]"
+            # Convertir "Pago mensual habitación" a formato "Pago [Mes] [Año]" basándose en fecha_prevista o mes_pagado
             concepto = data.get('concepto', '')
             mes_pagado = data.get('mes_pagado')
+            fecha_prevista = data.get('fecha_prevista')
             
-            if concepto and concepto.strip().lower().startswith('pago') and mes_pagado:
+            if concepto and concepto.strip() == 'Pago mensual habitación':
+                meses_espanol = {
+                    1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+                    5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+                    9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+                }
+                
+                mes = None
+                año = None
+                
+                if mes_pagado:
+                    # mes_pagado está en formato 'YYYY-MM'
+                    partes = mes_pagado.split('-')
+                    if len(partes) == 2:
+                        año = int(partes[0])
+                        mes = int(partes[1])
+                elif fecha_prevista:
+                    # fecha_prevista puede ser string ISO o date
+                    if isinstance(fecha_prevista, str):
+                        try:
+                            fecha = datetime.strptime(fecha_prevista, '%Y-%m-%d')
+                            año = fecha.year
+                            mes = fecha.month
+                        except:
+                            pass
+                    else:
+                        año = fecha_prevista.year
+                        mes = fecha_prevista.month
+                
+                if mes and año:
+                    nombre_mes = meses_espanol.get(mes, 'mes')
+                    # Formato: "Diciembre 25", "Enero 26" (solo mes y año corto, sin "Pago")
+                    año_corto = str(año)[-2:]  # Últimos 2 dígitos
+                    concepto = f"{nombre_mes.capitalize()} {año_corto}"
+            
+            # Prevenir duplicados: Si el concepto es un mes (pago mensual de habitación), verificar que no exista otro cobro
+            # con el mismo id_residente, mes_pagado y concepto de mes
+            meses_espanol_list = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
+                                  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+            es_concepto_mensual = concepto and any(concepto.lower().startswith(mes) for mes in meses_espanol_list)
+            if es_concepto_mensual and mes_pagado:
                 cursor.execute("""
                     SELECT id_pago FROM pago_residente
                     WHERE id_residente = %s 
                       AND id_residencia = %s
                       AND mes_pagado = %s
-                      AND concepto ILIKE 'Pago %%'
+                      AND (concepto ILIKE 'enero %%' OR concepto ILIKE 'febrero %%' OR concepto ILIKE 'marzo %%' 
+                           OR concepto ILIKE 'abril %%' OR concepto ILIKE 'mayo %%' OR concepto ILIKE 'junio %%'
+                           OR concepto ILIKE 'julio %%' OR concepto ILIKE 'agosto %%' OR concepto ILIKE 'septiembre %%'
+                           OR concepto ILIKE 'octubre %%' OR concepto ILIKE 'noviembre %%' OR concepto ILIKE 'diciembre %%'
+                           OR concepto ILIKE 'Pago %%')
                 """, (id_residente, id_residencia_cobro, mes_pagado))
                 
                 cobro_duplicado = cursor.fetchone()
                 if cobro_duplicado:
                     return jsonify({
-                        'error': f'Ya existe un cobro de habitación para este residente en el mes {mes_pagado}. No se pueden crear cobros duplicados con concepto "Pago [mes]".'
+                        'error': f'Ya existe un cobro de habitación para este residente en el mes {mes_pagado}. No se pueden crear cobros duplicados con concepto de mes.'
                     }), 400
             
             cursor.execute("""
@@ -2275,7 +2337,11 @@ def generar_cobros_previstos():
                     WHERE id_residente = %s 
                       AND id_residencia = %s
                       AND mes_pagado = %s
-                      AND concepto ILIKE 'Pago %%'
+                      AND (concepto ILIKE 'enero %%' OR concepto ILIKE 'febrero %%' OR concepto ILIKE 'marzo %%' 
+                           OR concepto ILIKE 'abril %%' OR concepto ILIKE 'mayo %%' OR concepto ILIKE 'junio %%'
+                           OR concepto ILIKE 'julio %%' OR concepto ILIKE 'agosto %%' OR concepto ILIKE 'septiembre %%'
+                           OR concepto ILIKE 'octubre %%' OR concepto ILIKE 'noviembre %%' OR concepto ILIKE 'diciembre %%'
+                           OR concepto ILIKE 'Pago %%')
                 """, (id_residente, residencia_del_residente, mes_siguiente_str))
                 
                 cobro_existente = cursor.fetchone()
@@ -2587,7 +2653,11 @@ def ultimos_cobros_completados():
                     JOIN residente r ON p.id_residente = r.id_residente
                     WHERE p.estado = 'cobrado'
                       AND p.fecha_pago IS NOT NULL
-                      AND (p.concepto ILIKE 'Pago %%' OR p.concepto ILIKE 'Pago mensual%%')
+                      AND (p.concepto ILIKE 'enero %%' OR p.concepto ILIKE 'febrero %%' OR p.concepto ILIKE 'marzo %%' 
+                           OR p.concepto ILIKE 'abril %%' OR p.concepto ILIKE 'mayo %%' OR p.concepto ILIKE 'junio %%'
+                           OR p.concepto ILIKE 'julio %%' OR p.concepto ILIKE 'agosto %%' OR p.concepto ILIKE 'septiembre %%'
+                           OR p.concepto ILIKE 'octubre %%' OR p.concepto ILIKE 'noviembre %%' OR p.concepto ILIKE 'diciembre %%'
+                           OR p.concepto ILIKE 'Pago %%' OR p.concepto ILIKE 'Pago mensual%%')
                     ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
                 """
                 cursor.execute(query_mensual)
@@ -2600,7 +2670,13 @@ def ultimos_cobros_completados():
                     JOIN residente r ON p.id_residente = r.id_residente
                     WHERE p.estado = 'cobrado'
                       AND p.fecha_pago IS NOT NULL
-                      AND (p.concepto IS NULL OR (p.concepto NOT ILIKE 'Pago %%' AND p.concepto NOT ILIKE 'Pago mensual%%'))
+                      AND (p.concepto IS NULL OR (p.concepto NOT ILIKE 'enero %%' AND p.concepto NOT ILIKE 'febrero %%' 
+                           AND p.concepto NOT ILIKE 'marzo %%' AND p.concepto NOT ILIKE 'abril %%' 
+                           AND p.concepto NOT ILIKE 'mayo %%' AND p.concepto NOT ILIKE 'junio %%'
+                           AND p.concepto NOT ILIKE 'julio %%' AND p.concepto NOT ILIKE 'agosto %%' 
+                           AND p.concepto NOT ILIKE 'septiembre %%' AND p.concepto NOT ILIKE 'octubre %%' 
+                           AND p.concepto NOT ILIKE 'noviembre %%' AND p.concepto NOT ILIKE 'diciembre %%'
+                           AND p.concepto NOT ILIKE 'Pago %%' AND p.concepto NOT ILIKE 'Pago mensual%%'))
                     ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
                 """
                 cursor.execute(query_extra)
@@ -2619,7 +2695,11 @@ def ultimos_cobros_completados():
                     WHERE p.id_residencia IN ({placeholders})
                       AND p.estado = 'cobrado'
                       AND p.fecha_pago IS NOT NULL
-                      AND (p.concepto ILIKE 'Pago %%' OR p.concepto ILIKE 'Pago mensual%%')
+                      AND (p.concepto ILIKE 'enero %%' OR p.concepto ILIKE 'febrero %%' OR p.concepto ILIKE 'marzo %%' 
+                           OR p.concepto ILIKE 'abril %%' OR p.concepto ILIKE 'mayo %%' OR p.concepto ILIKE 'junio %%'
+                           OR p.concepto ILIKE 'julio %%' OR p.concepto ILIKE 'agosto %%' OR p.concepto ILIKE 'septiembre %%'
+                           OR p.concepto ILIKE 'octubre %%' OR p.concepto ILIKE 'noviembre %%' OR p.concepto ILIKE 'diciembre %%'
+                           OR p.concepto ILIKE 'Pago %%' OR p.concepto ILIKE 'Pago mensual%%')
                     ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
                 """
                 cursor.execute(query_mensual, tuple(g.residencias_acceso))
@@ -2633,7 +2713,13 @@ def ultimos_cobros_completados():
                     WHERE p.id_residencia IN ({placeholders})
                       AND p.estado = 'cobrado'
                       AND p.fecha_pago IS NOT NULL
-                      AND (p.concepto IS NULL OR (p.concepto NOT ILIKE 'Pago %%' AND p.concepto NOT ILIKE 'Pago mensual%%'))
+                      AND (p.concepto IS NULL OR (p.concepto NOT ILIKE 'enero %%' AND p.concepto NOT ILIKE 'febrero %%' 
+                           AND p.concepto NOT ILIKE 'marzo %%' AND p.concepto NOT ILIKE 'abril %%' 
+                           AND p.concepto NOT ILIKE 'mayo %%' AND p.concepto NOT ILIKE 'junio %%'
+                           AND p.concepto NOT ILIKE 'julio %%' AND p.concepto NOT ILIKE 'agosto %%' 
+                           AND p.concepto NOT ILIKE 'septiembre %%' AND p.concepto NOT ILIKE 'octubre %%' 
+                           AND p.concepto NOT ILIKE 'noviembre %%' AND p.concepto NOT ILIKE 'diciembre %%'
+                           AND p.concepto NOT ILIKE 'Pago %%' AND p.concepto NOT ILIKE 'Pago mensual%%'))
                     ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
                 """
                 cursor.execute(query_extra, tuple(g.residencias_acceso))
@@ -2756,17 +2842,18 @@ def obtener_cobro(id_pago):
             resultado = {
                 'id_pago': cobro[0],
                 'id_residente': cobro[1],
-                'residente': cobro[2],
-                'monto': float(cobro[3]),
-                'fecha_pago': str(cobro[4]) if cobro[4] else None,
-                'fecha_prevista': str(cobro[5]) if cobro[5] else None,
-                'mes_pagado': cobro[6],
-                'concepto': cobro[7],
-                'metodo_pago': cobro[8],
-                'estado': cobro[9],
-                'es_cobro_previsto': cobro[10],
-                'observaciones': cobro[11],
-                'fecha_creacion': cobro[12].isoformat() if cobro[12] else None
+                'id_residencia': cobro[2],
+                'residente': cobro[3],  # COALESCE(r.nombre || ' ' || r.apellido, ...)
+                'monto': float(cobro[4]),  # p.monto
+                'fecha_pago': str(cobro[5]) if cobro[5] else None,  # p.fecha_pago
+                'fecha_prevista': str(cobro[6]) if cobro[6] else None,  # p.fecha_prevista
+                'mes_pagado': cobro[7],  # p.mes_pagado
+                'concepto': cobro[8],  # p.concepto
+                'metodo_pago': cobro[9],  # p.metodo_pago
+                'estado': cobro[10],  # p.estado
+                'es_cobro_previsto': cobro[11],  # p.es_cobro_previsto
+                'observaciones': cobro[12],  # p.observaciones
+                'fecha_creacion': cobro[13].isoformat() if cobro[13] else None  # p.fecha_creacion
             }
             
             return jsonify(resultado), 200
@@ -2780,6 +2867,126 @@ def obtener_cobro(id_pago):
         import traceback
         app.logger.error(traceback.format_exc())
         return jsonify({'error': 'Error al obtener cobro', 'details': str(e)}), 500
+
+
+@app.route('/api/v1/facturacion/cobros/normalizar-conceptos', methods=['POST'])
+def normalizar_conceptos_cobros():
+    """
+    Normaliza los conceptos de cobros existentes:
+    - Convierte "Pago mensual habitación" o "Pago [Mes] [Año]" a formato "[Mes] [Año corto]"
+    - Ejemplos: "Pago Diciembre 2025" → "Diciembre 25", "Pago mensual habitación" → "Diciembre 25"
+    - Basándose en mes_pagado o fecha_prevista
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            meses_espanol = {
+                1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+                5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+                9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+            }
+            
+            # Obtener cobros con conceptos que necesitan normalización
+            # Buscar conceptos que sean "Pago mensual habitación" o "Pago [mes] [año completo]" 
+            # y convertirlos a formato "[Mes] [año corto]" (ej: "Diciembre 25")
+            cursor.execute("""
+                SELECT id_pago, concepto, mes_pagado, fecha_prevista, fecha_pago
+                FROM pago_residente
+                WHERE concepto ILIKE 'Pago mensual%%' 
+                   OR concepto ILIKE 'mensual habitación%%'
+                   OR concepto = 'Pago mensual habitación'
+                   OR (concepto ILIKE 'Pago %%' AND concepto NOT SIMILAR TO 'Pago (enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre) [0-9]{2}')
+                   OR (concepto ILIKE 'Pago %%' AND concepto SIMILAR TO 'Pago (enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre) [0-9]{4}')
+            """)
+            
+            cobros_a_normalizar = cursor.fetchall()
+            actualizados = 0
+            errores = []
+            
+            for cobro in cobros_a_normalizar:
+                id_pago = cobro[0]
+                concepto_actual = cobro[1]
+                mes_pagado = cobro[2]
+                fecha_prevista = cobro[3]
+                fecha_pago = cobro[4]
+                
+                # Determinar mes y año
+                mes = None
+                año = None
+                
+                if mes_pagado:
+                    # mes_pagado está en formato 'YYYY-MM'
+                    partes = mes_pagado.split('-')
+                    if len(partes) == 2:
+                        año = int(partes[0])
+                        mes = int(partes[1])
+                elif fecha_prevista:
+                    # fecha_prevista es date
+                    if isinstance(fecha_prevista, str):
+                        try:
+                            fecha = datetime.strptime(fecha_prevista, '%Y-%m-%d')
+                            año = fecha.year
+                            mes = fecha.month
+                        except:
+                            pass
+                    else:
+                        año = fecha_prevista.year
+                        mes = fecha_prevista.month
+                elif fecha_pago:
+                    # fecha_pago es date
+                    if isinstance(fecha_pago, str):
+                        try:
+                            fecha = datetime.strptime(fecha_pago, '%Y-%m-%d')
+                            año = fecha.year
+                            mes = fecha.month
+                        except:
+                            pass
+                    else:
+                        año = fecha_pago.year
+                        mes = fecha_pago.month
+                
+                if mes and año:
+                    nombre_mes = meses_espanol.get(mes, 'mes')
+                    # Formato: "Diciembre 25", "Enero 26" (solo mes y año corto, sin "Pago")
+                    año_corto = str(año)[-2:]  # Últimos 2 dígitos
+                    concepto_nuevo = f"{nombre_mes.capitalize()} {año_corto}"
+                    
+                    try:
+                        cursor.execute("""
+                            UPDATE pago_residente
+                            SET concepto = %s
+                            WHERE id_pago = %s
+                        """, (concepto_nuevo, id_pago))
+                        actualizados += 1
+                    except Exception as e:
+                        errores.append(f"Error al actualizar cobro {id_pago}: {str(e)}")
+                else:
+                    errores.append(f"Cobro {id_pago}: No se pudo determinar mes/año")
+            
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': f'Conceptos normalizados exitosamente',
+                'actualizados': actualizados,
+                'total_revisados': len(cobros_a_normalizar),
+                'errores': errores if errores else None
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al normalizar conceptos: {str(e)}")
+            import traceback
+            app.logger.error(traceback.format_exc())
+            return jsonify({'error': 'Error al normalizar conceptos', 'details': str(e)}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
 
 
 @app.route('/api/v1/facturacion/cobros/<int:id_pago>', methods=['PUT'])
