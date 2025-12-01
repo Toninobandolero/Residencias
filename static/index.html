@@ -1857,14 +1857,38 @@
                 }
                 
                 if (response.ok) {
+                    // Cargar residencias desde la API para obtener nombres reales
+                    let residenciasMap = {};
+                    try {
+                        const residenciasResponse = await fetch(`${API_URL}/api/v1/residencias`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (residenciasResponse.ok) {
+                            const residenciasData = await residenciasResponse.json();
+                            residenciasData.residencias.forEach(res => {
+                                residenciasMap[res.id_residencia] = res.nombre;
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error al cargar residencias:', error);
+                        // Fallback a nombres por defecto
+                        residenciasMap[1] = 'Violetas 1';
+                        residenciasMap[2] = 'Violetas 2';
+                    }
+                    
                     // Separar residentes activos e inactivos
                     const residentesActivos = (data.residentes || []).filter(r => r.activo);
                     const residentesInactivos = (data.residentes || []).filter(r => !r.activo);
                     
-                    // Agrupar residentes activos por residencia
-                    const residentesVioletas1 = residentesActivos.filter(r => r.id_residencia === 1);
-                    const residentesVioletas2 = residentesActivos.filter(r => r.id_residencia === 2);
-                    const residentesOtrasResidencias = residentesActivos.filter(r => r.id_residencia !== 1 && r.id_residencia !== 2);
+                    // Agrupar residentes activos por residencia usando nombres reales
+                    const residentesPorResidencia = {};
+                    residentesActivos.forEach(res => {
+                        const residenciaId = res.id_residencia;
+                        if (!residentesPorResidencia[residenciaId]) {
+                            residentesPorResidencia[residenciaId] = [];
+                        }
+                        residentesPorResidencia[residenciaId].push(res);
+                    });
                     
                     let html = `
                         <div class="module-content">
@@ -1872,16 +1896,26 @@
                             <button class="add-btn" onclick="openModal('modalResidente')" style="display: inline-flex; align-items: center; gap: 6px;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Residente</button>
                     `;
                     
-                    // Contenedor para Violetas 1
-                    if (residentesVioletas1.length > 0) {
+                    // Colores para diferentes residencias
+                    const coloresResidencias = {
+                        1: '#667eea',
+                        2: '#48bb78'
+                    };
+                    
+                    // Mostrar todas las residencias con sus nombres reales
+                    Object.keys(residentesPorResidencia).sort((a, b) => parseInt(a) - parseInt(b)).forEach(residenciaId => {
+                        const residentesResidencia = residentesPorResidencia[residenciaId];
+                        const nombreResidencia = residenciasMap[residenciaId] || residentesResidencia[0]?.nombre_residencia || `Residencia ${residenciaId}`;
+                        const color = coloresResidencias[residenciaId] || '#718096';
+                        
                         html += `
-                            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #667eea;">
-                                <h4 style="color: #667eea; margin-bottom: 15px; font-size: 18px; font-weight: 600;">Violetas 1 (${residentesVioletas1.length})</h4>
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
+                            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid ${color};">
+                                <h4 style="color: ${color}; margin-bottom: 15px; font-size: 18px; font-weight: 600;">${nombreResidencia} (${residentesResidencia.length})</h4>
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
                                             <th>Habitación</th>
-                                        <th>Nombre</th>
+                                            <th>Nombre</th>
                                             <th>Contacto de Emergencia</th>
                                             <th>Teléfono de Emergencia</th>
                                         </tr>
@@ -1889,7 +1923,7 @@
                                     <tbody>
                         `;
                         
-                        residentesVioletas1.forEach(res => {
+                        residentesResidencia.forEach(res => {
                             html += `
                                 <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
                                     <td>${res.habitacion || '-'}</td>
@@ -1904,113 +1938,15 @@
                                     </tbody>
                                     <tfoot>
                                         <tr style="background: white; font-weight: 600;">
-                                            <td colspan="4" style="padding: 10px; text-align: right; color: #667eea; border-top: 2px solid #e0e0e0;">
-                                                Total: ${residentesVioletas1.length}
+                                            <td colspan="4" style="padding: 10px; text-align: right; color: ${color}; border-top: 2px solid #e0e0e0;">
+                                                Total: ${residentesResidencia.length}
                                             </td>
                                         </tr>
                                     </tfoot>
                                 </table>
                             </div>
                         `;
-                    }
-                    
-                    // Contenedor para Violetas 2
-                    if (residentesVioletas2.length > 0) {
-                        html += `
-                            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #48bb78;">
-                                <h4 style="color: #48bb78; margin-bottom: 15px; font-size: 18px; font-weight: 600;">Violetas 2 (${residentesVioletas2.length})</h4>
-                                <table class="data-table">
-                                    <thead>
-                                        <tr>
-                                        <th>Habitación</th>
-                                            <th>Nombre</th>
-                                            <th>Contacto de Emergencia</th>
-                                            <th>Teléfono de Emergencia</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                        `;
-                        
-                        residentesVioletas2.forEach(res => {
-                            html += `
-                                <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
-                                    <td>${res.habitacion || '-'}</td>
-                                    <td>${res.nombre} ${res.apellido}</td>
-                                    <td>${res.contacto_emergencia || '-'}</td>
-                                    <td>${res.telefono_emergencia || '-'}</td>
-                                </tr>
-                            `;
-                        });
-                        
-                        html += `
-                                    </tbody>
-                                    <tfoot>
-                                        <tr style="background: white; font-weight: 600;">
-                                            <td colspan="4" style="padding: 10px; text-align: right; color: #48bb78; border-top: 2px solid #e0e0e0;">
-                                                Total: ${residentesVioletas2.length}
-                                            </td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
-                        `;
-                    }
-                    
-                    // Otras residencias (por si hay más en el futuro)
-                    if (residentesOtrasResidencias.length > 0) {
-                        const residenciasAgrupadas = {};
-                        residentesOtrasResidencias.forEach(res => {
-                            const residenciaId = res.id_residencia;
-                            if (!residenciasAgrupadas[residenciaId]) {
-                                residenciasAgrupadas[residenciaId] = [];
-                            }
-                            residenciasAgrupadas[residenciaId].push(res);
-                        });
-                        
-                        Object.keys(residenciasAgrupadas).forEach(residenciaId => {
-                            const residentesResidencia = residenciasAgrupadas[residenciaId];
-                            const nombreResidencia = residentesResidencia[0].nombre_residencia || `Residencia ${residenciaId}`;
-                            
-                            html += `
-                                <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid #718096;">
-                                    <h4 style="color: #718096; margin-bottom: 15px; font-size: 18px; font-weight: 600;">${nombreResidencia} (${residentesResidencia.length})</h4>
-                                    <table class="data-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Habitación</th>
-                                                <th>Nombre</th>
-                                                <th>Contacto de Emergencia</th>
-                                                <th>Teléfono de Emergencia</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                            `;
-                            
-                            residentesResidencia.forEach(res => {
-                                html += `
-                                    <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
-                                    <td>${res.habitacion || '-'}</td>
-                                        <td>${res.nombre} ${res.apellido}</td>
-                                        <td>${res.contacto_emergencia || '-'}</td>
-                                        <td>${res.telefono_emergencia || '-'}</td>
-                                </tr>
-                            `;
-                        });
-                        
-                            html += `
-                                        </tbody>
-                                        <tfoot>
-                                            <tr style="background: white; font-weight: 600;">
-                                                <td colspan="4" style="padding: 10px; text-align: right; color: #718096; border-top: 2px solid #e0e0e0;">
-                                                    Total: ${residentesResidencia.length}
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                            `;
-                        });
-                    }
+                    });
                     
                     if (residentesActivos.length === 0) {
                         html += '<p style="margin-top: 20px;">No hay residentes activos registrados.</p>';
@@ -2019,20 +1955,26 @@
                     // Lista de residentes inactivos (usuarios de baja)
                     if (residentesInactivos.length > 0) {
                         // Agrupar residentes inactivos por residencia
-                        const inactivosVioletas1 = residentesInactivos.filter(r => r.id_residencia === 1);
-                        const inactivosVioletas2 = residentesInactivos.filter(r => r.id_residencia === 2);
-                        const inactivosOtrasResidencias = residentesInactivos.filter(r => r.id_residencia !== 1 && r.id_residencia !== 2);
+                        const inactivosPorResidencia = {};
+                        residentesInactivos.forEach(res => {
+                            const residenciaId = res.id_residencia;
+                            if (!inactivosPorResidencia[residenciaId]) {
+                                inactivosPorResidencia[residenciaId] = [];
+                            }
+                            inactivosPorResidencia[residenciaId].push(res);
+                        });
                         
                         html += `
                             <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #e0e0e0;">
                                 <h3 style="color: #dc3545; margin-bottom: 20px;"><img src="/static/icons/medical/user-x.svg" alt="Bajas" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Usuarios de Baja (${residentesInactivos.length})</h3>
                         `;
                         
-                        // Contenedor para Violetas 1 - Inactivos
-                        if (inactivosVioletas1.length > 0) {
+                        // Mostrar todas las residencias inactivas con sus nombres reales
+                        Object.keys(inactivosPorResidencia).sort((a, b) => parseInt(a) - parseInt(b)).forEach(residenciaId => {
+                            const residentesResidencia = inactivosPorResidencia[residenciaId];
+                            const nombreResidencia = residenciasMap[residenciaId] || residentesResidencia[0]?.nombre_residencia || `Residencia ${residenciaId}`;
+                            
                             html += `
-                                <div style="margin-top: 20px; padding: 20px; background: #fff5f5; border-radius: 10px; border-left: 4px solid #dc3545;">
-                                    <h4 style="color: #dc3545; margin-bottom: 15px; font-size: 18px; font-weight: 600;">Violetas 1 (${inactivosVioletas1.length})</h4>
                                     <table class="data-table">
                                         <thead>
                                             <tr>
@@ -2045,16 +1987,7 @@
                                         <tbody>
                             `;
                             
-                            inactivosVioletas1.forEach(res => {
-                                // Debug: verificar datos recibidos
-                                console.log('Residente inactivo:', {
-                                    id: res.id_residente,
-                                    nombre: res.nombre,
-                                    habitacion: res.habitacion,
-                                    motivo_baja: res.motivo_baja,
-                                    fecha_baja: res.fecha_baja
-                                });
-                                
+                            residentesResidencia.forEach(res => {
                                 const fechaBaja = res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : '-';
                                 const motivoBaja = res.motivo_baja || '-';
                                 html += `
@@ -2072,134 +2005,14 @@
                                         <tfoot>
                                             <tr style="background: white; font-weight: 600;">
                                                 <td colspan="4" style="padding: 10px; text-align: right; color: #dc3545; border-top: 2px solid #e0e0e0;">
-                                                    Total: ${inactivosVioletas1.length}
+                                                    Total: ${residentesResidencia.length}
                                                 </td>
                                             </tr>
                                         </tfoot>
                                     </table>
                                 </div>
                             `;
-                        }
-                        
-                        // Contenedor para Violetas 2 - Inactivos
-                        if (inactivosVioletas2.length > 0) {
-                            html += `
-                                <div style="margin-top: 20px; padding: 20px; background: #fff5f5; border-radius: 10px; border-left: 4px solid #dc3545;">
-                                    <h4 style="color: #dc3545; margin-bottom: 15px; font-size: 18px; font-weight: 600;">Violetas 2 (${inactivosVioletas2.length})</h4>
-                                    <table class="data-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Habitación</th>
-                                                <th>Nombre</th>
-                                                <th>Motivo de Baja</th>
-                                                <th>Fecha de Baja</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                            `;
-                            
-                            inactivosVioletas2.forEach(res => {
-                                // Debug: verificar datos recibidos
-                                console.log('Residente inactivo:', {
-                                    id: res.id_residente,
-                                    nombre: res.nombre,
-                                    habitacion: res.habitacion,
-                                    motivo_baja: res.motivo_baja,
-                                    fecha_baja: res.fecha_baja
-                                });
-                                
-                                const fechaBaja = res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : '-';
-                                const motivoBaja = res.motivo_baja || '-';
-                                html += `
-                                    <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
-                                        <td>${res.habitacion || '-'}</td>
-                                        <td>${res.nombre} ${res.apellido}</td>
-                                        <td>${motivoBaja}</td>
-                                        <td>${fechaBaja}</td>
-                                    </tr>
-                                `;
-                            });
-                            
-                            html += `
-                                        </tbody>
-                                        <tfoot>
-                                            <tr style="background: white; font-weight: 600;">
-                                                <td colspan="4" style="padding: 10px; text-align: right; color: #dc3545; border-top: 2px solid #e0e0e0;">
-                                                    Total: ${inactivosVioletas2.length}
-                                                </td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                            `;
-                        }
-                        
-                        // Otras residencias inactivas (por si hay más en el futuro)
-                        if (inactivosOtrasResidencias.length > 0) {
-                            const residenciasAgrupadas = {};
-                            inactivosOtrasResidencias.forEach(res => {
-                                const residenciaId = res.id_residencia;
-                                if (!residenciasAgrupadas[residenciaId]) {
-                                    residenciasAgrupadas[residenciaId] = [];
-                                }
-                                residenciasAgrupadas[residenciaId].push(res);
-                            });
-                            
-                            Object.keys(residenciasAgrupadas).forEach(residenciaId => {
-                                const residentesResidencia = residenciasAgrupadas[residenciaId];
-                                const nombreResidencia = residentesResidencia[0].nombre_residencia || `Residencia ${residenciaId}`;
-                                
-                                html += `
-                                    <div style="margin-top: 20px; padding: 20px; background: #fff5f5; border-radius: 10px; border-left: 4px solid #dc3545;">
-                                        <h4 style="color: #dc3545; margin-bottom: 15px; font-size: 18px; font-weight: 600;">${nombreResidencia} (${residentesResidencia.length})</h4>
-                                        <table class="data-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Habitación</th>
-                                                    <th>Nombre</th>
-                                                    <th>Motivo de Baja</th>
-                                                    <th>Fecha de Baja</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                `;
-                                
-                                residentesResidencia.forEach(res => {
-                                    // Debug: verificar datos recibidos
-                                    console.log('Residente inactivo:', {
-                                        id: res.id_residente,
-                                        nombre: res.nombre,
-                                        habitacion: res.habitacion,
-                                        motivo_baja: res.motivo_baja,
-                                        fecha_baja: res.fecha_baja
-                                    });
-                                    
-                                    const fechaBaja = res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : '-';
-                                    const motivoBaja = res.motivo_baja || '-';
-                                    html += `
-                                        <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
-                                            <td>${res.habitacion || '-'}</td>
-                                            <td>${res.nombre} ${res.apellido}</td>
-                                            <td>${motivoBaja}</td>
-                                            <td>${fechaBaja}</td>
-                                        </tr>
-                                    `;
-                                });
-                                
-                                html += `
-                                            </tbody>
-                                            <tfoot>
-                                                <tr style="background: white; font-weight: 600;">
-                                                    <td colspan="4" style="padding: 10px; text-align: right; color: #dc3545; border-top: 2px solid #e0e0e0;">
-                                                        Total: ${residentesResidencia.length}
-                                                    </td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
-                                    </div>
-                                `;
-                            });
-                        }
+                        });
                         
                         html += `</div>`;
                     }
@@ -2207,18 +2020,24 @@
                     // Calcular totales para el resumen
                     const totalResidentes = residentesActivos.length + residentesInactivos.length;
                     
+                    // Construir resumen por residencia
+                    let resumenHtml = '';
+                    Object.keys(residentesPorResidencia).sort((a, b) => parseInt(a) - parseInt(b)).forEach(residenciaId => {
+                        const nombreResidencia = residenciasMap[residenciaId] || `Residencia ${residenciaId}`;
+                        const cantidad = residentesPorResidencia[residenciaId].length;
+                        resumenHtml += `
+                            <div style="background: rgba(255, 255, 255, 0.2); padding: 15px; border-radius: 8px;">
+                                <div style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">${cantidad}</div>
+                                <div style="font-size: 13px; opacity: 0.9;">${nombreResidencia} Activos</div>
+                            </div>
+                        `;
+                    });
+                    
                     html += `
                         <div style="margin-top: 40px; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white;">
                             <h3 style="color: white; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/users.svg" alt="Total" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px; filter: brightness(0) invert(1);"> Resumen Total</h3>
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
-                                <div style="background: rgba(255, 255, 255, 0.2); padding: 15px; border-radius: 8px;">
-                                    <div style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">${residentesVioletas1.length}</div>
-                                    <div style="font-size: 13px; opacity: 0.9;">Violetas 1 Activos</div>
-                                </div>
-                                <div style="background: rgba(255, 255, 255, 0.2); padding: 15px; border-radius: 8px;">
-                                    <div style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">${residentesVioletas2.length}</div>
-                                    <div style="font-size: 13px; opacity: 0.9;">Violetas 2 Activos</div>
-                                </div>
+                                ${resumenHtml}
                                 <div style="background: rgba(255, 255, 255, 0.2); padding: 15px; border-radius: 8px;">
                                     <div style="font-size: 28px; font-weight: bold; margin-bottom: 5px;">${residentesInactivos.length}</div>
                                     <div style="font-size: 13px; opacity: 0.9;">Usuarios de Baja</div>
@@ -2545,13 +2364,13 @@
                                 <!-- Pestaña de Cobros -->
                                 <div id="tabCobros" class="tab-content active">
                                     <div style="margin-bottom: 20px;">
-                                        <h4 style="color: #667eea; margin: 0; margin-bottom: 15px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros del Período Cercano - Pendientes (${totalPrevistos})</h4>
                                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                                             <button class="add-btn" onclick="openModal('modalCobro')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Cobro</button>
                                         </div>
                                         <p style="font-size: 12px; color: #666; margin-top: -10px; margin-bottom: 15px;">
                                             💡 <strong>Nota:</strong> Se muestran los cobros pendientes del mes siguiente y los cobros completados recientes. Para ver el historial completo, usa el módulo <strong>Históricos</strong>.
                                         </p>
+                                        <h4 style="color: #667eea; margin: 0; margin-bottom: 15px; margin-top: 15px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros Futuros (${totalPrevistos})</h4>
                                     </div>
                                     <div style="margin-bottom: 30px;">
                     `;
@@ -5678,11 +5497,26 @@
                         modalTitle.innerHTML = `<img src="/static/icons/medical/user-medical.svg" alt="Usuario" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Detalle del Residente${nombreCompleto ? ': ' + nombreCompleto : ''}`;
                     }
                     
-                    // Obtener nombre de residencia
-                    const tokenPayload = JSON.parse(atob(token.split('.')[1]));
-                    const residenciaNombre = tokenPayload.id_residencia === 1 ? 'Violetas 1' : 
-                                           tokenPayload.id_residencia === 2 ? 'Violetas 2' : 
-                                           `Residencia ${tokenPayload.id_residencia}`;
+                    // Obtener residencias desde la API para construir el select
+                    let residenciasOptions = '';
+                    try {
+                        const residenciasResponse = await fetch(`${API_URL}/api/v1/residencias`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (residenciasResponse.ok) {
+                            const residenciasData = await residenciasResponse.json();
+                            residenciasData.residencias.forEach(residencia => {
+                                if (residencia.activa || residenciasData.residencias.length <= 2) {
+                                    residenciasOptions += `<option value="${residencia.id_residencia}" ${res.id_residencia === residencia.id_residencia ? 'selected' : ''}>${residencia.nombre}</option>`;
+                                }
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error al cargar residencias:', error);
+                        // Fallback a valores por defecto si falla la carga
+                        residenciasOptions = `<option value="1" ${res.id_residencia === 1 ? 'selected' : ''}>Violetas 1</option>
+                                            <option value="2" ${res.id_residencia === 2 ? 'selected' : ''}>Violetas 2</option>`;
+                    }
                     
                     let html = `
                         <form id="formEditResidente" onsubmit="updateResidente(event, ${idResidente})">
@@ -5694,8 +5528,7 @@
                                     <div class="form-group">
                                         <label for="edit_id_residencia">Residencia *</label>
                                         <select id="edit_id_residencia" name="id_residencia" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
-                                            <option value="1" ${res.id_residencia === 1 ? 'selected' : ''}>Violetas 1</option>
-                                            <option value="2" ${res.id_residencia === 2 ? 'selected' : ''}>Violetas 2</option>
+                                            ${residenciasOptions}
                                         </select>
                                     </div>
                                     <div class="form-group">
@@ -7181,10 +7014,8 @@
                     const selectedValue = currentValue !== null ? currentValue : select.value;
                     select.innerHTML = '<option value="">Seleccione una residencia</option>';
                     data.residencias.forEach(res => {
-                        // Solo mostrar residencias activas (excepto para super_admin que puede ver todas)
-                        if (res.activa || g?.id_rol === 1) {
-                            select.innerHTML += `<option value="${res.id_residencia}" ${res.id_residencia == selectedValue ? 'selected' : ''}>${res.nombre}</option>`;
-                        }
+                        // Mostrar todas las residencias (el backend ya filtra según permisos)
+                        select.innerHTML += `<option value="${res.id_residencia}" ${res.id_residencia == selectedValue ? 'selected' : ''}>${res.nombre}</option>`;
                     });
                 }
             } catch (error) {

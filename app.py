@@ -1160,12 +1160,14 @@ def crear_residente():
                     concepto = f"Pago {nombre_mes} {siguiente_mes.year}"
                     metodo_pago = data.get('metodo_pago_preferido') or 'transferencia'
                     
-                    # Verificar si ya existe un cobro para el mes siguiente
+                    # Verificar si ya existe un cobro para el mes siguiente con concepto "Pago [mes]"
+                    # Prevenir duplicados: no puede haber dos cobros con concepto "Pago [mes]" para el mismo residente y mes
                     cursor.execute("""
                         SELECT id_pago FROM pago_residente
                         WHERE id_residente = %s 
                           AND id_residencia = %s
                           AND mes_pagado = %s
+                          AND concepto ILIKE 'Pago %%'
                     """, (id_residente, id_residencia, mes_siguiente_str))
                     
                     if not cursor.fetchone():
@@ -1600,12 +1602,14 @@ def actualizar_residente(id_residente):
                     mes_siguiente_str = siguiente_mes.strftime('%Y-%m')
                     fecha_prevista = siguiente_mes.date()  # Día 1 del mes siguiente
                     
-                    # Verificar si ya existe un cobro para el mes siguiente
+                    # Verificar si ya existe un cobro para el mes siguiente con concepto "Pago [mes]"
+                    # Prevenir duplicados: no puede haber dos cobros con concepto "Pago [mes]" para el mismo residente y mes
                     cursor.execute("""
                         SELECT id_pago FROM pago_residente
                         WHERE id_residente = %s 
                           AND id_residencia = %s
                           AND mes_pagado = %s
+                          AND concepto ILIKE 'Pago %%'
                     """, (id_residente, id_residencia_final, mes_siguiente_str))
                     
                     if not cursor.fetchone():
@@ -1690,11 +1694,16 @@ def listar_cobros():
             # 2. Último cobro completado de cada residente
             # 3. Cobros completados del mes actual y mes anterior
             
+            # Guardar la query para poder reutilizarla después de generar cobros pendientes
+            query = None
+            params_query = None
+            
             if where_clause:
                 # Usuario normal: filtrar por residencias asignadas
                 # where_clause ya incluye "WHERE", así que lo usamos directamente
+                # Usar subquery para DISTINCT ON ya que no puede estar directamente en UNION ALL
                 query = f"""
-                    WITH cobros_periodo_cercano AS (
+                    WITH cobros_pendientes AS (
                         -- Todos los cobros pendientes
                         SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
                                p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
@@ -1706,9 +1715,8 @@ def listar_cobros():
                         JOIN residencia res ON p.id_residencia = res.id_residencia
                         {where_clause}
                           AND p.estado = 'pendiente'
-                        
-                        UNION ALL
-                        
+                    ),
+                    ultimos_cobros_completados AS (
                         -- Último cobro completado de cada residente
                         SELECT DISTINCT ON (p.id_residente)
                                p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
@@ -1723,9 +1731,8 @@ def listar_cobros():
                           AND p.estado = 'cobrado'
                           AND p.fecha_pago IS NOT NULL
                         ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
-                        
-                        UNION ALL
-                        
+                    ),
+                    cobros_mes_actual_anterior AS (
                         -- Cobros completados del mes actual y mes anterior
                         SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
                                p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
@@ -1739,8 +1746,19 @@ def listar_cobros():
                           AND p.estado = 'cobrado'
                           AND p.fecha_pago IS NOT NULL
                           AND p.fecha_pago >= %s
+                    ),
+                    cobros_periodo_cercano AS (
+                        SELECT * FROM cobros_pendientes
+                        UNION
+                        SELECT * FROM ultimos_cobros_completados
+                        UNION
+                        SELECT * FROM cobros_mes_actual_anterior
+                    ),
+                    cobros_sin_duplicados AS (
+                        SELECT DISTINCT ON (id_pago) * FROM cobros_periodo_cercano
+                        ORDER BY id_pago
                     )
-                    SELECT * FROM cobros_periodo_cercano
+                    SELECT * FROM cobros_sin_duplicados
                     ORDER BY id_residencia, orden_prioridad,
                              CASE 
                                  WHEN fecha_prevista IS NOT NULL THEN fecha_prevista
@@ -1749,13 +1767,14 @@ def listar_cobros():
                              END ASC,
                              fecha_creacion DESC
                 """
-                # Agregar fecha del mes anterior a los params (duplicar params para cada UNION)
-                params_extended = list(params) * 2 + [mes_anterior_inicio]
+                # Agregar fecha del mes anterior a los params (necesitamos params para cada CTE)
+                params_extended = list(params) * 3 + [mes_anterior_inicio]
+                params_query = params_extended  # Guardar params para reutilizar
                 cursor.execute(query, params_extended)
             else:
                 # Super admin: sin filtro (acceso total)
                 query = """
-                    WITH cobros_periodo_cercano AS (
+                    WITH cobros_pendientes AS (
                         -- Todos los cobros pendientes
                         SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
                                p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
@@ -1766,9 +1785,8 @@ def listar_cobros():
                         JOIN residente r ON p.id_residente = r.id_residente
                         JOIN residencia res ON p.id_residencia = res.id_residencia
                         WHERE p.estado = 'pendiente'
-                        
-                        UNION ALL
-                        
+                    ),
+                    ultimos_cobros_completados AS (
                         -- Último cobro completado de cada residente
                         SELECT DISTINCT ON (p.id_residente)
                                p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
@@ -1782,9 +1800,8 @@ def listar_cobros():
                         WHERE p.estado = 'cobrado'
                           AND p.fecha_pago IS NOT NULL
                         ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
-                        
-                        UNION ALL
-                        
+                    ),
+                    cobros_mes_actual_anterior AS (
                         -- Cobros completados del mes actual y mes anterior
                         SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
                                p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
@@ -1797,19 +1814,137 @@ def listar_cobros():
                         WHERE p.estado = 'cobrado'
                           AND p.fecha_pago IS NOT NULL
                           AND p.fecha_pago >= %s
+                    ),
+                    cobros_periodo_cercano AS (
+                        SELECT * FROM cobros_pendientes
+                        UNION
+                        SELECT * FROM ultimos_cobros_completados
+                        UNION
+                        SELECT * FROM cobros_mes_actual_anterior
                     )
-                    SELECT * FROM cobros_periodo_cercano
-                    ORDER BY id_residencia, orden_prioridad,
-                             CASE 
-                                 WHEN fecha_prevista IS NOT NULL THEN fecha_prevista
-                                 WHEN fecha_pago IS NOT NULL THEN fecha_pago
-                                 ELSE '9999-12-31'::date
-                             END ASC,
-                             fecha_creacion DESC
+                    SELECT DISTINCT ON (id_pago) * FROM cobros_periodo_cercano
+                    ORDER BY id_pago
                 """
-                cursor.execute(query, [mes_anterior_inicio])
+                params_extended = [mes_anterior_inicio]
+                params_query = params_extended  # Guardar params para reutilizar
+                cursor.execute(query, params_extended)
             
             cobros = cursor.fetchall()
+            
+            # NUEVA LÓGICA: Generar automáticamente cobros pendientes para el mes siguiente
+            # si un residente tiene cobros completados pero no tiene cobro pendiente
+            # Calcular mes siguiente
+            hoy = datetime.now()
+            if hoy.month == 12:
+                siguiente_mes = datetime(hoy.year + 1, 1, 1)
+            else:
+                siguiente_mes = datetime(hoy.year, hoy.month + 1, 1)
+            mes_siguiente_str = siguiente_mes.strftime('%Y-%m')
+            fecha_prevista = siguiente_mes.date()
+            
+            meses_espanol = {
+                1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+                5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+                9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+            }
+            nombre_mes = meses_espanol.get(siguiente_mes.month, 'mes')
+            concepto_siguiente = f"Pago {nombre_mes} {siguiente_mes.year}"
+            
+            # Identificar residentes con cobros completados pero sin cobro pendiente para el mes siguiente
+            # Obtener residentes activos con costo_habitacion que tienen cobros completados
+            if where_clause:
+                # Usuario normal: filtrar por residencias asignadas
+                # Construir filtro para residente (donde clause tiene formato "WHERE p.id_residencia IN (...)")
+                # Necesitamos extraer los IDs de residencia de params
+                if params:
+                    placeholders = ','.join(['%s'] * len(params))
+                    query_residentes = f"""
+                        SELECT DISTINCT r.id_residente, r.id_residencia, r.costo_habitacion, 
+                               r.metodo_pago_preferido, r.nombre, r.apellido
+                        FROM residente r
+                        JOIN pago_residente p ON r.id_residente = p.id_residente
+                        WHERE r.activo = TRUE
+                          AND r.costo_habitacion IS NOT NULL
+                          AND r.costo_habitacion > 0
+                          AND p.estado = 'cobrado'
+                          AND p.fecha_pago IS NOT NULL
+                          AND r.id_residencia IN ({placeholders})
+                          AND NOT EXISTS (
+                              SELECT 1 FROM pago_residente p2
+                              WHERE p2.id_residente = r.id_residente
+                                AND p2.id_residencia = r.id_residencia
+                                AND p2.mes_pagado = %s
+                                AND p2.concepto ILIKE 'Pago %%'
+                          )
+                    """
+                    cursor.execute(query_residentes, list(params) + [mes_siguiente_str])
+                else:
+                    residentes_sin_cobro_pendiente = []
+            else:
+                # Super admin: sin filtro
+                query_residentes = """
+                    SELECT DISTINCT r.id_residente, r.id_residencia, r.costo_habitacion, 
+                           r.metodo_pago_preferido, r.nombre, r.apellido
+                    FROM residente r
+                    JOIN pago_residente p ON r.id_residente = p.id_residente
+                    WHERE r.activo = TRUE
+                      AND r.costo_habitacion IS NOT NULL
+                      AND r.costo_habitacion > 0
+                      AND p.estado = 'cobrado'
+                      AND p.fecha_pago IS NOT NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM pago_residente p2
+                          WHERE p2.id_residente = r.id_residente
+                            AND p2.id_residencia = r.id_residencia
+                            AND p2.mes_pagado = %s
+                            AND p2.concepto ILIKE 'Pago %%'
+                      )
+                """
+                cursor.execute(query_residentes, [mes_siguiente_str])
+                residentes_sin_cobro_pendiente = cursor.fetchall()
+            
+            # Generar cobros pendientes faltantes
+            cobros_generados = 0
+            for res in residentes_sin_cobro_pendiente:
+                id_residente = res[0]
+                id_residencia = res[1]
+                costo_habitacion = float(res[2])
+                metodo_pago = res[3] or 'transferencia'
+                nombre = res[4]
+                apellido = res[5]
+                
+                try:
+                    cursor.execute("""
+                        INSERT INTO pago_residente (
+                            id_residente, id_residencia, monto, fecha_pago, fecha_prevista,
+                            mes_pagado, concepto, metodo_pago, estado, es_cobro_previsto
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        RETURNING id_pago
+                    """, (
+                        id_residente,
+                        id_residencia,
+                        costo_habitacion,
+                        None,  # fecha_pago es NULL para cobros previstos
+                        fecha_prevista,
+                        mes_siguiente_str,
+                        concepto_siguiente,
+                        metodo_pago,
+                        'pendiente',
+                        True
+                    ))
+                    cobros_generados += 1
+                    app.logger.info(f"Cobro pendiente generado automáticamente para {nombre} {apellido} (ID: {id_residente}): €{costo_habitacion}, mes: {mes_siguiente_str}")
+                except Exception as e:
+                    app.logger.error(f"Error al generar cobro pendiente automático para residente {id_residente}: {str(e)}")
+            
+            # Si se generaron cobros, volver a consultar para incluirlos
+            if cobros_generados > 0:
+                conn.commit()
+                # Volver a ejecutar la query original para incluir los nuevos cobros pendientes
+                if query and params_query:
+                    cursor.execute(query, params_query)
+                    cobros = cursor.fetchall()
             
             # Agrupar por residencia
             cobros_por_residencia = {}
@@ -1918,6 +2053,26 @@ def crear_cobro():
                     estado_final = 'cobrado'
                 else:
                     estado_final = 'pendiente'
+            
+            # Prevenir duplicados: Si el concepto empieza con "Pago", verificar que no exista otro cobro
+            # con el mismo id_residente, mes_pagado y concepto "Pago [mes]"
+            concepto = data.get('concepto', '')
+            mes_pagado = data.get('mes_pagado')
+            
+            if concepto and concepto.strip().lower().startswith('pago') and mes_pagado:
+                cursor.execute("""
+                    SELECT id_pago FROM pago_residente
+                    WHERE id_residente = %s 
+                      AND id_residencia = %s
+                      AND mes_pagado = %s
+                      AND concepto ILIKE 'Pago %%'
+                """, (id_residente, id_residencia_cobro, mes_pagado))
+                
+                cobro_duplicado = cursor.fetchone()
+                if cobro_duplicado:
+                    return jsonify({
+                        'error': f'Ya existe un cobro de habitación para este residente en el mes {mes_pagado}. No se pueden crear cobros duplicados con concepto "Pago [mes]".'
+                    }), 400
             
             cursor.execute("""
                 INSERT INTO pago_residente (id_residente, id_residencia, monto, fecha_pago, fecha_prevista,
@@ -2113,12 +2268,14 @@ def generar_cobros_previstos():
                     app.logger.warning(f"Residente {nombre} {apellido} (ID: {id_residente}) no tiene fecha_ingreso, saltando")
                     continue
                 
-                # Verificar si ya existe un cobro (completado o previsto) para el mes siguiente
+                # Verificar si ya existe un cobro (completado o previsto) para el mes siguiente con concepto "Pago [mes]"
+                # Prevenir duplicados: no puede haber dos cobros con concepto "Pago [mes]" para el mismo residente y mes
                 cursor.execute("""
                     SELECT id_pago, estado FROM pago_residente
                     WHERE id_residente = %s 
                       AND id_residencia = %s
                       AND mes_pagado = %s
+                      AND concepto ILIKE 'Pago %%'
                 """, (id_residente, residencia_del_residente, mes_siguiente_str))
                 
                 cobro_existente = cursor.fetchone()
