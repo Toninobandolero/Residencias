@@ -24,12 +24,33 @@ def get_storage_client():
 
 def upload_document(file_content, id_residencia, id_residente, tipo_documento, nombre_archivo, content_type=None):
     """
-    Sube un documento a Cloud Storage.
+    Sube un documento a Cloud Storage (función legacy para compatibilidad con residentes).
     
     Args:
         file_content: Contenido del archivo (bytes)
         id_residencia: ID de la residencia
         id_residente: ID del residente
+        tipo_documento: Tipo de documento (Médica, Bancaria, etc.)
+        nombre_archivo: Nombre del archivo
+        content_type: Tipo MIME del archivo (opcional)
+    
+    Returns:
+        str: Ruta del archivo en Cloud Storage (blob_path), o None si hay error
+    """
+    return upload_document_unificado(
+        file_content, id_residencia, 'residente', id_residente, tipo_documento, nombre_archivo, content_type
+    )
+
+
+def upload_document_unificado(file_content, id_residencia, tipo_entidad, id_entidad, tipo_documento, nombre_archivo, content_type=None):
+    """
+    Sube un documento a Cloud Storage (función unificada para todas las entidades).
+    
+    Args:
+        file_content: Contenido del archivo (bytes)
+        id_residencia: ID de la residencia
+        tipo_entidad: Tipo de entidad ('residente', 'proveedor', 'personal')
+        id_entidad: ID de la entidad
         tipo_documento: Tipo de documento (Médica, Bancaria, etc.)
         nombre_archivo: Nombre del archivo
         content_type: Tipo MIME del archivo (opcional)
@@ -49,14 +70,14 @@ def upload_document(file_content, id_residencia, id_residente, tipo_documento, n
             print(error_msg)
             raise Exception(error_msg)
         
-        # Crear ruta: residencia-{id}/residente-{id}/tipo-fecha-nombre
+        # Crear ruta: residencia-{id}/{tipo_entidad}-{id}/tipo-fecha-nombre
         fecha = datetime.now().strftime('%Y%m%d')
         timestamp = datetime.now().strftime('%H%M%S')
         extension = os.path.splitext(nombre_archivo)[1] or '.pdf'
         nombre_safe = nombre_archivo.replace(' ', '_').replace('/', '_').replace('\\', '_')
         tipo_safe = tipo_documento.lower().replace(' ', '_')
         
-        blob_path = f"residencia-{id_residencia}/residente-{id_residente}/{tipo_safe}-{fecha}-{timestamp}{extension}"
+        blob_path = f"residencia-{id_residencia}/{tipo_entidad}-{id_entidad}/{tipo_safe}-{fecha}-{timestamp}{extension}"
         
         # Determinar content type si no se proporciona
         if not content_type:

@@ -9,23 +9,25 @@ Write-Host ""
 # Detener procesos de Python que estén ejecutando app.py
 Write-Host "Deteniendo procesos existentes..." -ForegroundColor Yellow
 
-$processes = Get-Process python -ErrorAction SilentlyContinue | Where-Object {
-    $_.CommandLine -like "*app.py*" -or $_.Path -like "*python*"
+# Buscar procesos de Python que tengan app.py en la línea de comandos
+$processes = Get-WmiObject Win32_Process -Filter "name='python.exe' OR name='pythonw.exe'" -ErrorAction SilentlyContinue | Where-Object {
+    $_.CommandLine -like "*app.py*"
 }
 
 if ($processes) {
     foreach ($proc in $processes) {
         try {
-            Write-Host "  Deteniendo proceso PID: $($proc.Id)" -ForegroundColor Gray
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            $pid = $proc.ProcessId
+            Write-Host "  Deteniendo proceso PID: $pid" -ForegroundColor Gray
+            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
         } catch {
-            Write-Host "  No se pudo detener proceso $($proc.Id)" -ForegroundColor Red
+            Write-Host "  No se pudo detener proceso $pid" -ForegroundColor Red
         }
     }
     Start-Sleep -Seconds 2
     Write-Host "  Procesos detenidos." -ForegroundColor Green
 } else {
-    Write-Host "  No hay procesos de Python ejecutándose." -ForegroundColor Gray
+    Write-Host "  No hay procesos de Python ejecutando app.py." -ForegroundColor Gray
 }
 
 Write-Host ""
@@ -52,10 +54,6 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Iniciar el servidor en una nueva ventana
-$scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$scriptPath'; python app.py"
-
-Write-Host "Servidor iniciado en una nueva ventana." -ForegroundColor Green
-Write-Host "Puedes cerrar esta ventana." -ForegroundColor Gray
+# Iniciar el servidor en la misma terminal (logs visibles)
+python app.py
 

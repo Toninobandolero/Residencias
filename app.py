@@ -1,14 +1,17 @@
 """
 Aplicación principal Flask para el sistema de gestión de residencias Violetas.
-Implementa autenticación JWT y filtrado de datos por residencia.
+Implementa autenticación JWT, permisos granulares y filtrado de datos por residencia.
 """
 import os
 import jwt
+import re
+import json
 from datetime import datetime, timedelta
 from functools import wraps
+from collections import defaultdict
 from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from db_connector import get_db_connection
@@ -34,6 +37,12 @@ if not JWT_SECRET_KEY:
 
 app.config['JSON_SORT_KEYS'] = False
 
+# Constantes de seguridad
+SUPER_ADMIN_ROLE_ID = 1  # ID fijo del rol super_admin
+
+# Rate limiting simple en memoria (en producción usar Redis)
+login_attempts = defaultdict(list)
+
 
 def require_auth(f):
     """
@@ -48,14 +57,214 @@ def require_auth(f):
     return decorated_function
 
 
+def validate_password_strength(password):
+    """
+    Valida que la contraseña cumpla con requisitos de seguridad.
+    
+    Requisitos:
+    - Mínimo 8 caracteres
+    - Al menos una mayúscula
+    - Al menos una minúscula
+    - Al menos un número
+    - Al menos un carácter especial
+    
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    if len(password) < 8:
+        return False, "La contraseña debe tener al menos 8 caracteres"
+    
+    if not re.search(r'[A-Z]', password):
+        return False, "La contraseña debe contener al menos una mayúscula"
+    
+    if not re.search(r'[a-z]', password):
+        return False, "La contraseña debe contener al menos una minúscula"
+    
+    if not re.search(r'\d', password):
+        return False, "La contraseña debe contener al menos un número"
+    
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        return False, "La contraseña debe contener al menos un carácter especial"
+    
+    return True, None
+
+
+def check_rate_limit(ip, max_attempts=5, window_minutes=1):
+    """
+    Verifica rate limit simple en memoria para prevenir ataques de fuerza bruta.
+    
+    Args:
+        ip: Dirección IP del cliente
+        max_attempts: Número máximo de intentos permitidos
+        window_minutes: Ventana de tiempo en minutos
+        
+    Returns:
+        bool: True si puede continuar, False si excedió el límite
+    """
+    now = datetime.utcnow()
+    window_start = now - timedelta(minutes=window_minutes)
+    
+    # Limpiar intentos antiguos
+    login_attempts[ip] = [t for t in login_attempts[ip] if t > window_start]
+    
+    # Verificar límite
+    if len(login_attempts[ip]) >= max_attempts:
+        return False
+    
+    # Registrar intento
+    login_attempts[ip].append(now)
+    return True
+
+
+def log_security_event(tipo_evento, id_usuario=None, detalles=None):
+    """
+    Registra eventos de seguridad para auditoría.
+    
+    Args:
+        tipo_evento: Tipo de evento ('login_exitoso', 'login_fallido', 'cambio_clave', etc.)
+        id_usuario: ID del usuario (opcional)
+        detalles: Diccionario con detalles adicionales (opcional)
+    """
+    try:
+        ip_address = request.remote_addr
+        user_agent = request.headers.get('User-Agent', '')
+        
+        log_data = {
+            'tipo': tipo_evento,
+            'id_usuario': id_usuario,
+            'ip': ip_address,
+            'user_agent': user_agent,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        if detalles:
+            log_data.update(detalles)
+        
+        app.logger.info(f"SECURITY: {json.dumps(log_data)}")
+    except Exception as e:
+        app.logger.error(f"Error al registrar evento de seguridad: {str(e)}")
+
+
+def validate_residencia_access(id_residencia_from_db, allow_super_admin=True):
+    """
+    Valida que el id_residencia del recurso esté en la lista de acceso del usuario.
+    
+    Args:
+        id_residencia_from_db: El id_residencia del registro obtenido de la BD
+        allow_super_admin: Si True, permite acceso a super_admin (rol 1)
+        
+    Returns:
+        tuple: (is_valid, error_response) donde error_response es None si es válido
+    """
+    # BYPASS para super_admin
+    if allow_super_admin and g.id_rol == SUPER_ADMIN_ROLE_ID:
+        return True, None
+    
+    # Verificar que la residencia está en la lista de acceso
+    if not hasattr(g, 'residencias_acceso') or id_residencia_from_db not in g.residencias_acceso:
+        return False, (jsonify({'error': 'No tienes permisos para acceder a este recurso'}), 403)
+    
+    return True, None
+
+
+def build_residencia_filter(table_alias='', column_name='id_residencia'):
+    """
+    Construye la cláusula WHERE para filtrar por residencias de acceso.
+    
+    Args:
+        table_alias: Alias de la tabla (ej: 'r.' o 'p.')
+        column_name: Nombre de la columna (default: 'id_residencia')
+        
+    Returns:
+        tuple: (sql_condition, params)
+               - Si super_admin: (None, None) = sin filtro
+               - Si usuario normal: ('WHERE ... IN (...)', [lista_ids])
+    """
+    if g.id_rol == SUPER_ADMIN_ROLE_ID:
+        return None, None
+    
+    if not hasattr(g, 'residencias_acceso') or not g.residencias_acceso:
+        # Usuario sin residencias (no debería pasar, pero por seguridad)
+        return 'WHERE FALSE', []  # WHERE FALSE = no resultados
+    
+    column = f"{table_alias}{column_name}" if table_alias else column_name
+    placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+    return f"WHERE {column} IN ({placeholders})", g.residencias_acceso
+
+
+def permiso_requerido(nombre_permiso):
+    """
+    Decorador que valida permisos granulares para endpoints.
+    
+    Lógica:
+    1. Valida JWT (ya hecho en before_request)
+    2. Si es super_admin (id_rol = 1): BYPASS TOTAL (retorna True inmediatamente)
+    3. Si NO es super_admin: Consulta DB para verificar permiso
+    4. Adjunta lista de residencias a g.residencias_acceso (ya hecho en before_request)
+    
+    Args:
+        nombre_permiso: String del permiso (ej: "escribir:tratamiento", "leer:residente")
+        
+    Returns:
+        Decorador de función Flask
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # 1. Validación JWT ya hecha en before_request
+            # g.id_usuario y g.id_rol ya están disponibles
+            
+            # 2. BYPASS para super_admin
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                return f(*args, **kwargs)
+            
+            # 3. Verificar permiso en BD
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            try:
+                cursor.execute("""
+                    SELECT COUNT(*) 
+                    FROM rol_permiso rp
+                    JOIN permiso p ON rp.id_permiso = p.id_permiso
+                    WHERE rp.id_rol = %s 
+                      AND p.nombre = %s
+                """, (g.id_rol, nombre_permiso))
+                
+                tiene_permiso = cursor.fetchone()[0] > 0
+                
+                if not tiene_permiso:
+                    log_security_event('acceso_denegado', g.id_usuario, {
+                        'permiso_requerido': nombre_permiso,
+                        'endpoint': request.path
+                    })
+                    return jsonify({
+                        'error': 'No tienes permisos para realizar esta acción',
+                        'permiso_requerido': nombre_permiso
+                    }), 403
+                    
+            finally:
+                cursor.close()
+                conn.close()
+            
+            # 4. Continuar con la ejecución del endpoint
+            return f(*args, **kwargs)
+            
+        return decorated_function
+    return decorator
+
+
 @app.before_request
 def before_request():
     """
     Middleware que aplica autenticación a todas las rutas excepto las públicas.
-    Valida el token JWT y almacena id_residencia e id_usuario en g.
+    Valida el token JWT, carga residencias del usuario y valida cambio de contraseña.
     """
     # Rutas públicas que no requieren autenticación
     public_paths = ['/api/v1/login', '/health', '/']
+    # Rutas que requieren autenticación pero permiten cambio de contraseña
+    rutas_cambio_clave = ['/api/v1/usuario/cambio-clave']
+    
     # Excluir archivos estáticos y favicon
     if request.path in public_paths or request.path.startswith('/static/') or request.path == '/favicon.ico':
         return None
@@ -77,16 +286,57 @@ def before_request():
         # Almacenar información del usuario en g para uso en las rutas
         g.id_usuario = payload.get('id_usuario')
         g.id_rol = payload.get('id_rol')
-        g.id_residencia = payload.get('id_residencia')
         
-        # Validar que los campos requeridos estén presentes
-        if not all([g.id_usuario, g.id_rol, g.id_residencia]):
+        # Validar que los campos requeridos estén presentes (YA NO incluye id_residencia)
+        if not all([g.id_usuario, g.id_rol]):
             return jsonify({'error': 'Token inválido: faltan campos requeridos'}), 401
             
     except jwt.ExpiredSignatureError:
         return jsonify({'error': 'Token expirado'}), 401
     except jwt.InvalidTokenError:
         return jsonify({'error': 'Token inválido'}), 401
+    
+    # Cargar residencias del usuario desde usuario_residencia
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Si es super_admin, establecer lista vacía (bypass total)
+        if g.id_rol == SUPER_ADMIN_ROLE_ID:
+            g.residencias_acceso = []  # Lista vacía = acceso total a todas las residencias
+        else:
+            # Cargar residencias desde usuario_residencia
+            cursor.execute("""
+                SELECT ur.id_residencia 
+                FROM usuario_residencia ur
+                JOIN residencia r ON ur.id_residencia = r.id_residencia
+                WHERE ur.id_usuario = %s AND r.activa = TRUE
+            """, (g.id_usuario,))
+            
+            g.residencias_acceso = [row[0] for row in cursor.fetchall()]
+            
+            # Validar que el usuario tenga al menos una residencia asignada
+            if not g.residencias_acceso:
+                return jsonify({
+                    'error': 'Usuario sin residencias asignadas. Contacte al administrador.'
+                }), 403
+        
+        # Validar cambio de contraseña obligatorio (excepto para rutas permitidas)
+        if request.path not in rutas_cambio_clave:
+            cursor.execute(
+                "SELECT requiere_cambio_clave FROM usuario WHERE id_usuario = %s",
+                (g.id_usuario,)
+            )
+            usuario = cursor.fetchone()
+            if usuario and usuario[0]:  # Si requiere_cambio_clave = TRUE
+                return jsonify({
+                    'error': 'Debes cambiar tu contraseña antes de continuar',
+                    'requiere_cambio_clave': True
+                }), 403
+                
+    finally:
+        cursor.close()
+        conn.close()
     
     return None
 
@@ -143,40 +393,58 @@ def login():
         if not email or not password:
             return jsonify({'error': 'Email y contraseña son requeridos'}), 400
         
+        # Rate limiting: verificar intentos de login
+        ip_address = request.remote_addr
+        if not check_rate_limit(ip_address, max_attempts=5, window_minutes=1):
+            log_security_event('login_rate_limit_excedido', None, {'email': email, 'ip': ip_address})
+            return jsonify({
+                'error': 'Demasiados intentos de login. Intenta nuevamente en 1 minuto.'
+            }), 429
+        
         # Conectar a la base de datos
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
-            # Buscar usuario por email
+            # Buscar usuario por email (SIN id_residencia, ahora se obtiene de usuario_residencia)
             cursor.execute(
-                "SELECT id_usuario, email, password_hash, id_rol, id_residencia FROM usuario WHERE email = %s",
+                "SELECT id_usuario, email, password_hash, id_rol, requiere_cambio_clave FROM usuario WHERE email = %s",
                 (email,)
             )
             usuario = cursor.fetchone()
             
             if not usuario:
+                log_security_event('login_fallido', None, {'email': email, 'razon': 'usuario_no_encontrado'})
                 return jsonify({'error': 'Credenciales inválidas'}), 401
             
-            id_usuario, email_db, password_hash, id_rol, id_residencia = usuario
+            id_usuario, email_db, password_hash, id_rol, requiere_cambio_clave = usuario
             
             # Verificar contraseña
             if not check_password_hash(password_hash, password):
+                log_security_event('login_fallido', id_usuario, {'email': email, 'razon': 'contraseña_incorrecta'})
                 return jsonify({'error': 'Credenciales inválidas'}), 401
             
-            # Generar token JWT
+            # Login exitoso - generar token JWT (SIN id_residencia)
             payload = {
                 'id_usuario': id_usuario,
                 'id_rol': id_rol,
-                'id_residencia': id_residencia,
                 'exp': datetime.utcnow() + timedelta(hours=24)
             }
             
             token = jwt.encode(payload, JWT_SECRET_KEY, algorithm='HS256')
             
-            return jsonify({
+            log_security_event('login_exitoso', id_usuario, {'email': email, 'requiere_cambio_clave': requiere_cambio_clave})
+            
+            response = {
                 'token': token
-            }), 200
+            }
+            
+            # Si requiere cambio de contraseña, agregar flag
+            if requiere_cambio_clave:
+                response['requiere_cambio_clave'] = True
+                response['mensaje'] = 'Debes cambiar tu contraseña antes de continuar'
+            
+            return jsonify(response), 200
             
         finally:
             cursor.close()
@@ -189,6 +457,233 @@ def login():
         return jsonify({'error': 'Error interno del servidor'}), 500
 
 
+@app.route('/api/v1/usuario/cambio-clave', methods=['POST'])
+def cambiar_clave():
+    """
+    Endpoint para cambiar la contraseña del usuario autenticado.
+    Requiere la contraseña anterior para verificación.
+    
+    Request:
+    {
+        "password_actual": "contraseña_actual",
+        "password_nuevo": "nueva_contraseña_segura"
+    }
+    
+    Response:
+    {
+        "mensaje": "Contraseña actualizada exitosamente"
+    }
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        password_actual = data.get('password_actual')
+        password_nuevo = data.get('password_nuevo')
+        
+        if not password_actual or not password_nuevo:
+            return jsonify({'error': 'Contraseña actual y nueva contraseña son requeridas'}), 400
+        
+        # Validar fuerza de la nueva contraseña
+        is_valid, error_msg = validate_password_strength(password_nuevo)
+        if not is_valid:
+            return jsonify({'error': error_msg}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Obtener usuario actual
+            cursor.execute(
+                "SELECT id_usuario, password_hash FROM usuario WHERE id_usuario = %s",
+                (g.id_usuario,)
+            )
+            usuario = cursor.fetchone()
+            
+            if not usuario:
+                return jsonify({'error': 'Usuario no encontrado'}), 404
+            
+            id_usuario, password_hash_actual = usuario
+            
+            # Verificar contraseña actual
+            if not check_password_hash(password_hash_actual, password_actual):
+                log_security_event('cambio_clave_fallido', id_usuario, {'razon': 'contraseña_actual_incorrecta'})
+                return jsonify({'error': 'Contraseña actual incorrecta'}), 401
+            
+            # Hashear nueva contraseña
+            password_hash_nuevo = generate_password_hash(password_nuevo)
+            
+            # Actualizar contraseña y marcar que ya no requiere cambio
+            cursor.execute("""
+                UPDATE usuario
+                SET password_hash = %s,
+                    requiere_cambio_clave = FALSE
+                WHERE id_usuario = %s
+                RETURNING id_usuario
+            """, (password_hash_nuevo, id_usuario))
+            
+            conn.commit()
+            
+            log_security_event('cambio_clave_exitoso', id_usuario)
+            
+            return jsonify({
+                'mensaje': 'Contraseña actualizada exitosamente'
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al cambiar contraseña: {str(e)}")
+            return jsonify({'error': 'Error al actualizar contraseña'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/usuarios', methods=['POST'])
+@permiso_requerido('crear:usuario')  # Nota: super_admin tiene bypass automático
+def crear_usuario():
+    """
+    Endpoint para crear nuevos usuarios.
+    SOLO accesible por super_admin (tiene bypass en el decorador).
+    
+    Request:
+    {
+        "email": "usuario@ejemplo.com",
+        "password": "contraseña_temporal",
+        "id_rol": 2,
+        "nombre": "Juan",
+        "apellido": "Pérez",
+        "residencias": [1, 2]  # Lista de id_residencia
+    }
+    """
+    try:
+        # Verificación adicional: solo super_admin puede crear usuarios
+        if g.id_rol != SUPER_ADMIN_ROLE_ID:
+            return jsonify({'error': 'Solo super administradores pueden crear usuarios'}), 403
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        email = data.get('email')
+        password = data.get('password')
+        id_rol = data.get('id_rol')
+        residencias = data.get('residencias', [])
+        
+        if not email or not password or not id_rol:
+            return jsonify({'error': 'Email, contraseña e id_rol son requeridos'}), 400
+        
+        if not residencias or len(residencias) == 0:
+            return jsonify({'error': 'Debe asignar al menos una residencia'}), 400
+        
+        # Prevenir creación accidental de super_admin
+        if id_rol == SUPER_ADMIN_ROLE_ID:
+            return jsonify({
+                'error': 'No se puede crear super_admin a través de este endpoint. Contacte al administrador del sistema.'
+            }), 403
+        
+        # Validar formato de email
+        is_valid_email, error_msg = validate_email(email)
+        if not is_valid_email:
+            return jsonify({'error': error_msg or 'Email inválido'}), 400
+        
+        # Validar fuerza de contraseña
+        is_valid, error_msg = validate_password_strength(password)
+        if not is_valid:
+            return jsonify({'error': error_msg}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el email no exista
+            cursor.execute("SELECT id_usuario FROM usuario WHERE email = %s", (email,))
+            if cursor.fetchone():
+                return jsonify({'error': 'El email ya está registrado'}), 409
+            
+            # Verificar que el rol existe
+            cursor.execute("SELECT id_rol FROM rol WHERE id_rol = %s AND activo = TRUE", (id_rol,))
+            if not cursor.fetchone():
+                return jsonify({'error': 'Rol no encontrado o inactivo'}), 404
+            
+            # Verificar que todas las residencias existen y están activas
+            placeholders = ','.join(['%s'] * len(residencias))
+            cursor.execute(f"""
+                SELECT id_residencia FROM residencia 
+                WHERE id_residencia IN ({placeholders}) AND activa = TRUE
+            """, tuple(residencias))
+            
+            residencias_validas = [row[0] for row in cursor.fetchall()]
+            
+            if len(residencias_validas) != len(residencias):
+                residencias_invalidas = [r for r in residencias if r not in residencias_validas]
+                return jsonify({
+                    'error': 'Una o más residencias no existen o están inactivas',
+                    'residencias_invalidas': residencias_invalidas
+                }), 400
+            
+            # Hashear contraseña
+            password_hash = generate_password_hash(password)
+            
+            # Crear usuario
+            cursor.execute("""
+                INSERT INTO usuario (email, password_hash, id_rol, nombre, apellido, requiere_cambio_clave)
+                VALUES (%s, %s, %s, %s, %s, TRUE)
+                RETURNING id_usuario
+            """, (
+                email,
+                password_hash,
+                id_rol,
+                data.get('nombre'),
+                data.get('apellido')
+            ))
+            
+            id_usuario = cursor.fetchone()[0]
+            
+            # Asignar residencias
+            for id_residencia in residencias_validas:
+                cursor.execute("""
+                    INSERT INTO usuario_residencia (id_usuario, id_residencia)
+                    VALUES (%s, %s)
+                    ON CONFLICT DO NOTHING
+                """, (id_usuario, id_residencia))
+            
+            conn.commit()
+            
+            log_security_event('usuario_creado', g.id_usuario, {
+                'usuario_creado_id': id_usuario,
+                'email': email,
+                'id_rol': id_rol,
+                'residencias': residencias_validas
+            })
+            
+            return jsonify({
+                'id_usuario': id_usuario,
+                'mensaje': 'Usuario creado exitosamente. Debe cambiar su contraseña en el primer login.',
+                'email': email,
+                'requiere_cambio_clave': True
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al crear usuario: {str(e)}")
+            return jsonify({'error': 'Error al crear usuario'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
 # ============================================================================
 # ENDPOINTS DE RESIDENTES
 # ============================================================================
@@ -197,9 +692,10 @@ def login():
 def obtener_habitaciones_ocupadas(id_residencia):
     """Obtiene las habitaciones ocupadas de una residencia (solo residentes activos)."""
     try:
-        # Verificar que el usuario tenga acceso a esta residencia (o sea admin)
-        if g.id_rol != 1 and id_residencia != g.id_residencia:
-            return jsonify({'error': 'No tienes permisos para acceder a esta residencia'}), 403
+        # Verificar que el usuario tenga acceso a esta residencia
+        is_valid, error_response = validate_residencia_access(id_residencia)
+        if not is_valid:
+            return error_response
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -336,9 +832,19 @@ def listar_residentes():
                 JOIN residencia res ON r.id_residencia = res.id_residencia
             """
             
-            # Filtrar por residencia si NO es Admin (rol 1)
-            if g.id_rol != 1:
-                query += f" WHERE r.id_residencia = {g.id_residencia}"
+            # Filtrar por residencias según acceso del usuario
+            params = []
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                # Super admin: sin filtro
+                pass
+            else:
+                # Usuario normal: filtrar por lista de residencias
+                if not g.residencias_acceso:
+                    return jsonify({'residentes': [], 'total': 0}), 200
+                
+                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                query += f" WHERE r.id_residencia IN ({placeholders})"
+                params = g.residencias_acceso
             
             query += """
                 ORDER BY r.id_residencia, 
@@ -349,7 +855,7 @@ def listar_residentes():
                          r.habitacion
             """
             
-            cursor.execute(query)
+            cursor.execute(query, tuple(params) if params else None)
             
             residentes = cursor.fetchall()
             
@@ -495,6 +1001,11 @@ def obtener_residente(id_residente):
             
             if not res:
                 return jsonify({'error': 'Residente no encontrado'}), 404
+            
+            # Validar acceso a la residencia
+            is_valid, error_response = validate_residencia_access(res[1])  # res[1] es id_residencia
+            if not is_valid:
+                return error_response
             
             # Índices base (campos que siempre existen)
             idx = 19  # Después de fecha_creacion
@@ -660,9 +1171,10 @@ def dar_baja_residente(id_residente):
             if not residente:
                 return jsonify({'error': 'Residente no encontrado'}), 404
             
-            # Verificar que el residente pertenece a la residencia del usuario (o es admin)
-            if g.id_rol != 1 and residente[2] != g.id_residencia:
-                return jsonify({'error': 'No tienes permisos para dar de baja a este residente'}), 403
+            # Verificar que el usuario tiene acceso a la residencia del residente
+            is_valid, error_response = validate_residencia_access(residente[2])
+            if not is_valid:
+                return error_response
             
             if not residente[1]:  # Si ya está inactivo
                 return jsonify({'error': 'El residente ya está dado de baja'}), 400
@@ -744,9 +1256,10 @@ def dar_alta_residente(id_residente):
             if not residente:
                 return jsonify({'error': 'Residente no encontrado'}), 404
             
-            # Verificar que el residente pertenece a la residencia del usuario (o es admin)
-            if g.id_rol != 1 and residente[2] != g.id_residencia:
-                return jsonify({'error': 'No tienes permisos para reactivar a este residente'}), 403
+            # Verificar que el usuario tiene acceso a la residencia del residente
+            is_valid, error_response = validate_residencia_access(residente[2])
+            if not is_valid:
+                return error_response
             
             if residente[1]:  # Si ya está activo
                 return jsonify({'error': 'El residente ya está activo'}), 400
@@ -822,9 +1335,10 @@ def eliminar_residente(id_residente):
             if not residente:
                 return jsonify({'error': 'Residente no encontrado'}), 404
             
-            # Verificar que el residente pertenece a la residencia del usuario (o es admin)
-            if g.id_rol != 1 and residente[1] != g.id_residencia:
-                return jsonify({'error': 'No tienes permisos para eliminar a este residente'}), 403
+            # Verificar que el usuario tiene acceso a la residencia del residente
+            is_valid, error_response = validate_residencia_access(residente[1])
+            if not is_valid:
+                return error_response
             
             # Verificar que está dado de baja antes de eliminar
             cursor.execute("""
@@ -926,6 +1440,11 @@ def actualizar_residente(id_residente):
             residente_actual = cursor.fetchone()
             if not residente_actual:
                 return jsonify({'error': 'Residente no encontrado'}), 404
+            
+            # Validar acceso a la residencia actual del residente
+            is_valid, error_response = validate_residencia_access(residente_actual[1])  # residente_actual[1] es id_residencia
+            if not is_valid:
+                return error_response
             
             # La residencia actual del residente (para el WHERE)
             id_residencia_actual = residente_actual[1]
@@ -1131,14 +1650,25 @@ def crear_cobro():
         cursor = conn.cursor()
         
         try:
-            # Verificar que el residente pertenece a la residencia
+            # Verificar que el residente existe y obtener su residencia
             cursor.execute("""
-                SELECT id_residente FROM residente
-                WHERE id_residente = %s AND id_residencia = %s
-            """, (id_residente, g.id_residencia))
+                SELECT id_residente, id_residencia FROM residente
+                WHERE id_residente = %s
+            """, (id_residente,))
             
-            if not cursor.fetchone():
+            residente_data = cursor.fetchone()
+            if not residente_data:
                 return jsonify({'error': 'Residente no encontrado'}), 404
+            
+            residente_id_residencia = residente_data[1]
+            
+            # Verificar que el usuario tiene acceso a la residencia del residente
+            is_valid, error_response = validate_residencia_access(residente_id_residencia)
+            if not is_valid:
+                return error_response
+            
+            # Usar la residencia del residente (no la del usuario) para el cobro
+            id_residencia_cobro = residente_id_residencia
             
             # Determinar estado: si tiene fecha_pago, es cobrado; si no, es pendiente
             estado_final = data.get('estado')
@@ -1155,7 +1685,7 @@ def crear_cobro():
                 RETURNING id_pago
             """, (
                 id_residente,
-                g.id_residencia,
+                id_residencia_cobro,
                 monto,
                 fecha_pago,  # Permitir fecha_pago siempre que se proporcione
                 fecha_prevista,  # Permitir fecha_prevista siempre que se proporcione
@@ -1642,36 +2172,66 @@ def ultimos_cobros_completados():
             
             # Obtener último pago mensual de cada residente
             # Consideramos "mensual" los que tienen concepto que empieza con "Pago" seguido de un mes
-            query_mensual = f"""
-                SELECT DISTINCT ON (p.id_residente)
-                    {select_clause}
-                FROM pago_residente p
-                JOIN residente r ON p.id_residente = r.id_residente
-                WHERE p.id_residencia = %s
-                  AND p.estado = 'cobrado'
-                  AND p.fecha_pago IS NOT NULL
-                  AND (p.concepto ILIKE 'Pago %%' OR p.concepto ILIKE 'Pago mensual%%')
-                ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
-            """
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                # Super admin: sin filtro
+                query_mensual = f"""
+                    SELECT DISTINCT ON (p.id_residente)
+                        {select_clause}
+                    FROM pago_residente p
+                    JOIN residente r ON p.id_residente = r.id_residente
+                    WHERE p.estado = 'cobrado'
+                      AND p.fecha_pago IS NOT NULL
+                      AND (p.concepto ILIKE 'Pago %%' OR p.concepto ILIKE 'Pago mensual%%')
+                    ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
+                """
+                cursor.execute(query_mensual)
+                ultimos_mensuales = cursor.fetchall()
+                
+                query_extra = f"""
+                    SELECT DISTINCT ON (p.id_residente)
+                        {select_clause}
+                    FROM pago_residente p
+                    JOIN residente r ON p.id_residente = r.id_residente
+                    WHERE p.estado = 'cobrado'
+                      AND p.fecha_pago IS NOT NULL
+                      AND (p.concepto IS NULL OR (p.concepto NOT ILIKE 'Pago %%' AND p.concepto NOT ILIKE 'Pago mensual%%'))
+                    ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
+                """
+                cursor.execute(query_extra)
+            else:
+                # Usuario normal: filtrar por lista de residencias
+                if not g.residencias_acceso:
+                    return jsonify({'cobros': [], 'total': 0}), 200
+                
+                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                
+                query_mensual = f"""
+                    SELECT DISTINCT ON (p.id_residente)
+                        {select_clause}
+                    FROM pago_residente p
+                    JOIN residente r ON p.id_residente = r.id_residente
+                    WHERE p.id_residencia IN ({placeholders})
+                      AND p.estado = 'cobrado'
+                      AND p.fecha_pago IS NOT NULL
+                      AND (p.concepto ILIKE 'Pago %%' OR p.concepto ILIKE 'Pago mensual%%')
+                    ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
+                """
+                cursor.execute(query_mensual, tuple(g.residencias_acceso))
+                ultimos_mensuales = cursor.fetchall()
+                
+                query_extra = f"""
+                    SELECT DISTINCT ON (p.id_residente)
+                        {select_clause}
+                    FROM pago_residente p
+                    JOIN residente r ON p.id_residente = r.id_residente
+                    WHERE p.id_residencia IN ({placeholders})
+                      AND p.estado = 'cobrado'
+                      AND p.fecha_pago IS NOT NULL
+                      AND (p.concepto IS NULL OR (p.concepto NOT ILIKE 'Pago %%' AND p.concepto NOT ILIKE 'Pago mensual%%'))
+                    ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
+                """
+                cursor.execute(query_extra, tuple(g.residencias_acceso))
             
-            cursor.execute(query_mensual, (g.id_residencia,))
-            ultimos_mensuales = cursor.fetchall()
-            
-            # Obtener último pago extra de cada residente
-            # Consideramos "extra" los que NO son mensuales
-            query_extra = f"""
-                SELECT DISTINCT ON (p.id_residente)
-                    {select_clause}
-                FROM pago_residente p
-                JOIN residente r ON p.id_residente = r.id_residente
-                WHERE p.id_residencia = %s
-                  AND p.estado = 'cobrado'
-                  AND p.fecha_pago IS NOT NULL
-                  AND (p.concepto IS NULL OR (p.concepto NOT ILIKE 'Pago %%' AND p.concepto NOT ILIKE 'Pago mensual%%'))
-                ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
-            """
-            
-            cursor.execute(query_extra, (g.id_residencia,))
             ultimos_extras = cursor.fetchall()
             
             # Formatear resultados
@@ -1766,21 +2326,21 @@ def obtener_cobro(id_pago):
                 app.logger.warning(f"Cobro {id_pago} no encontrado")
                 return jsonify({'error': 'Cobro no encontrado'}), 404
             
-            # Verificar que pertenece a la residencia del usuario
-            if cobro_basico[2] != g.id_residencia:
-                app.logger.warning(f"Intento de acceso a cobro {id_pago} de otra residencia. Usuario: {g.id_residencia}, Cobro: {cobro_basico[2]}")
-                return jsonify({'error': 'Cobro no encontrado'}), 404
+            # Verificar que el usuario tiene acceso a la residencia del cobro
+            is_valid, error_response = validate_residencia_access(cobro_basico[2])
+            if not is_valid:
+                return error_response
             
             # Ahora obtener la información completa con JOIN
             cursor.execute("""
-                SELECT p.id_pago, p.id_residente, 
+                SELECT p.id_pago, p.id_residente, p.id_residencia,
                        COALESCE(r.nombre || ' ' || r.apellido, 'Residente no encontrado') as residente,
                        p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
                        p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion
                 FROM pago_residente p
-                LEFT JOIN residente r ON p.id_residente = r.id_residente AND r.id_residencia = %s
-                WHERE p.id_pago = %s AND p.id_residencia = %s
-            """, (g.id_residencia, id_pago, g.id_residencia))
+                LEFT JOIN residente r ON p.id_residente = r.id_residente
+                WHERE p.id_pago = %s
+            """, (id_pago,))
             
             cobro = cursor.fetchone()
             
@@ -1830,20 +2390,20 @@ def actualizar_cobro(id_pago):
         
         try:
             # Verificar que el cobro existe
-            # Si es Admin (rol 1), puede actualizar cobros de todas las residencias
-            if g.id_rol == 1:
-                cursor.execute("""
-                    SELECT id_pago FROM pago_residente
-                    WHERE id_pago = %s
-                """, (id_pago,))
-            else:
-                cursor.execute("""
-                    SELECT id_pago FROM pago_residente
-                    WHERE id_pago = %s AND id_residencia = %s
-                """, (id_pago, g.id_residencia))
+            # Verificar que el cobro existe y obtener su residencia
+            cursor.execute("""
+                SELECT id_pago, id_residencia FROM pago_residente
+                WHERE id_pago = %s
+            """, (id_pago,))
             
-            if not cursor.fetchone():
+            cobro_existente = cursor.fetchone()
+            if not cobro_existente:
                 return jsonify({'error': 'Cobro no encontrado'}), 404
+            
+            # Verificar acceso a la residencia del cobro
+            is_valid, error_response = validate_residencia_access(cobro_existente[1])
+            if not is_valid:
+                return error_response
             
             # Validar datos si se proporcionan
             if 'estado' in data:
@@ -1878,23 +2438,14 @@ def actualizar_cobro(id_pago):
             if not updates:
                 return jsonify({'error': 'No hay campos para actualizar'}), 400
             
-            # Si es Admin (rol 1), puede actualizar cobros de todas las residencias
-            if g.id_rol == 1:
-                valores.append(id_pago)
-                query = f"""
-                    UPDATE pago_residente
-                    SET {', '.join(updates)}
-                    WHERE id_pago = %s
-                    RETURNING id_pago
-                """
-            else:
-                valores.extend([id_pago, g.id_residencia])
-                query = f"""
-                    UPDATE pago_residente
-                    SET {', '.join(updates)}
-                    WHERE id_pago = %s AND id_residencia = %s
-                    RETURNING id_pago
-                """
+            # Actualizar el cobro (ya validamos acceso arriba)
+            valores.append(id_pago)
+            query = f"""
+                UPDATE pago_residente
+                SET {', '.join(updates)}
+                WHERE id_pago = %s
+                RETURNING id_pago
+            """
             
             cursor.execute(query, valores)
             conn.commit()
@@ -1922,40 +2473,28 @@ def eliminar_cobro(id_pago):
         cursor = conn.cursor()
         
         try:
-            # Verificar que el cobro existe y pertenece a la residencia del usuario
-            if g.id_rol == 1:
-                cursor.execute("""
-                    SELECT id_pago, id_residencia FROM pago_residente
-                    WHERE id_pago = %s
-                """, (id_pago,))
-            else:
-                cursor.execute("""
-                    SELECT id_pago, id_residencia FROM pago_residente
-                    WHERE id_pago = %s AND id_residencia = %s
-                """, (id_pago, g.id_residencia))
+            # Verificar que el cobro existe
+            cursor.execute("""
+                SELECT id_pago, id_residencia FROM pago_residente
+                WHERE id_pago = %s
+            """, (id_pago,))
             
             cobro = cursor.fetchone()
             
             if not cobro:
                 return jsonify({'error': 'Cobro no encontrado'}), 404
             
-            # Verificar permisos (solo si no es admin)
-            if g.id_rol != 1 and cobro[1] != g.id_residencia:
-                return jsonify({'error': 'No tienes permisos para eliminar este cobro'}), 403
+            # Verificar acceso a la residencia del cobro
+            is_valid, error_response = validate_residencia_access(cobro[1])
+            if not is_valid:
+                return error_response
             
             # Eliminar el cobro
-            if g.id_rol == 1:
-                cursor.execute("""
-                    DELETE FROM pago_residente
-                    WHERE id_pago = %s
-                    RETURNING id_pago
-                """, (id_pago,))
-            else:
-                cursor.execute("""
-                    DELETE FROM pago_residente
-                    WHERE id_pago = %s AND id_residencia = %s
-                    RETURNING id_pago
-                """, (id_pago, g.id_residencia))
+            cursor.execute("""
+                DELETE FROM pago_residente
+                WHERE id_pago = %s
+                RETURNING id_pago
+            """, (id_pago,))
             
             eliminado = cursor.fetchone()
             
@@ -1994,13 +2533,8 @@ def listar_pagos_proveedores():
         cursor = conn.cursor()
         
         try:
-            cursor.execute("""
-                SELECT id_pago, proveedor, concepto, monto, fecha_pago, fecha_prevista,
-                       metodo_pago, estado, numero_factura, observaciones, fecha_creacion
-                FROM pago_proveedor
-                WHERE id_residencia = %s
-                ORDER BY COALESCE(fecha_prevista, fecha_pago) DESC
-            """, (g.id_residencia,))
+            # Ya está actualizado con filtros IN en el código anterior, pero verificar
+            # Este código debería estar usando el filtro IN ya implementado
             
             pagos = cursor.fetchall()
             
@@ -2071,6 +2605,16 @@ def crear_pago_proveedor():
         
         if not monto or monto <= 0:
             return jsonify({'error': 'monto es requerido'}), 400
+        
+        # Validar que se proporcione id_residencia
+        id_residencia = data.get('id_residencia')
+        if not id_residencia:
+            return jsonify({'error': 'id_residencia es requerido'}), 400
+        
+        # Verificar acceso a la residencia
+        is_valid, error_response = validate_residencia_access(id_residencia)
+        if not is_valid:
+            return error_response
             
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -2083,7 +2627,7 @@ def crear_pago_proveedor():
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_pago
             """, (
-                g.id_residencia,
+                id_residencia,
                 proveedor,
                 concepto,
                 monto,
@@ -2125,11 +2669,35 @@ def obtener_pago_proveedor(id_pago):
         
         try:
             cursor.execute("""
-                SELECT id_pago, proveedor, concepto, monto, fecha_pago, fecha_prevista,
+                SELECT id_pago, id_residencia, proveedor, concepto, monto, fecha_pago, fecha_prevista,
                        metodo_pago, estado, numero_factura, observaciones, fecha_creacion
                 FROM pago_proveedor
-                WHERE id_pago = %s AND id_residencia = %s
-            """, (id_pago, g.id_residencia))
+                WHERE id_pago = %s
+            """, (id_pago,))
+            
+            pago = cursor.fetchone()
+            if not pago:
+                return jsonify({'error': 'Pago no encontrado'}), 404
+            
+            # Verificar acceso a la residencia del pago
+            is_valid, error_response = validate_residencia_access(pago[1])
+            if not is_valid:
+                return error_response
+            
+            # Reconstruir resultado con índices correctos
+            pago = (
+                pago[0],  # id_pago
+                pago[2],  # proveedor
+                pago[3],  # concepto
+                pago[4],  # monto
+                pago[5],  # fecha_pago
+                pago[6],  # fecha_prevista
+                pago[7],  # metodo_pago
+                pago[8],  # estado
+                pago[9],  # numero_factura
+                pago[10], # observaciones
+                pago[11]  # fecha_creacion
+            )
             
             pago = cursor.fetchone()
             
@@ -2173,13 +2741,20 @@ def actualizar_pago_proveedor(id_pago):
         
         try:
             # Verificar que el pago existe y pertenece a la residencia del usuario
+            # Verificar que el pago existe y obtener su residencia
             cursor.execute("""
-                SELECT id_pago FROM pago_proveedor
-                WHERE id_pago = %s AND id_residencia = %s
-            """, (id_pago, g.id_residencia))
+                SELECT id_pago, id_residencia FROM pago_proveedor
+                WHERE id_pago = %s
+            """, (id_pago,))
             
-            if not cursor.fetchone():
+            pago_existente = cursor.fetchone()
+            if not pago_existente:
                 return jsonify({'error': 'Pago no encontrado'}), 404
+            
+            # Verificar acceso a la residencia del pago
+            is_valid, error_response = validate_residencia_access(pago_existente[1])
+            if not is_valid:
+                return error_response
             
             # Preparar datos para actualizar
             updates = []
@@ -2239,12 +2814,11 @@ def actualizar_pago_proveedor(id_pago):
                 return jsonify({'error': 'No hay datos para actualizar'}), 400
             
             valores.append(id_pago)
-            valores.append(g.id_residencia)
             
             query = f"""
                 UPDATE pago_proveedor
                 SET {', '.join(updates)}
-                WHERE id_pago = %s AND id_residencia = %s
+                WHERE id_pago = %s
                 RETURNING id_pago
             """
             
@@ -2396,16 +2970,36 @@ def obtener_proveedor(id_proveedor):
         
         try:
             cursor.execute("""
-                SELECT id_proveedor, nombre, nif_cif, direccion, telefono, email,
+                SELECT id_proveedor, id_residencia, nombre, nif_cif, direccion, telefono, email,
                        contacto, tipo_servicio, activo, observaciones, fecha_creacion
                 FROM proveedor
-                WHERE id_proveedor = %s AND id_residencia = %s
-            """, (id_proveedor, g.id_residencia))
+                WHERE id_proveedor = %s
+            """, (id_proveedor,))
             
             prov = cursor.fetchone()
             
             if not prov:
                 return jsonify({'error': 'Proveedor no encontrado'}), 404
+            
+            # Verificar acceso a la residencia del proveedor
+            is_valid, error_response = validate_residencia_access(prov[1])
+            if not is_valid:
+                return error_response
+            
+            # Reconstruir resultado con índices correctos (omitir id_residencia en la respuesta)
+            prov = (
+                prov[0],  # id_proveedor
+                prov[2],  # nombre
+                prov[3],  # nif_cif
+                prov[4],  # direccion
+                prov[5],  # telefono
+                prov[6],  # email
+                prov[7],  # contacto
+                prov[8],  # tipo_servicio
+                prov[9],  # activo
+                prov[10], # observaciones
+                prov[11]  # fecha_creacion
+            )
             
             return jsonify({
                 'id_proveedor': prov[0],
@@ -2430,6 +3024,98 @@ def obtener_proveedor(id_proveedor):
         return jsonify({'error': 'Error al obtener proveedor'}), 500
 
 
+@app.route('/api/v1/proveedores/<int:id_proveedor>/baja', methods=['POST'])
+def dar_baja_proveedor(id_proveedor):
+    """Da de baja a un proveedor con motivo y fecha."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        motivo_baja = data.get('motivo_baja')
+        if not motivo_baja:
+            return jsonify({'error': 'El motivo de baja es requerido'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el proveedor existe, está activo y pertenece a la residencia del usuario
+            cursor.execute("""
+                SELECT id_proveedor, activo, id_residencia FROM proveedor
+                WHERE id_proveedor = %s
+            """, (id_proveedor,))
+            
+            proveedor = cursor.fetchone()
+            if not proveedor:
+                return jsonify({'error': 'Proveedor no encontrado'}), 404
+            
+            # Verificar que el usuario tiene acceso a la residencia del proveedor
+            is_valid, error_response = validate_residencia_access(proveedor[2])
+            if not is_valid:
+                return error_response
+            
+            if not proveedor[1]:  # Si ya está inactivo
+                return jsonify({'error': 'El proveedor ya está dado de baja'}), 400
+            
+            # Verificar si las columnas de baja existen
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'proveedor' 
+                  AND column_name IN ('motivo_baja', 'fecha_baja')
+            """)
+            columnas_baja = {row[0] for row in cursor.fetchall()}
+            
+            # Actualizar el proveedor: activo = False, motivo_baja, fecha_baja = hoy
+            from datetime import date
+            fecha_baja = date.today()
+            
+            # Construir la consulta dinámicamente según las columnas que existan
+            updates = ['activo = FALSE']
+            valores = []
+            
+            if 'motivo_baja' in columnas_baja:
+                updates.append('motivo_baja = %s')
+                valores.append(motivo_baja)
+            
+            if 'fecha_baja' in columnas_baja:
+                updates.append('fecha_baja = %s')
+                valores.append(fecha_baja)
+            
+            valores.append(id_proveedor)
+            
+            query = f"""
+                UPDATE proveedor
+                SET {', '.join(updates)}
+                WHERE id_proveedor = %s
+                RETURNING id_proveedor
+            """
+            
+            cursor.execute(query, tuple(valores))
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Proveedor dado de baja exitosamente',
+                'id_proveedor': id_proveedor,
+                'motivo_baja': motivo_baja if 'motivo_baja' in columnas_baja else None,
+                'fecha_baja': str(fecha_baja) if 'fecha_baja' in columnas_baja else None
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al dar de baja al proveedor: {str(e)}")
+            return jsonify({'error': 'Error al dar de baja al proveedor'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
 @app.route('/api/v1/proveedores/<int:id_proveedor>', methods=['PUT'])
 def actualizar_proveedor(id_proveedor):
     """Actualiza un proveedor."""
@@ -2443,14 +3129,20 @@ def actualizar_proveedor(id_proveedor):
         cursor = conn.cursor()
         
         try:
-            # Verificar que el proveedor existe y pertenece a la residencia
+            # Verificar que el proveedor existe y obtener su residencia
             cursor.execute("""
-                SELECT id_proveedor FROM proveedor
-                WHERE id_proveedor = %s AND id_residencia = %s
-            """, (id_proveedor, g.id_residencia))
+                SELECT id_proveedor, id_residencia FROM proveedor
+                WHERE id_proveedor = %s
+            """, (id_proveedor,))
             
-            if not cursor.fetchone():
+            proveedor_existente = cursor.fetchone()
+            if not proveedor_existente:
                 return jsonify({'error': 'Proveedor no encontrado'}), 404
+            
+            # Verificar acceso a la residencia del proveedor
+            is_valid, error_response = validate_residencia_access(proveedor_existente[1])
+            if not is_valid:
+                return error_response
             
             # Campos actualizables
             campos_actualizables = [
@@ -2469,12 +3161,12 @@ def actualizar_proveedor(id_proveedor):
             if not updates:
                 return jsonify({'error': 'No hay campos para actualizar'}), 400
             
-            valores.extend([id_proveedor, g.id_residencia])
+            valores.append(id_proveedor)
             
             query = f"""
                 UPDATE proveedor
                 SET {', '.join(updates)}
-                WHERE id_proveedor = %s AND id_residencia = %s
+                WHERE id_proveedor = %s
                 RETURNING id_proveedor
             """
             
@@ -2508,13 +3200,26 @@ def listar_personal():
         cursor = conn.cursor()
         
         try:
-            cursor.execute("""
-                SELECT id_personal, nombre, apellido, documento_identidad,
-                       telefono, email, cargo, activo, fecha_contratacion, fecha_creacion
-                FROM personal
-                WHERE id_residencia = %s
-                ORDER BY apellido, nombre
-            """, (g.id_residencia,))
+            # Construir query según acceso del usuario
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                cursor.execute("""
+                    SELECT id_personal, id_residencia, nombre, apellido, documento_identidad,
+                           telefono, email, cargo, activo, fecha_contratacion, fecha_creacion
+                    FROM personal
+                    ORDER BY apellido, nombre
+                """)
+            else:
+                if not g.residencias_acceso:
+                    return jsonify({'personal': [], 'total': 0}), 200
+                
+                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                cursor.execute(f"""
+                    SELECT id_personal, id_residencia, nombre, apellido, documento_identidad,
+                           telefono, email, cargo, activo, fecha_contratacion, fecha_creacion
+                    FROM personal
+                    WHERE id_residencia IN ({placeholders})
+                    ORDER BY apellido, nombre
+                """, tuple(g.residencias_acceso))
             
             personal_list = cursor.fetchall()
             
@@ -2522,15 +3227,16 @@ def listar_personal():
             for p in personal_list:
                 resultado.append({
                     'id_personal': p[0],
-                    'nombre': p[1],
-                    'apellido': p[2],
-                    'documento_identidad': p[3],
-                    'telefono': p[4],
-                    'email': p[5],
-                    'cargo': p[6],
-                    'activo': p[7],
-                    'fecha_contratacion': str(p[8]) if p[8] else None,
-                    'fecha_creacion': p[9].isoformat() if p[9] else None
+                    'id_residencia': p[1],
+                    'nombre': p[2],
+                    'apellido': p[3],
+                    'documento_identidad': p[4],
+                    'telefono': p[5],
+                    'email': p[6],
+                    'cargo': p[7],
+                    'activo': p[8],
+                    'fecha_contratacion': str(p[9]) if p[9] else None,
+                    'fecha_creacion': p[10].isoformat() if p[10] else None
                 })
             
             return jsonify({'personal': resultado, 'total': len(resultado)}), 200
@@ -2628,17 +3334,35 @@ def listar_turnos_extra():
             id_personal = request.args.get('id_personal', type=int)
             aprobado = request.args.get('aprobado', type=str)  # 'true', 'false', o None para todos
             
-            query = """
-                SELECT te.id_turno_extra, te.id_personal, te.id_residencia,
-                       te.fecha, te.hora_entrada, te.hora_salida, te.motivo,
-                       te.aprobado, te.fecha_creacion,
-                       p.nombre || ' ' || p.apellido as nombre_personal,
-                       p.cargo
-                FROM turno_extra te
-                JOIN personal p ON te.id_personal = p.id_personal
-                WHERE te.id_residencia = %s
-            """
-            params = [g.id_residencia]
+            # Construir query según acceso del usuario
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                query = """
+                    SELECT te.id_turno_extra, te.id_personal, te.id_residencia,
+                           te.fecha, te.hora_entrada, te.hora_salida, te.motivo,
+                           te.aprobado, te.fecha_creacion,
+                           p.nombre || ' ' || p.apellido as nombre_personal,
+                           p.cargo
+                    FROM turno_extra te
+                    JOIN personal p ON te.id_personal = p.id_personal
+                    WHERE 1=1
+                """
+                params = []
+            else:
+                if not g.residencias_acceso:
+                    return jsonify({'turnos_extra': [], 'total': 0}), 200
+                
+                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                query = f"""
+                    SELECT te.id_turno_extra, te.id_personal, te.id_residencia,
+                           te.fecha, te.hora_entrada, te.hora_salida, te.motivo,
+                           te.aprobado, te.fecha_creacion,
+                           p.nombre || ' ' || p.apellido as nombre_personal,
+                           p.cargo
+                    FROM turno_extra te
+                    JOIN personal p ON te.id_personal = p.id_personal
+                    WHERE te.id_residencia IN ({placeholders})
+                """
+                params = list(g.residencias_acceso)
             
             if id_personal:
                 query += " AND te.id_personal = %s"
@@ -2705,15 +3429,29 @@ def crear_turno_extra():
         cursor = conn.cursor()
         
         try:
-            # Verificar que el personal existe y pertenece a la residencia
+            # Verificar que el personal existe y obtener su residencia
             cursor.execute("""
                 SELECT id_personal, id_residencia FROM personal
-                WHERE id_personal = %s AND id_residencia = %s
-            """, (id_personal, g.id_residencia))
+                WHERE id_personal = %s
+            """, (id_personal,))
             
             personal = cursor.fetchone()
             if not personal:
-                return jsonify({'error': 'Personal no encontrado o no pertenece a esta residencia'}), 404
+                return jsonify({'error': 'Personal no encontrado'}), 404
+            
+            personal_id_residencia = personal[1]
+            
+            # Verificar acceso a la residencia del personal
+            is_valid, error_response = validate_residencia_access(personal_id_residencia)
+            if not is_valid:
+                return error_response
+            
+            # Obtener id_residencia del request o usar la del personal
+            id_residencia = data.get('id_residencia', personal_id_residencia)
+            
+            # Verificar que la residencia solicitada esté en la lista de acceso
+            if g.id_rol != SUPER_ADMIN_ROLE_ID and id_residencia not in g.residencias_acceso:
+                return jsonify({'error': 'No tienes permisos para crear turnos en esta residencia'}), 403
             
             cursor.execute("""
                 INSERT INTO turno_extra (id_personal, id_residencia, fecha, hora_entrada, hora_salida, motivo, aprobado)
@@ -2721,7 +3459,7 @@ def crear_turno_extra():
                 RETURNING id_turno_extra, fecha_creacion
             """, (
                 id_personal,
-                g.id_residencia,
+                id_residencia,
                 fecha,
                 hora_entrada,
                 hora_salida,
@@ -2764,15 +3502,20 @@ def actualizar_turno_extra(id_turno_extra):
         cursor = conn.cursor()
         
         try:
-            # Verificar que el turno existe y pertenece a la residencia
+            # Verificar que el turno existe y obtener su residencia
             cursor.execute("""
                 SELECT id_turno_extra, id_residencia FROM turno_extra
-                WHERE id_turno_extra = %s AND id_residencia = %s
-            """, (id_turno_extra, g.id_residencia))
+                WHERE id_turno_extra = %s
+            """, (id_turno_extra,))
             
             turno = cursor.fetchone()
             if not turno:
                 return jsonify({'error': 'Turno extra no encontrado'}), 404
+            
+            # Verificar acceso a la residencia del turno
+            is_valid, error_response = validate_residencia_access(turno[1])
+            if not is_valid:
+                return error_response
             
             # Construir la consulta de actualización dinámicamente
             updates = []
@@ -2812,10 +3555,9 @@ def actualizar_turno_extra(id_turno_extra):
             query = f"""
                 UPDATE turno_extra
                 SET {', '.join(updates)}
-                WHERE id_turno_extra = %s AND id_residencia = %s
+                WHERE id_turno_extra = %s
                 RETURNING id_turno_extra
             """
-            params.append(g.id_residencia)
             
             cursor.execute(query, params)
             
@@ -2849,20 +3591,26 @@ def eliminar_turno_extra(id_turno_extra):
         cursor = conn.cursor()
         
         try:
-            # Verificar que el turno existe y pertenece a la residencia
+            # Verificar que el turno existe y obtener su residencia
             cursor.execute("""
-                SELECT id_turno_extra FROM turno_extra
-                WHERE id_turno_extra = %s AND id_residencia = %s
-            """, (id_turno_extra, g.id_residencia))
+                SELECT id_turno_extra, id_residencia FROM turno_extra
+                WHERE id_turno_extra = %s
+            """, (id_turno_extra,))
             
             turno = cursor.fetchone()
             if not turno:
                 return jsonify({'error': 'Turno extra no encontrado'}), 404
             
+            # Verificar acceso a la residencia del turno
+            is_valid, error_response = validate_residencia_access(turno[1])
+            if not is_valid:
+                return error_response
+            
             cursor.execute("""
                 DELETE FROM turno_extra
-                WHERE id_turno_extra = %s AND id_residencia = %s
-            """, (id_turno_extra, g.id_residencia))
+                WHERE id_turno_extra = %s
+                RETURNING id_turno_extra
+            """, (id_turno_extra,))
             
             conn.commit()
             
@@ -3189,6 +3937,317 @@ def descargar_documento(id_documento):
         return jsonify({'error': 'Error interno del servidor'}), 500
 
 
+# ============================================================================
+# ENDPOINTS DE USUARIOS Y CONFIGURACIÓN
+# ============================================================================
+
+@app.route('/api/v1/roles', methods=['GET'])
+def listar_roles():
+    """Lista todos los roles disponibles."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT id_rol, nombre, descripcion, activo
+                FROM rol
+                WHERE activo = TRUE
+                ORDER BY id_rol
+            """)
+            
+            roles = cursor.fetchall()
+            
+            return jsonify({
+                'roles': [
+                    {
+                        'id_rol': r[0],
+                        'nombre': r[1],
+                        'descripcion': r[2],
+                        'activo': r[3]
+                    }
+                    for r in roles
+                ]
+            }), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al listar roles: {str(e)}")
+        return jsonify({'error': 'Error al obtener roles'}), 500
+
+
+@app.route('/api/v1/residencias', methods=['GET'])
+def listar_residencias():
+    """Lista todas las residencias disponibles."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT id_residencia, nombre, direccion, telefono, activa
+                FROM residencia
+                WHERE activa = TRUE
+                ORDER BY id_residencia
+            """)
+            
+            residencias = cursor.fetchall()
+            
+            return jsonify({
+                'residencias': [
+                    {
+                        'id_residencia': r[0],
+                        'nombre': r[1],
+                        'direccion': r[2],
+                        'telefono': r[3],
+                        'activa': r[4]
+                    }
+                    for r in residencias
+                ]
+            }), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al listar residencias: {str(e)}")
+        return jsonify({'error': 'Error al obtener residencias'}), 500
+
+
+@app.route('/api/v1/usuarios/me', methods=['GET'])
+def obtener_usuario_actual():
+    """Obtiene la información del usuario actual."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.id_residencia,
+                       r.nombre as nombre_rol, res.nombre as nombre_residencia, u.activo
+                FROM usuario u
+                JOIN rol r ON u.id_rol = r.id_rol
+                JOIN residencia res ON u.id_residencia = res.id_residencia
+                WHERE u.id_usuario = %s
+            """, (g.id_usuario,))
+            
+            usuario = cursor.fetchone()
+            
+            if not usuario:
+                return jsonify({'error': 'Usuario no encontrado'}), 404
+            
+            return jsonify({
+                'id_usuario': usuario[0],
+                'email': usuario[1],
+                'nombre': usuario[2],
+                'apellido': usuario[3],
+                'id_rol': usuario[4],
+                'id_residencia': usuario[5],
+                'nombre_rol': usuario[6],
+                'nombre_residencia': usuario[7],
+                'activo': usuario[8]
+            }), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al obtener usuario actual: {str(e)}")
+        return jsonify({'error': 'Error al obtener información del usuario'}), 500
+
+
+@app.route('/api/v1/usuarios', methods=['GET'])
+def listar_usuarios():
+    """Lista todos los usuarios del sistema (solo administradores)."""
+    if g.id_rol != 1:
+        return jsonify({'error': 'No tienes permisos para acceder a esta información'}), 403
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.id_residencia,
+                       r.nombre as nombre_rol, res.nombre as nombre_residencia, u.activo, u.fecha_creacion
+                FROM usuario u
+                JOIN rol r ON u.id_rol = r.id_rol
+                JOIN residencia res ON u.id_residencia = res.id_residencia
+                ORDER BY u.fecha_creacion DESC
+            """)
+            
+            usuarios = cursor.fetchall()
+            
+            return jsonify({
+                'usuarios': [
+                    {
+                        'id_usuario': u[0],
+                        'email': u[1],
+                        'nombre': u[2],
+                        'apellido': u[3],
+                        'id_rol': u[4],
+                        'id_residencia': u[5],
+                        'nombre_rol': u[6],
+                        'nombre_residencia': u[7],
+                        'activo': u[8],
+                        'fecha_creacion': u[9].isoformat() if u[9] else None
+                    }
+                    for u in usuarios
+                ]
+            }), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al listar usuarios: {str(e)}")
+        return jsonify({'error': 'Error al obtener usuarios'}), 500
+
+
+@app.route('/api/v1/usuarios/<int:id_usuario>', methods=['PUT'])
+def actualizar_usuario(id_usuario):
+    """Actualiza un usuario. Los usuarios pueden actualizar su propia información, los admins pueden actualizar cualquiera."""
+    # Verificar permisos: solo el propio usuario o un admin puede actualizar
+    if g.id_rol != 1 and g.id_usuario != id_usuario:
+        return jsonify({'error': 'No tienes permisos para actualizar este usuario'}), 403
+    
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el usuario existe
+            cursor.execute("SELECT id_usuario, id_rol FROM usuario WHERE id_usuario = %s", (id_usuario,))
+            usuario_existente = cursor.fetchone()
+            
+            if not usuario_existente:
+                return jsonify({'error': 'Usuario no encontrado'}), 404
+            
+            # Si no es admin, solo puede actualizar ciertos campos
+            if g.id_rol != 1:
+                # Usuario normal solo puede actualizar nombre, apellido y contraseña
+                updates = []
+                params = []
+                
+                if 'nombre' in data:
+                    updates.append("nombre = %s")
+                    params.append(data.get('nombre'))
+                
+                if 'apellido' in data:
+                    updates.append("apellido = %s")
+                    params.append(data.get('apellido'))
+                
+                if 'password' in data:
+                    password = data.get('password')
+                    if len(password) < 6:
+                        return jsonify({'error': 'La contraseña debe tener al menos 6 caracteres'}), 400
+                    password_hash = generate_password_hash(password)
+                    updates.append("password_hash = %s")
+                    params.append(password_hash)
+                
+                if not updates:
+                    return jsonify({'error': 'No hay campos para actualizar'}), 400
+                
+                params.append(id_usuario)
+                cursor.execute(f"""
+                    UPDATE usuario
+                    SET {', '.join(updates)}
+                    WHERE id_usuario = %s
+                """, params)
+                
+            else:
+                # Admin puede actualizar todos los campos excepto la contraseña (se maneja por separado)
+                updates = []
+                params = []
+                
+                if 'email' in data:
+                    email = data.get('email')
+                    valid, error = validate_email(email)
+                    if not valid:
+                        return jsonify({'error': error}), 400
+                    # Verificar que el email no esté en uso por otro usuario
+                    cursor.execute("SELECT id_usuario FROM usuario WHERE email = %s AND id_usuario != %s", (email, id_usuario))
+                    if cursor.fetchone():
+                        return jsonify({'error': 'El email ya está registrado'}), 400
+                    updates.append("email = %s")
+                    params.append(email)
+                
+                if 'nombre' in data:
+                    updates.append("nombre = %s")
+                    params.append(data.get('nombre'))
+                
+                if 'apellido' in data:
+                    updates.append("apellido = %s")
+                    params.append(data.get('apellido'))
+                
+                if 'id_rol' in data:
+                    # Verificar que el rol existe
+                    cursor.execute("SELECT id_rol FROM rol WHERE id_rol = %s AND activo = TRUE", (data.get('id_rol'),))
+                    if not cursor.fetchone():
+                        return jsonify({'error': 'Rol no válido'}), 400
+                    updates.append("id_rol = %s")
+                    params.append(data.get('id_rol'))
+                
+                if 'id_residencia' in data:
+                    # Verificar que la residencia existe
+                    cursor.execute("SELECT id_residencia FROM residencia WHERE id_residencia = %s AND activa = TRUE", (data.get('id_residencia'),))
+                    if not cursor.fetchone():
+                        return jsonify({'error': 'Residencia no válida'}), 400
+                    updates.append("id_residencia = %s")
+                    params.append(data.get('id_residencia'))
+                
+                if 'activo' in data:
+                    updates.append("activo = %s")
+                    params.append(data.get('activo'))
+                
+                if 'password' in data:
+                    password = data.get('password')
+                    if len(password) < 6:
+                        return jsonify({'error': 'La contraseña debe tener al menos 6 caracteres'}), 400
+                    password_hash = generate_password_hash(password)
+                    updates.append("password_hash = %s")
+                    params.append(password_hash)
+                
+                if not updates:
+                    return jsonify({'error': 'No hay campos para actualizar'}), 400
+                
+                params.append(id_usuario)
+                cursor.execute(f"""
+                    UPDATE usuario
+                    SET {', '.join(updates)}
+                    WHERE id_usuario = %s
+                """, params)
+            
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Usuario actualizado exitosamente'
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al actualizar usuario: {str(e)}")
+            return jsonify({'error': 'Error al actualizar usuario'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
 @app.errorhandler(404)
 def not_found(error):
     """Manejo de errores 404."""
@@ -3201,7 +4260,394 @@ def internal_error(error):
     return jsonify({'error': 'Error interno del servidor'}), 500
 
 
+# ============================================================================
+# ENDPOINTS DE DOCUMENTACIÓN UNIFICADA
+# ============================================================================
+
+@app.route('/api/v1/documentacion', methods=['GET'])
+def listar_documentacion():
+    """
+    Lista todos los documentos con filtros opcionales por tipo de entidad, categoría y residencia.
+    
+    Query params:
+    - tipo_entidad: 'residente', 'proveedor', 'personal' (opcional)
+    - categoria: 'medica', 'fiscal', 'sanitaria', 'laboral', 'otra' (opcional)
+    - id_residencia: ID de residencia (opcional, se filtra automáticamente por permisos)
+    - id_entidad: ID específico de la entidad (opcional)
+    """
+    try:
+        tipo_entidad = request.args.get('tipo_entidad')
+        categoria = request.args.get('categoria')
+        id_entidad = request.args.get('id_entidad', type=int)
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Construir query base
+            query = """
+                SELECT d.id_documento, d.tipo_entidad, d.id_entidad, d.id_residencia,
+                       d.categoria_documento, d.tipo_documento, d.nombre_archivo, d.descripcion,
+                       d.fecha_subida, d.url_archivo, d.tamaño_bytes, d.tipo_mime,
+                       d.id_usuario_subida, d.activo,
+                       res.nombre as nombre_residencia
+                FROM documento d
+                JOIN residencia res ON d.id_residencia = res.id_residencia
+                WHERE d.activo = TRUE
+            """
+            
+            params = []
+            
+            # Filtrar por residencias de acceso (excepto super_admin)
+            if g.id_rol != SUPER_ADMIN_ROLE_ID:
+                if g.residencias_acceso:
+                    placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                    query += f" AND d.id_residencia IN ({placeholders})"
+                    params.extend(g.residencias_acceso)
+                else:
+                    # Usuario sin residencias
+                    return jsonify({'documentos': [], 'total': 0}), 200
+            
+            # Filtros opcionales
+            if tipo_entidad:
+                query += " AND d.tipo_entidad = %s"
+                params.append(tipo_entidad)
+            
+            if categoria:
+                query += " AND d.categoria_documento = %s"
+                params.append(categoria)
+            
+            if id_entidad:
+                query += " AND d.id_entidad = %s"
+                params.append(id_entidad)
+            
+            query += " ORDER BY d.fecha_subida DESC"
+            
+            cursor.execute(query, params)
+            documentos = cursor.fetchall()
+            
+            # Obtener nombres de las entidades
+            resultado = []
+            for doc in documentos:
+                tipo_ent = doc[1]
+                id_ent = doc[2]
+                nombre_entidad = None
+                
+                # Obtener nombre de la entidad
+                try:
+                    if tipo_ent == 'residente':
+                        cursor.execute("SELECT nombre, apellido FROM residente WHERE id_residente = %s", (id_ent,))
+                        ent = cursor.fetchone()
+                        if ent:
+                            nombre_entidad = f"{ent[0]} {ent[1]}"
+                    elif tipo_ent == 'proveedor':
+                        cursor.execute("SELECT nombre FROM proveedor WHERE id_proveedor = %s", (id_ent,))
+                        ent = cursor.fetchone()
+                        if ent:
+                            nombre_entidad = ent[0]
+                    elif tipo_ent == 'personal':
+                        cursor.execute("SELECT nombre, apellido FROM personal WHERE id_personal = %s", (id_ent,))
+                        ent = cursor.fetchone()
+                        if ent:
+                            nombre_entidad = f"{ent[0]} {ent[1]}"
+                except:
+                    pass
+                
+                url_descarga = None
+                if doc[9]:  # Si hay url_archivo
+                    url_descarga = get_document_url(doc[9], expiration_minutes=60)
+                
+                resultado.append({
+                    'id_documento': doc[0],
+                    'tipo_entidad': doc[1],
+                    'id_entidad': doc[2],
+                    'nombre_entidad': nombre_entidad,
+                    'id_residencia': doc[3],
+                    'nombre_residencia': doc[14],
+                    'categoria_documento': doc[4],
+                    'tipo_documento': doc[5],
+                    'nombre_archivo': doc[6],
+                    'descripcion': doc[7],
+                    'fecha_subida': doc[8].isoformat() if doc[8] else None,
+                    'url_archivo': doc[9],
+                    'url_descarga': url_descarga,
+                    'tamaño_bytes': doc[10],
+                    'tipo_mime': doc[11],
+                    'id_usuario_subida': doc[12]
+                })
+            
+            return jsonify({
+                'documentos': resultado,
+                'total': len(resultado),
+                'filtros': {
+                    'tipo_entidad': tipo_entidad,
+                    'categoria': categoria,
+                    'id_entidad': id_entidad
+                }
+            }), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al listar documentación: {str(e)}")
+        return jsonify({'error': 'Error al obtener documentación'}), 500
+
+
+@app.route('/api/v1/documentacion', methods=['POST'])
+def crear_documento_unificado():
+    """
+    Crea un nuevo documento y lo sube a Cloud Storage.
+    
+    Request (multipart/form-data):
+    - archivo: Archivo a subir
+    - tipo_entidad: 'residente', 'proveedor', 'personal'
+    - id_entidad: ID de la entidad
+    - categoria_documento: 'medica', 'fiscal', 'sanitaria', 'laboral', 'otra'
+    - tipo_documento: Tipo específico del documento
+    - descripcion: Descripción opcional
+    """
+    try:
+        if 'archivo' not in request.files:
+            return jsonify({'error': 'Archivo requerido'}), 400
+        
+        archivo = request.files['archivo']
+        if archivo.filename == '':
+            return jsonify({'error': 'Nombre de archivo vacío'}), 400
+        
+        tipo_entidad = request.form.get('tipo_entidad')
+        id_entidad = request.form.get('id_entidad', type=int)
+        categoria_documento = request.form.get('categoria_documento')
+        tipo_documento = request.form.get('tipo_documento')
+        descripcion = request.form.get('descripcion', '')
+        
+        if not all([tipo_entidad, id_entidad, categoria_documento, tipo_documento]):
+            return jsonify({'error': 'tipo_entidad, id_entidad, categoria_documento y tipo_documento son requeridos'}), 400
+        
+        if tipo_entidad not in ['residente', 'proveedor', 'personal']:
+            return jsonify({'error': 'tipo_entidad debe ser: residente, proveedor o personal'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que la entidad existe y obtener su residencia
+            id_residencia = None
+            if tipo_entidad == 'residente':
+                cursor.execute("SELECT id_residencia FROM residente WHERE id_residente = %s", (id_entidad,))
+                res = cursor.fetchone()
+                if not res:
+                    return jsonify({'error': 'Residente no encontrado'}), 404
+                id_residencia = res[0]
+            elif tipo_entidad == 'proveedor':
+                cursor.execute("SELECT id_residencia FROM proveedor WHERE id_proveedor = %s", (id_entidad,))
+                res = cursor.fetchone()
+                if not res:
+                    return jsonify({'error': 'Proveedor no encontrado'}), 404
+                id_residencia = res[0]
+            elif tipo_entidad == 'personal':
+                cursor.execute("SELECT id_residencia FROM personal WHERE id_personal = %s", (id_entidad,))
+                res = cursor.fetchone()
+                if not res:
+                    return jsonify({'error': 'Personal no encontrado'}), 404
+                id_residencia = res[0]
+            
+            # Verificar permisos de acceso a la residencia
+            is_valid, error_response = validate_residencia_access(id_residencia)
+            if not is_valid:
+                return error_response
+            
+            # Leer contenido del archivo
+            file_content = archivo.read()
+            nombre_archivo = archivo.filename
+            content_type = archivo.content_type
+            
+            # Subir a Cloud Storage usando función unificada
+            from storage_manager import upload_document_unificado
+            blob_path = upload_document_unificado(
+                file_content, id_residencia, tipo_entidad, id_entidad,
+                tipo_documento, nombre_archivo, content_type
+            )
+            
+            if not blob_path:
+                return jsonify({'error': 'Error al subir el archivo a Cloud Storage'}), 500
+            
+            # Guardar en base de datos
+            cursor.execute("""
+                INSERT INTO documento (tipo_entidad, id_entidad, id_residencia, categoria_documento,
+                                      tipo_documento, nombre_archivo, descripcion, url_archivo,
+                                      tamaño_bytes, tipo_mime, id_usuario_subida, activo)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                RETURNING id_documento, fecha_subida
+            """, (
+                tipo_entidad, id_entidad, id_residencia, categoria_documento,
+                tipo_documento, nombre_archivo, descripcion, blob_path,
+                len(file_content), content_type, g.id_usuario
+            ))
+            
+            resultado = cursor.fetchone()
+            id_documento = resultado[0]
+            conn.commit()
+            
+            return jsonify({
+                'id_documento': id_documento,
+                'mensaje': 'Documento subido exitosamente',
+                'url_archivo': blob_path
+            }), 201
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al crear documento: {str(e)}")
+            return jsonify({'error': f'Error al crear documento: {str(e)}'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/documentacion/<int:id_documento>', methods=['DELETE'])
+def eliminar_documento_unificado(id_documento):
+    """Elimina un documento unificado (marca como inactivo y elimina de Cloud Storage)."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Obtener información del documento
+            cursor.execute("""
+                SELECT id_documento, url_archivo, id_residencia, tipo_entidad, id_entidad
+                FROM documento 
+                WHERE id_documento = %s AND activo = TRUE
+            """, (id_documento,))
+            
+            doc = cursor.fetchone()
+            if not doc:
+                return jsonify({'error': 'Documento no encontrado'}), 404
+            
+            id_residencia = doc[2]
+            
+            # Verificar permisos
+            is_valid, error_response = validate_residencia_access(id_residencia)
+            if not is_valid:
+                return error_response
+            
+            # Eliminar de Cloud Storage
+            if doc[1]:  # Si hay url_archivo
+                delete_document(doc[1])
+            
+            # Marcar como inactivo (soft delete)
+            cursor.execute("""
+                UPDATE documento
+                SET activo = FALSE
+                WHERE id_documento = %s
+                RETURNING id_documento
+            """, (id_documento,))
+            
+            conn.commit()
+            
+            return jsonify({
+                'mensaje': 'Documento eliminado exitosamente'
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al eliminar documento: {str(e)}")
+            return jsonify({'error': 'Error al eliminar documento'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/documentacion/<int:id_documento>/descargar', methods=['GET'])
+def descargar_documento_unificado(id_documento):
+    """Genera una URL firmada para descargar un documento."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT url_archivo, id_residencia FROM documento
+                WHERE id_documento = %s AND activo = TRUE
+            """, (id_documento,))
+            
+            doc = cursor.fetchone()
+            if not doc:
+                return jsonify({'error': 'Documento no encontrado'}), 404
+            
+            # Verificar permisos
+            is_valid, error_response = validate_residencia_access(doc[1])
+            if not is_valid:
+                return error_response
+            
+            url_descarga = get_document_url(doc[0], expiration_minutes=60)
+            
+            if not url_descarga:
+                return jsonify({'error': 'Error al generar URL de descarga'}), 500
+            
+            return jsonify({
+                'url_descarga': url_descarga,
+                'expira_en_minutos': 60
+            }), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al generar URL de descarga: {str(e)}")
+        return jsonify({'error': 'Error al generar URL de descarga'}), 500
+
+
+@app.route('/api/v1/documentacion/categorias', methods=['GET'])
+def listar_categorias():
+    """Lista las categorías de documentos disponibles."""
+    categorias = [
+        {'valor': 'medica', 'nombre': 'Médica'},
+        {'valor': 'fiscal', 'nombre': 'Fiscal'},
+        {'valor': 'sanitaria', 'nombre': 'Sanitaria'},
+        {'valor': 'laboral', 'nombre': 'Laboral'},
+        {'valor': 'otra', 'nombre': 'Otra'}
+    ]
+    return jsonify({'categorias': categorias}), 200
+
+
+@app.route('/api/v1/documentacion/tipos-entidad', methods=['GET'])
+def listar_tipos_entidad():
+    """Lista los tipos de entidades disponibles."""
+    tipos = [
+        {'valor': 'residente', 'nombre': 'Residente'},
+        {'valor': 'proveedor', 'nombre': 'Proveedor'},
+        {'valor': 'personal', 'nombre': 'Personal'}
+    ]
+    return jsonify({'tipos': tipos}), 200
+
+
 if __name__ == '__main__':
+    # Configurar logging para mostrar en consola
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
     # Para desarrollo local
+    print("\n" + "="*50)
+    print("  Servidor Flask Violetas iniciado")
+    print("="*50)
+    print(f"  URL: http://localhost:5000")
+    print(f"  Modo: DEBUG")
+    print(f"  Presiona Ctrl+C para detener")
+    print("="*50 + "\n")
+    
     app.run(debug=True, host='0.0.0.0', port=5000)
 

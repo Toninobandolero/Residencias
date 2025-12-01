@@ -522,8 +522,20 @@
             padding: 30px;
             border-radius: 20px;
             width: 90%;
-            max-width: 500px;
+            max-width: 600px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        @media (min-width: 1200px) {
+            .modal-content {
+                max-width: 900px;
+            }
+        }
+
+        @media (min-width: 1600px) {
+            .modal-content {
+                max-width: 1100px;
+            }
         }
 
         .modal-header {
@@ -627,7 +639,7 @@
             <div class="user-info" id="userInfo" style="display: none;"></div>
             
             <div style="margin-top: 20px;">
-                <h3 style="color: #667eea; margin-bottom: 15px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Módulos" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;"> Módulos del Sistema</h3>
+                <h3 style="color: #667eea; margin-bottom: 15px;">Módulos del Sistema</h3>
                 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
                     <button class="module-btn" onclick="showModule('residentes')">
@@ -638,6 +650,9 @@
                     </button>
                     <button class="module-btn" onclick="showModule('personal')">
                         <img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 20px; height: 20px; margin-right: 8px;"> Personal
+                    </button>
+                    <button class="module-btn" onclick="showModule('documentacion')">
+                        <img src="/static/icons/medical/file-text.svg" alt="Documentación" style="width: 20px; height: 20px; margin-right: 8px;"> Documentación
                     </button>
                 </div>
             </div>
@@ -808,7 +823,7 @@
                             <textarea id="res_alergias" name="alergias" rows="2" placeholder="Ej: Penicilina, Lácteos, Polen"></textarea>
                         </div>
                         <div class="form-group">
-                            <label for="res_diagnosticos">Enfermedades Crónicas / Diagnósticos</label>
+                            <label for="res_diagnosticos">Enfermedades / Diagnósticos</label>
                             <textarea id="res_diagnosticos" name="diagnosticos" rows="2" placeholder="Ej: Diabetes tipo 2, Hipertensión, Artritis"></textarea>
                         </div>
                     </div>
@@ -975,7 +990,7 @@
     <div id="modalTurnoExtra" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2><img src="/static/icons/medical/clock.svg" alt="Turno Extra" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> <span id="modalTurnoExtraTitle">Agregar Turno Extra</span></h2>
+                <h2><img src="/static/icons/medical/calendar-medical.svg" alt="Turno Extra" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> <span id="modalTurnoExtraTitle">Agregar Turno Extra</span></h2>
                 <button class="close-modal" onclick="closeModal('modalTurnoExtra')">&times;</button>
             </div>
             <form id="formTurnoExtra" onsubmit="saveTurnoExtra(event)">
@@ -994,7 +1009,7 @@
                 
                 <!-- SECCIÓN: Fecha y Horas -->
                 <div style="background: #fff5f5; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #f56565;">
-                    <h3 style="color: #f56565; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/calendar.svg" alt="Fecha" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Fecha y Horas</h3>
+                    <h3 style="color: #f56565; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/calendar-medical.svg" alt="Fecha" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Fecha y Horas</h3>
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
                         <div class="form-group">
                             <label for="turno_fecha">Fecha *</label>
@@ -1112,7 +1127,44 @@
                 <div id="modalProveedorAlert" class="alert" style="display: none;"></div>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
                     <button type="submit" id="saveProveedorBtn" style="flex: 1;">Guardar</button>
+                    <button type="button" id="bajaProveedorBtn" onclick="abrirModalBajaProveedor()" style="flex: 1; background: #dc3545; display: none;">Dar de Baja</button>
                     <button type="button" onclick="closeModal('modalProveedor')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para Dar de Baja a Proveedor -->
+    <div id="modalBajaProveedor" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2><img src="/static/icons/medical/user-x.svg" alt="Dar de baja" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Archivar Proveedor</h2>
+                <button class="close-modal" onclick="closeModal('modalBajaProveedor')">&times;</button>
+            </div>
+            <form id="formBajaProveedor" onsubmit="confirmarBajaProveedor(event)">
+                <input type="hidden" id="baja_id_proveedor" name="id_proveedor">
+                <div class="form-group">
+                    <label for="baja_proveedor_motivo">Motivo de la Baja *</label>
+                    <select id="baja_proveedor_motivo" name="motivo_baja" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                        <option value="">Seleccione un motivo</option>
+                        <option value="Finalización de contrato">Finalización de contrato</option>
+                        <option value="Incumplimiento de condiciones">Incumplimiento de condiciones</option>
+                        <option value="Cambio de proveedor">Cambio de proveedor</option>
+                        <option value="Cese de actividad">Cese de actividad</option>
+                        <option value="Problemas de calidad">Problemas de calidad</option>
+                        <option value="Problemas de pago">Problemas de pago</option>
+                        <option value="Falta de documentación">Falta de documentación</option>
+                        <option value="Otro">Otro</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin-top: 15px;">
+                    <label for="baja_proveedor_observaciones">Observaciones (opcional)</label>
+                    <textarea id="baja_proveedor_observaciones" name="observaciones" rows="3" placeholder="Información adicional sobre la baja"></textarea>
+                </div>
+                <div id="modalBajaProveedorAlert" class="alert" style="display: none;"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="confirmarBajaProveedorBtn" style="flex: 1; background: #dc3545;">Confirmar Baja</button>
+                    <button type="button" onclick="closeModal('modalBajaProveedor')" style="flex: 1; background: #6c757d;">Cancelar</button>
                 </div>
             </form>
         </div>
@@ -1323,6 +1375,129 @@
         </div>
     </div>
 
+    <!-- Modal para Gestión de Usuarios (Solo Admin) -->
+    <div id="modalUsuarios" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalUsuariosTitulo">
+                    <img src="/static/icons/medical/users.svg" alt="Usuarios" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Gestión de Usuarios
+                </h2>
+                <button class="close-modal" onclick="closeModal('modalUsuarios')">&times;</button>
+            </div>
+            <div id="usuariosContent" style="max-height: 70vh; overflow-y: auto;">
+                <!-- Contenido dinámico -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Crear/Editar Usuario -->
+    <div id="modalUsuario" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalUsuarioTitulo">
+                    <img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Usuario
+                </h2>
+                <button class="close-modal" onclick="closeModal('modalUsuario')">&times;</button>
+            </div>
+            <form id="formUsuario" onsubmit="saveUsuario(event)">
+                <input type="hidden" id="usuario_id_usuario" name="id_usuario" value="">
+                <div id="usuarioAlert" class="alert" style="display: none;"></div>
+                
+                <div class="form-section">
+                    <h3>Información de Acceso</h3>
+                    <div class="form-group">
+                        <label for="usuario_email">Email *</label>
+                        <input type="email" id="usuario_email" name="email" required placeholder="usuario@ejemplo.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="usuario_password">Contraseña *</label>
+                        <input type="password" id="usuario_password" name="password" placeholder="Mínimo 6 caracteres">
+                        <small style="color: #666; font-size: 12px;">Dejar vacío para no cambiar (solo en edición)</small>
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h3>Información Personal</h3>
+                    <div class="form-group">
+                        <label for="usuario_nombre">Nombre</label>
+                        <input type="text" id="usuario_nombre" name="nombre" placeholder="Nombre del usuario">
+                    </div>
+                    <div class="form-group">
+                        <label for="usuario_apellido">Apellido</label>
+                        <input type="text" id="usuario_apellido" name="apellido" placeholder="Apellido del usuario">
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h3>Permisos y Residencia</h3>
+                    <div class="form-group">
+                        <label for="usuario_id_rol">Rol *</label>
+                        <select id="usuario_id_rol" name="id_rol" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                            <option value="">Seleccione un rol</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="usuario_id_residencia">Residencia *</label>
+                        <select id="usuario_id_residencia" name="id_residencia" required style="width: 100%; padding: 12px 15px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 16px; background: white; color: #333333;">
+                            <option value="">Seleccione una residencia</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="usuario_activo" name="activo" checked style="width: auto; margin-right: 8px;"> Usuario Activo
+                        </label>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="saveUsuarioBtn" style="flex: 1;">Guardar</button>
+                    <button type="button" onclick="closeModal('modalUsuario')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para Editar Mi Cuenta -->
+    <div id="modalMiCuenta" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>
+                    <img src="/static/icons/medical/user-medical.svg" alt="Mi Cuenta" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Mi Cuenta
+                </h2>
+                <button class="close-modal" onclick="closeModal('modalMiCuenta')">&times;</button>
+            </div>
+            <form id="formMiCuenta" onsubmit="saveMiCuenta(event)">
+                <div id="miCuentaAlert" class="alert" style="display: none;"></div>
+                
+                <div class="form-section">
+                    <h3>Información Personal</h3>
+                    <div class="form-group">
+                        <label for="micuenta_nombre">Nombre</label>
+                        <input type="text" id="micuenta_nombre" name="nombre" placeholder="Tu nombre">
+                    </div>
+                    <div class="form-group">
+                        <label for="micuenta_apellido">Apellido</label>
+                        <input type="text" id="micuenta_apellido" name="apellido" placeholder="Tu apellido">
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h3>Cambiar Contraseña</h3>
+                    <div class="form-group">
+                        <label for="micuenta_password">Nueva Contraseña</label>
+                        <input type="password" id="micuenta_password" name="password" placeholder="Mínimo 6 caracteres">
+                        <small style="color: #666; font-size: 12px;">Dejar vacío para no cambiar</small>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="saveMiCuentaBtn" style="flex: 1;">Guardar Cambios</button>
+                    <button type="button" onclick="closeModal('modalMiCuenta')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         const API_URL = window.location.origin;
         let currentToken = null;
@@ -1460,9 +1635,64 @@
             menu.classList.remove('show');
         }
 
-        function showConfiguracion() {
+        async function showConfiguracion() {
             closeUserMenu();
-            alert('Configuración - Próximamente');
+            const content = document.getElementById('moduleContent');
+            const token = localStorage.getItem('violetas_token');
+            
+            if (!token) {
+                content.innerHTML = '<div class="module-content"><p style="color: red;">No hay sesión activa. Por favor, inicia sesión.</p></div>';
+                return;
+            }
+            
+            // Obtener información del usuario actual
+            let usuarioActual = null;
+            let esAdmin = false;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/usuarios/me`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    usuarioActual = await response.json();
+                    esAdmin = usuarioActual.id_rol === 1;
+                }
+            } catch (error) {
+                console.error('Error al obtener información del usuario:', error);
+            }
+            
+            content.innerHTML = `
+                <div class="module-content">
+                    <h2 style="color: #667eea; margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+                        <img src="/static/icons/medical/settings.svg" alt="Configuración" style="width: 32px; height: 32px;"> Configuración
+                    </h2>
+                    
+                    <div style="display: grid; grid-template-columns: ${esAdmin ? '1fr 1fr' : '1fr'}; gap: 30px; margin-bottom: 30px;">
+                        ${esAdmin ? `
+                        <div style="background: #f7fafc; padding: 25px; border-radius: 15px; border: 2px solid #e0e0e0;">
+                            <h3 style="color: #667eea; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                                <img src="/static/icons/medical/users.svg" alt="Usuarios" style="width: 24px; height: 24px;"> Gestión de Usuarios
+                            </h3>
+                            <p style="color: #666; margin-bottom: 20px;">Administra los usuarios del sistema, sus roles y permisos.</p>
+                            <button class="add-btn" onclick="loadUsuarios()" style="width: 100%; padding: 12px; font-size: 16px;">
+                                <img src="/static/icons/medical/users.svg" alt="Usuarios" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px; filter: brightness(0) invert(1);"> Ver Usuarios
+                            </button>
+                        </div>
+                        ` : ''}
+                        
+                        <div style="background: #f7fafc; padding: 25px; border-radius: 15px; border: 2px solid #e0e0e0;">
+                            <h3 style="color: #667eea; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+                                <img src="/static/icons/medical/user-medical.svg" alt="Mi Cuenta" style="width: 24px; height: 24px;"> Mi Cuenta
+                            </h3>
+                            <p style="color: #666; margin-bottom: 20px;">Edita tu información personal y cambia tu contraseña.</p>
+                            <button class="add-btn" onclick="editarMiCuenta()" style="width: 100%; padding: 12px; font-size: 16px;">
+                                <img src="/static/icons/medical/settings.svg" alt="Editar" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px; filter: brightness(0) invert(1);"> Editar Mi Cuenta
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
         }
 
         // Cerrar el menú al hacer clic fuera
@@ -1517,6 +1747,8 @@
                 loadFacturacion();
             } else if (module === 'personal') {
                 loadPersonal();
+            } else if (module === 'documentacion') {
+                loadDocumentacion();
             }
         }
 
@@ -2219,8 +2451,8 @@
                                 
                                 <!-- Pestaña de Cobros -->
                                 <div id="tabCobros" class="tab-content active">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                                        <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros Previstos (${totalPrevistos})</h4>
+                                    <div style="margin-bottom: 20px;">
+                                        <h4 style="color: #667eea; margin: 0; margin-bottom: 15px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Cobros" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Cobros Previstos (${totalPrevistos})</h4>
                                         <button class="add-btn" onclick="openModal('modalCobro')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Cobro</button>
                                     </div>
                                     <div style="margin-bottom: 30px;">
@@ -2437,7 +2669,7 @@
                         let totalPagos = 0;
                         proveedoresData.pagos.forEach(pago => {
                             const estadoPago = (pago.estado || 'pendiente').toLowerCase();
-                            const tipo = estadoPago === 'pagado' ? '<img src="/static/icons/medical/check-circle.svg" alt="Pagado" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;"> Pagado' : '<img src="/static/icons/medical/clock.svg" alt="Pendiente" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;"> Pendiente';
+                            const tipo = estadoPago === 'pagado' ? '<img src="/static/icons/medical/check-circle.svg" alt="Pagado" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;"> Pagado' : '<img src="/static/icons/medical/alert-circle.svg" alt="Pendiente" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;"> Pendiente';
                             const metodoPago = pago.metodo_pago || pago.tipo_pago || '-';
                             const monto = parseFloat(pago.monto || pago.monto_estimado || 0);
                             totalPagos += monto;
@@ -2904,6 +3136,8 @@
                     : `${API_URL}/api/v1/facturacion/cobros`;
                 const method = idPago ? 'PUT' : 'POST';
                 
+                console.log('Enviando cobro a:', url, 'Método:', method, 'Datos:', data);
+                
                 const response = await fetch(url, {
                     method: method,
                     headers: {
@@ -2913,7 +3147,23 @@
                     body: JSON.stringify(data)
                 });
                 
-                const result = await response.json();
+                let result;
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        result = await response.json();
+                    } else {
+                        const text = await response.text();
+                        console.error('Respuesta no es JSON:', text);
+                        throw new Error(`Error del servidor (${response.status}): ${text.substring(0, 100)}`);
+                    }
+                } catch (parseError) {
+                    console.error('Error al parsear respuesta:', parseError);
+                    showCobroModalError(`Error del servidor (${response.status}). Por favor, intenta de nuevo.`);
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                    return;
+                }
                 
                 if (response.ok) {
                     showCobroModalSuccess(idPago ? 'Cobro actualizado exitosamente' : 'Cobro registrado exitosamente');
@@ -2927,6 +3177,7 @@
                     saveBtn.textContent = originalText;
                 }
             } catch (error) {
+                console.error('Error al guardar cobro:', error);
                 showCobroModalError('Error de conexión: ' + error.message);
                 saveBtn.disabled = false;
                 saveBtn.textContent = originalText;
@@ -3423,11 +3674,135 @@
             openModal('modalProveedor');
         }
         
+        function abrirModalBajaProveedor(idProveedor) {
+            if (!idProveedor) {
+                // Intentar obtener del formulario
+                idProveedor = document.getElementById('prov_id_proveedor').value;
+            }
+            
+            if (!idProveedor) {
+                alert('Error: No se pudo identificar el proveedor');
+                return;
+            }
+            
+            document.getElementById('baja_id_proveedor').value = idProveedor;
+            document.getElementById('baja_proveedor_motivo').value = '';
+            document.getElementById('baja_proveedor_observaciones').value = '';
+            hideBajaProveedorModalAlert();
+            
+            closeModal('modalProveedor');
+            openModal('modalBajaProveedor');
+        }
+        
+        async function confirmarBajaProveedor(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const saveBtn = document.getElementById('confirmarBajaProveedorBtn');
+            const originalText = saveBtn.textContent;
+            
+            const formData = new FormData(form);
+            const idProveedor = formData.get('id_proveedor');
+            const motivoBaja = formData.get('motivo_baja');
+            
+            if (!motivoBaja) {
+                showBajaProveedorModalError('El motivo de baja es requerido');
+                return;
+            }
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Procesando...';
+            hideBajaProveedorModalAlert();
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/proveedores/${idProveedor}/baja`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        motivo_baja: motivoBaja,
+                        observaciones: formData.get('observaciones') || null
+                    })
+                });
+                
+                let result;
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        result = await response.json();
+                    } else {
+                        const text = await response.text();
+                        throw new Error(`Error del servidor (${response.status}): ${text.substring(0, 100)}`);
+                    }
+                } catch (parseError) {
+                    showBajaProveedorModalError(`Error del servidor (${response.status}). Por favor, intenta de nuevo.`);
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                    return;
+                }
+                
+                if (response.ok) {
+                    showBajaProveedorModalSuccess('Proveedor archivado exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalBajaProveedor');
+                        // Recargar lista de proveedores si el modal estaba abierto
+                        const modalLista = document.getElementById('modalListaProveedores');
+                        if (modalLista && modalLista.style.display === 'block') {
+                            abrirModalListaProveedores();
+                        }
+                    }, 1500);
+                } else {
+                    showBajaProveedorModalError(result.error || 'Error al archivar el proveedor');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            } catch (error) {
+                console.error('Error al archivar proveedor:', error);
+                showBajaProveedorModalError('Error de conexión: ' + error.message);
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        }
+        
+        function showBajaProveedorModalError(message) {
+            const alert = document.getElementById('modalBajaProveedorAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function showBajaProveedorModalSuccess(message) {
+            const alert = document.getElementById('modalBajaProveedorAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function hideBajaProveedorModalAlert() {
+            const alert = document.getElementById('modalBajaProveedorAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
+        
         function resetProveedorForm() {
             // Limpiar el formulario y restablecer el título
             document.getElementById('formProveedor').reset();
             document.getElementById('prov_id_proveedor').value = '';
             document.getElementById('prov_activo').checked = true;
+            
+            // Ocultar botón de dar de baja al crear nuevo proveedor
+            const bajaBtn = document.getElementById('bajaProveedorBtn');
+            if (bajaBtn) {
+                bajaBtn.style.display = 'none';
+            }
             
             // Restablecer título del modal
             const modalHeader = document.querySelector('#modalProveedor .modal-header h2');
@@ -3524,7 +3899,6 @@
                                         <tr>
                                             <th>Nombre</th>
                                             <th>Tipo de Servicio</th>
-                                            <th>NIF/CIF</th>
                                             <th>Teléfono</th>
                                             <th>Email</th>
                                             <th>Contacto</th>
@@ -3549,7 +3923,6 @@
                                 <tr style="cursor: pointer;" onclick="editarProveedor(${prov.id_proveedor})" title="Haz clic para editar">
                                     <td style="color: #333; font-weight: 600;">${prov.nombre || '-'}</td>
                                     <td style="color: #333;">${prov.tipo_servicio || '-'}</td>
-                                    <td style="color: #333;">${prov.nif_cif || '-'}</td>
                                     <td style="color: #333;">${prov.telefono || '-'}</td>
                                     <td style="color: #333;">${prov.email || '-'}</td>
                                     <td style="color: #333;">${prov.contacto || '-'}</td>
@@ -3563,22 +3936,6 @@
                                 </table>
                             </div>
                         `;
-                        
-                        // Añadir información adicional si hay observaciones o dirección
-                        const proveedoresConInfo = data.proveedores.filter(p => p.observaciones || p.direccion);
-                        if (proveedoresConInfo.length > 0) {
-                            html += `<div style="margin-top: 30px;"><h4 style="color: #667eea; margin-bottom: 15px;">Información Adicional</h4>`;
-                            proveedoresConInfo.forEach(prov => {
-                                html += `
-                                    <div style="background: #f7fafc; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #667eea;">
-                                        <strong style="color: #667eea;">${prov.nombre}</strong>
-                                        ${prov.direccion ? `<p style="margin: 5px 0; color: #666;"><strong>Dirección:</strong> ${prov.direccion}</p>` : ''}
-                                        ${prov.observaciones ? `<p style="margin: 5px 0; color: #666;"><strong>Observaciones:</strong> ${prov.observaciones}</p>` : ''}
-                                    </div>
-                                `;
-                            });
-                            html += `</div>`;
-                        }
                         
                         content.innerHTML = html;
                     } else {
@@ -3677,6 +4034,7 @@
                     saveBtn.textContent = originalText;
                 }
             } catch (error) {
+                console.error('Error al guardar proveedor:', error);
                 showProveedorModalError('Error de conexión: ' + error.message);
                 saveBtn.disabled = false;
                 saveBtn.textContent = originalText;
@@ -3748,11 +4106,22 @@
                         modalHeader.innerHTML = '<img src="/static/icons/medical/settings.svg" alt="Editar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Proveedor';
                     }
                     
+                    // Mostrar botón de dar de baja si el proveedor está activo
+                    const bajaBtn = document.getElementById('bajaProveedorBtn');
+                    if (bajaBtn) {
+                        if (proveedor.activo) {
+                            bajaBtn.style.display = 'block';
+                            bajaBtn.onclick = () => abrirModalBajaProveedor(proveedor.id_proveedor);
+                        } else {
+                            bajaBtn.style.display = 'none';
+                        }
+                    }
+                    
                     // Cerrar el modal de lista si está abierto
                     closeModal('modalListaProveedores');
                     
-                    // Abrir modal de edición
-                    openModal('modalProveedor');
+                    // Abrir modal de edición (sin resetear porque ya llenamos los campos)
+                    document.getElementById('modalProveedor').style.display = 'block';
                 } else {
                     // Manejar errores de autenticación
                     if (response.status === 401) {
@@ -4354,7 +4723,7 @@
                             <div class="tabs-container">
                                 <div class="tabs">
                                     <button class="tab active" onclick="switchPersonalTab('personal')"><img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Personal (${data.total || 0})</button>
-                                    <button class="tab" onclick="switchPersonalTab('turnos-extra')"><img src="/static/icons/medical/clock.svg" alt="Turnos" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Turnos Extra</button>
+                                    <button class="tab" onclick="switchPersonalTab('turnos-extra')"><img src="/static/icons/medical/calendar-medical.svg" alt="Turnos" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Turnos Extra</button>
                                 </div>
                                 
                                 <!-- Pestaña de Personal -->
@@ -4440,6 +4809,29 @@
         async function openModal(modalId) {
             document.getElementById(modalId).style.display = 'block';
             
+            // Asegurar que todos los botones de guardado estén habilitados al abrir cualquier modal
+            const saveButtonIds = ['saveResidenteBtn', 'savePersonalBtn', 'saveTurnoExtraBtn', 'saveCobroBtn', 'saveProveedorBtn', 'savePagoProveedorBtn', 'updateResidenteBtn'];
+            const buttonTexts = {
+                'saveResidenteBtn': 'Guardar',
+                'savePersonalBtn': 'Guardar',
+                'saveTurnoExtraBtn': 'Guardar',
+                'saveCobroBtn': 'Guardar',
+                'saveProveedorBtn': 'Guardar',
+                'savePagoProveedorBtn': 'Guardar',
+                'updateResidenteBtn': 'Actualizar'
+            };
+            
+            saveButtonIds.forEach(btnId => {
+                const btn = document.getElementById(btnId);
+                if (btn) {
+                    btn.disabled = false;
+                    // Restaurar texto original si está en "Guardando..." o "Actualizando..."
+                    if (btn.textContent.includes('Guardando') || btn.textContent.includes('Actualizando')) {
+                        btn.textContent = buttonTexts[btnId] || 'Guardar';
+                    }
+                }
+            });
+            
             // Si es el modal de agregar cobro, cargar residentes (solo si no estamos editando)
             if (modalId === 'modalCobro') {
                 const idPagoOculto = document.getElementById('cobro_id_pago');
@@ -4453,6 +4845,12 @@
             // Si es el modal de pago a proveedor, inicializar date pickers
             if (modalId === 'modalPagoProveedor') {
                 initializePagoProveedorDatePickers();
+            }
+            
+            // Si es el modal de usuario, cargar roles y residencias
+            if (modalId === 'modalUsuario') {
+                loadRolesForSelect();
+                loadResidenciasForSelect();
             }
             
             // Si es el modal de agregar residente, establecer residencia por defecto según el token
@@ -4683,6 +5081,29 @@
         function closeModal(modalId) {
             document.getElementById(modalId).style.display = 'none';
             
+            // Restaurar todos los botones de guardado al cerrar cualquier modal
+            const saveButtonIds = ['saveResidenteBtn', 'savePersonalBtn', 'saveTurnoExtraBtn', 'saveCobroBtn', 'saveProveedorBtn', 'savePagoProveedorBtn', 'updateResidenteBtn'];
+            const buttonTexts = {
+                'saveResidenteBtn': 'Guardar',
+                'savePersonalBtn': 'Guardar',
+                'saveTurnoExtraBtn': 'Guardar',
+                'saveCobroBtn': 'Guardar',
+                'saveProveedorBtn': 'Guardar',
+                'savePagoProveedorBtn': 'Guardar',
+                'updateResidenteBtn': 'Actualizar'
+            };
+            
+            saveButtonIds.forEach(btnId => {
+                const btn = document.getElementById(btnId);
+                if (btn) {
+                    btn.disabled = false;
+                    // Restaurar texto original si está en "Guardando..." o "Actualizando..."
+                    if (btn.textContent.includes('Guardando') || btn.textContent.includes('Actualizando')) {
+                        btn.textContent = buttonTexts[btnId] || 'Guardar';
+                    }
+                }
+            });
+            
             // Restaurar título del modal de ver residente
             if (modalId === 'modalViewResidente') {
                 const modalTitle = document.querySelector('#modalViewResidente .modal-header h2');
@@ -4773,11 +5194,20 @@
                 }
             }
             const formProveedor = document.getElementById('formProveedor');
-            if (formProveedor) {
-                formProveedor.reset();
-                const activoCheckbox = document.getElementById('prov_activo');
-                if (activoCheckbox) {
-                    activoCheckbox.checked = true;
+            if (formProveedor && modalId === 'modalProveedor') {
+                // Solo resetear si no estamos editando (no hay ID de proveedor)
+                const idProveedor = document.getElementById('prov_id_proveedor');
+                if (!idProveedor || !idProveedor.value) {
+                    formProveedor.reset();
+                    const activoCheckbox = document.getElementById('prov_activo');
+                    if (activoCheckbox) {
+                        activoCheckbox.checked = true;
+                    }
+                    // Restaurar título del modal
+                    const modalHeader = document.querySelector('#modalProveedor .modal-header h2');
+                    if (modalHeader) {
+                        modalHeader.innerHTML = '<img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Proveedor';
+                    }
                 }
             }
             const formPagoProveedor = document.getElementById('formPagoProveedor');
@@ -5276,7 +5706,7 @@
                                         <textarea id="edit_alergias" name="alergias" rows="2" placeholder="Ej: Penicilina, Lácteos, Polen">${res.alergias || ''}</textarea>
                                     </div>
                                     <div class="form-group">
-                                        <label for="edit_diagnosticos">Enfermedades Crónicas / Diagnósticos</label>
+                                        <label for="edit_diagnosticos">Enfermedades / Diagnósticos</label>
                                         <textarea id="edit_diagnosticos" name="diagnosticos" rows="2" placeholder="Ej: Diabetes tipo 2, Hipertensión, Artritis">${res.diagnosticos || ''}</textarea>
                                     </div>
                                 </div>
@@ -5888,6 +6318,14 @@
                 servicios_extra: serviciosExtraCombinados,
                 medicaciones: formData.get('medicaciones') || null,
                 peculiaridades: formData.get('peculiaridades') || null,
+                grupo_sanguineo: formData.get('grupo_sanguineo') || null,
+                alergias: formData.get('alergias') || null,
+                diagnosticos: formData.get('diagnosticos') || null,
+                restricciones_dieteticas: formData.get('restricciones_dieteticas') || null,
+                nivel_dependencia: formData.get('nivel_dependencia') || null,
+                movilidad: formData.get('movilidad') || null,
+                medico_referencia: formData.get('medico_referencia') || null,
+                telefono_medico: formData.get('telefono_medico') || null,
                 activo: true  // Los nuevos residentes siempre son activos
             };
             
@@ -6020,7 +6458,23 @@
                     body: JSON.stringify(data)
                 });
                 
-                const result = await response.json();
+                let result;
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        result = await response.json();
+                    } else {
+                        const text = await response.text();
+                        console.error('Respuesta no es JSON:', text);
+                        throw new Error(`Error del servidor (${response.status}): ${text.substring(0, 100)}`);
+                    }
+                } catch (parseError) {
+                    console.error('Error al parsear respuesta:', parseError);
+                    showModalPersonalError(`Error del servidor (${response.status}). Por favor, intenta de nuevo.`);
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                    return;
+                }
                 
                 if (response.ok) {
                     showModalPersonalSuccess('Personal agregado exitosamente');
@@ -6034,6 +6488,7 @@
                     saveBtn.textContent = originalText;
                 }
             } catch (error) {
+                console.error('Error al guardar personal:', error);
                 showModalPersonalError('Error de conexión: ' + error.message);
                 saveBtn.disabled = false;
                 saveBtn.textContent = originalText;
@@ -6105,7 +6560,7 @@
                 if (response.ok) {
                     let html = `
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/clock.svg" alt="Turnos" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Turnos Extra (${data.total || 0})</h4>
+                            <h4 style="color: #667eea; margin: 0;"><img src="/static/icons/medical/calendar-medical.svg" alt="Turnos" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Turnos Extra (${data.total || 0})</h4>
                             <button class="add-btn" onclick="openModal('modalTurnoExtra')" style="padding: 8px 16px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Turno Extra</button>
                         </div>
                         
@@ -6431,6 +6886,816 @@
                 alert.style.display = 'none';
             }
         }
+        // ========================================================================
+        // FUNCIONES DE CONFIGURACIÓN Y GESTIÓN DE USUARIOS
+        // ========================================================================
+        
+        async function loadUsuarios() {
+            const content = document.getElementById('usuariosContent');
+            const token = localStorage.getItem('violetas_token');
+            
+            content.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <p style="margin-top: 15px; color: #666;">Cargando usuarios...</p>
+                </div>
+            `;
+            
+            openModal('modalUsuarios');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/usuarios`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    let html = `
+                        <div style="margin-bottom: 20px;">
+                            <button class="add-btn" onclick="resetUsuarioForm(); openModal('modalUsuario')" style="padding: 10px 20px; font-size: 16px;">
+                                <img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px; filter: brightness(0) invert(1);"> Agregar Usuario
+                            </button>
+                        </div>
+                    `;
+                    
+                    if (data.usuarios && data.usuarios.length > 0) {
+                        html += `
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Email</th>
+                                        <th>Nombre</th>
+                                        <th>Rol</th>
+                                        <th>Residencia</th>
+                                        <th>Estado</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                        `;
+                        
+                        data.usuarios.forEach(usuario => {
+                            html += `
+                                <tr>
+                                    <td>${usuario.email}</td>
+                                    <td>${usuario.nombre || ''} ${usuario.apellido || ''}</td>
+                                    <td>${usuario.nombre_rol || 'N/A'}</td>
+                                    <td>${usuario.nombre_residencia || 'N/A'}</td>
+                                    <td>
+                                        <span style="padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; ${usuario.activo ? 'background: #d4edda; color: #155724;' : 'background: #f8d7da; color: #721c24;'}">
+                                            ${usuario.activo ? 'Activo' : 'Inactivo'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <button onclick="editarUsuario(${usuario.id_usuario})" style="padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                                            Editar
+                                        </button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        
+                        html += `
+                                </tbody>
+                            </table>
+                        `;
+                    } else {
+                        html += '<p style="color: #666; text-align: center; padding: 40px;">No hay usuarios registrados.</p>';
+                    }
+                    
+                    content.innerHTML = html;
+                } else {
+                    const error = await response.json();
+                    content.innerHTML = `<p style="color: red;">Error: ${error.error || 'Error desconocido'}</p>`;
+                }
+            } catch (error) {
+                console.error('Error al cargar usuarios:', error);
+                content.innerHTML = `<p style="color: red;">Error de conexión: ${error.message}</p>`;
+            }
+        }
+        
+        async function editarUsuario(idUsuario) {
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/usuarios`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const usuario = data.usuarios.find(u => u.id_usuario === idUsuario);
+                    
+                    if (usuario) {
+                        document.getElementById('usuario_id_usuario').value = usuario.id_usuario;
+                        document.getElementById('usuario_email').value = usuario.email || '';
+                        document.getElementById('usuario_nombre').value = usuario.nombre || '';
+                        document.getElementById('usuario_apellido').value = usuario.apellido || '';
+                        document.getElementById('usuario_id_rol').value = usuario.id_rol;
+                        document.getElementById('usuario_id_residencia').value = usuario.id_residencia;
+                        document.getElementById('usuario_activo').checked = usuario.activo !== false;
+                        document.getElementById('usuario_password').required = false;
+                        
+                        document.getElementById('modalUsuarioTitulo').innerHTML = '<img src="/static/icons/medical/settings.svg" alt="Editar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Usuario';
+                        
+                        await loadRolesForSelect();
+                        await loadResidenciasForSelect();
+                        
+                        closeModal('modalUsuarios');
+                        openModal('modalUsuario');
+                    }
+                }
+            } catch (error) {
+                console.error('Error al obtener usuario:', error);
+                alert('Error al obtener información del usuario');
+            }
+        }
+        
+        function resetUsuarioForm() {
+            document.getElementById('formUsuario').reset();
+            document.getElementById('usuario_id_usuario').value = '';
+            document.getElementById('usuario_password').required = true;
+            document.getElementById('modalUsuarioTitulo').innerHTML = '<img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Usuario';
+            loadRolesForSelect();
+            loadResidenciasForSelect();
+        }
+        
+        async function loadRolesForSelect() {
+            const select = document.getElementById('usuario_id_rol');
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/roles`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const currentValue = select.value;
+                    select.innerHTML = '<option value="">Seleccione un rol</option>';
+                    data.roles.forEach(rol => {
+                        select.innerHTML += `<option value="${rol.id_rol}" ${rol.id_rol == currentValue ? 'selected' : ''}>${rol.nombre}</option>`;
+                    });
+                }
+            } catch (error) {
+                console.error('Error al cargar roles:', error);
+            }
+        }
+        
+        async function loadResidenciasForSelect() {
+            const select = document.getElementById('usuario_id_residencia');
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residencias`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const currentValue = select.value;
+                    select.innerHTML = '<option value="">Seleccione una residencia</option>';
+                    data.residencias.forEach(res => {
+                        select.innerHTML += `<option value="${res.id_residencia}" ${res.id_residencia == currentValue ? 'selected' : ''}>${res.nombre}</option>`;
+                    });
+                }
+            } catch (error) {
+                console.error('Error al cargar residencias:', error);
+            }
+        }
+        
+        async function saveUsuario(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const saveBtn = document.getElementById('saveUsuarioBtn');
+            const originalText = saveBtn.textContent;
+            
+            const formData = new FormData(form);
+            const idUsuario = formData.get('id_usuario');
+            const password = formData.get('password');
+            
+            // Si es edición y no hay contraseña, no incluirla
+            const data = {
+                email: formData.get('email'),
+                nombre: formData.get('nombre') || null,
+                apellido: formData.get('apellido') || null,
+                id_rol: parseInt(formData.get('id_rol')),
+                id_residencia: parseInt(formData.get('id_residencia')),
+                activo: document.getElementById('usuario_activo').checked
+            };
+            
+            if (password && password.trim()) {
+                data.password = password;
+            }
+            
+            // Limpiar valores vacíos
+            Object.keys(data).forEach(key => {
+                if (data[key] === '' || data[key] === null) {
+                    delete data[key];
+                }
+            });
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Guardando...';
+            hideUsuarioModalAlert();
+            
+            try {
+                const url = idUsuario 
+                    ? `${API_URL}/api/v1/usuarios/${idUsuario}`
+                    : `${API_URL}/api/v1/usuarios`;
+                const method = idUsuario ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                let result;
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        result = await response.json();
+                    } else {
+                        const text = await response.text();
+                        throw new Error(`Error del servidor (${response.status}): ${text.substring(0, 100)}`);
+                    }
+                } catch (parseError) {
+                    showUsuarioModalError(`Error del servidor (${response.status}). Por favor, intenta de nuevo.`);
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                    return;
+                }
+                
+                if (response.ok) {
+                    showUsuarioModalSuccess(idUsuario ? 'Usuario actualizado exitosamente' : 'Usuario creado exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalUsuario');
+                        loadUsuarios();
+                    }, 1500);
+                } else {
+                    showUsuarioModalError(result.error || 'Error al guardar el usuario');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            } catch (error) {
+                console.error('Error al guardar usuario:', error);
+                showUsuarioModalError('Error de conexión: ' + error.message);
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        }
+        
+        function showUsuarioModalError(message) {
+            const alert = document.getElementById('usuarioAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function showUsuarioModalSuccess(message) {
+            const alert = document.getElementById('usuarioAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function hideUsuarioModalAlert() {
+            const alert = document.getElementById('usuarioAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
+        
+        async function editarMiCuenta() {
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/usuarios/me`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const usuario = await response.json();
+                    
+                    document.getElementById('micuenta_nombre').value = usuario.nombre || '';
+                    document.getElementById('micuenta_apellido').value = usuario.apellido || '';
+                    document.getElementById('micuenta_password').value = '';
+                    
+                    openModal('modalMiCuenta');
+                } else {
+                    alert('Error al obtener información del usuario');
+                }
+            } catch (error) {
+                console.error('Error al obtener información del usuario:', error);
+                alert('Error de conexión: ' + error.message);
+            }
+        }
+        
+        async function saveMiCuenta(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const saveBtn = document.getElementById('saveMiCuentaBtn');
+            const originalText = saveBtn.textContent;
+            
+            const formData = new FormData(form);
+            const password = formData.get('password');
+            
+            const data = {
+                nombre: formData.get('nombre') || null,
+                apellido: formData.get('apellido') || null
+            };
+            
+            if (password && password.trim()) {
+                data.password = password;
+            }
+            
+            // Limpiar valores vacíos
+            Object.keys(data).forEach(key => {
+                if (data[key] === '' || data[key] === null) {
+                    delete data[key];
+                }
+            });
+            
+            // Obtener id_usuario del token
+            let idUsuario = null;
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                idUsuario = payload.id_usuario;
+            } catch (e) {
+                showMiCuentaModalError('Error al obtener información del usuario');
+                return;
+            }
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Guardando...';
+            hideMiCuentaModalAlert();
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/usuarios/${idUsuario}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                let result;
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        result = await response.json();
+                    } else {
+                        const text = await response.text();
+                        throw new Error(`Error del servidor (${response.status}): ${text.substring(0, 100)}`);
+                    }
+                } catch (parseError) {
+                    showMiCuentaModalError(`Error del servidor (${response.status}). Por favor, intenta de nuevo.`);
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                    return;
+                }
+                
+                if (response.ok) {
+                    showMiCuentaModalSuccess('Información actualizada exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalMiCuenta');
+                    }, 1500);
+                } else {
+                    showMiCuentaModalError(result.error || 'Error al actualizar la información');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            } catch (error) {
+                console.error('Error al guardar información:', error);
+                showMiCuentaModalError('Error de conexión: ' + error.message);
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        }
+        
+        function showMiCuentaModalError(message) {
+            const alert = document.getElementById('miCuentaAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function showMiCuentaModalSuccess(message) {
+            const alert = document.getElementById('miCuentaAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function hideMiCuentaModalAlert() {
+            const alert = document.getElementById('miCuentaAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
+
+        // ========================================================================
+        // FUNCIONES DEL MÓDULO DE DOCUMENTACIÓN
+        // ========================================================================
+        
+        async function loadDocumentacion() {
+            const content = document.getElementById('moduleContent');
+            const token = localStorage.getItem('violetas_token');
+            
+            content.innerHTML = `
+                <div class="module-content">
+                    <div style="text-align: center; padding: 40px;">
+                        <div style="display: inline-block; width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                        <p style="margin-top: 15px; color: #666;">Cargando documentación...</p>
+                    </div>
+                </div>
+            `;
+            
+            try {
+                // Obtener filtros actuales de la URL o usar valores por defecto
+                const urlParams = new URLSearchParams(window.location.search);
+                const tipoEntidadFiltro = urlParams.get('tipo_entidad') || '';
+                const categoriaFiltro = urlParams.get('categoria') || '';
+                
+                // Construir URL con filtros
+                let url = `${API_URL}/api/v1/documentacion`;
+                const params = new URLSearchParams();
+                if (tipoEntidadFiltro) params.append('tipo_entidad', tipoEntidadFiltro);
+                if (categoriaFiltro) params.append('categoria', categoriaFiltro);
+                if (params.toString()) url += '?' + params.toString();
+                
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    let html = `
+                        <div class="module-content">
+                            <h2 style="color: #667eea; margin-bottom: 30px; display: flex; align-items: center; gap: 10px;">
+                                <img src="/static/icons/medical/file-text.svg" alt="Documentación" style="width: 32px; height: 32px;"> Documentación
+                            </h2>
+                            
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+                                <div style="display: flex; gap: 10px; flex-wrap: wrap; flex: 1;">
+                                    <select id="filtroTipoEntidad" onchange="aplicarFiltrosDocumentacion()" style="padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; min-width: 150px;">
+                                        <option value="">Todos los tipos</option>
+                                        <option value="residente">Residentes</option>
+                                        <option value="proveedor">Proveedores</option>
+                                        <option value="personal">Personal</option>
+                                    </select>
+                                    <select id="filtroCategoria" onchange="aplicarFiltrosDocumentacion()" style="padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; min-width: 150px;">
+                                        <option value="">Todas las categorías</option>
+                                        <option value="medica">Médica</option>
+                                        <option value="fiscal">Fiscal</option>
+                                        <option value="sanitaria">Sanitaria</option>
+                                        <option value="laboral">Laboral</option>
+                                        <option value="otra">Otra</option>
+                                    </select>
+                                </div>
+                                <button class="add-btn" onclick="resetFormDocumento(); openModal('modalSubirDocumento')" style="padding: 10px 20px; font-size: 16px;">
+                                    <img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px; filter: brightness(0) invert(1);"> Subir Documento
+                                </button>
+                            </div>
+                    `;
+                    
+                    if (data.documentos && data.documentos.length > 0) {
+                        // Agrupar por categoría
+                        const documentosPorCategoria = {};
+                        data.documentos.forEach(doc => {
+                            const categoria = doc.categoria_documento || 'otra';
+                            if (!documentosPorCategoria[categoria]) {
+                                documentosPorCategoria[categoria] = [];
+                            }
+                            documentosPorCategoria[categoria].push(doc);
+                        });
+                        
+                        // Mostrar por categoría
+                        const categoriasOrden = ['medica', 'fiscal', 'sanitaria', 'laboral', 'otra'];
+                        const nombresCategoria = {
+                            'medica': 'Médica',
+                            'fiscal': 'Fiscal',
+                            'sanitaria': 'Sanitaria',
+                            'laboral': 'Laboral',
+                            'otra': 'Otra'
+                        };
+                        
+                        categoriasOrden.forEach(cat => {
+                            if (documentosPorCategoria[cat] && documentosPorCategoria[cat].length > 0) {
+                                html += `
+                                    <div style="margin-bottom: 30px;">
+                                        <h3 style="color: #667eea; margin-bottom: 15px; padding: 10px; background: #f0f7ff; border-radius: 8px; border-left: 4px solid #667eea;">
+                                            ${nombresCategoria[cat]} (${documentosPorCategoria[cat].length} documentos)
+                                        </h3>
+                                        <table class="data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Entidad</th>
+                                                    <th>Tipo</th>
+                                                    <th>Nombre del Archivo</th>
+                                                    <th>Descripción</th>
+                                                    <th>Fecha</th>
+                                                    <th>Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                `;
+                                
+                                documentosPorCategoria[cat].forEach(doc => {
+                                    const tipoEntidadNombre = {
+                                        'residente': 'Residente',
+                                        'proveedor': 'Proveedor',
+                                        'personal': 'Personal'
+                                    };
+                                    
+                                    const fechaSubida = doc.fecha_subida ? fechaISOToEspanol(doc.fecha_subida.split('T')[0]) : '-';
+                                    
+                                    html += `
+                                        <tr>
+                                            <td>
+                                                <span style="padding: 4px 8px; background: #e0e0e0; border-radius: 4px; font-size: 12px; margin-right: 8px;">
+                                                    ${tipoEntidadNombre[doc.tipo_entidad] || doc.tipo_entidad}
+                                                </span>
+                                                ${doc.nombre_entidad || `ID: ${doc.id_entidad}`}
+                                            </td>
+                                            <td>${doc.tipo_documento || '-'}</td>
+                                            <td>${doc.nombre_archivo || '-'}</td>
+                                            <td>${doc.descripcion || '-'}</td>
+                                            <td>${fechaSubida}</td>
+                                            <td>
+                                                ${doc.url_descarga ? `
+                                                    <button onclick="descargarDocumento(${doc.id_documento})" style="padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; margin-right: 5px;">
+                                                        Descargar
+                                                    </button>
+                                                ` : ''}
+                                                <button onclick="eliminarDocumentoUnificado(${doc.id_documento})" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">
+                                                    Eliminar
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                });
+                                
+                                html += `
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                `;
+                            }
+                        });
+                    } else {
+                        html += '<p style="color: #666; text-align: center; padding: 40px;">No hay documentos registrados.</p>';
+                    }
+                    
+                    html += '</div>';
+                    content.innerHTML = html;
+                    
+                    // Aplicar valores de filtros DESPUÉS de insertar el HTML
+                    if (tipoEntidadFiltro) {
+                        const filtroTipo = document.getElementById('filtroTipoEntidad');
+                        if (filtroTipo) filtroTipo.value = tipoEntidadFiltro;
+                    }
+                    if (categoriaFiltro) {
+                        const filtroCat = document.getElementById('filtroCategoria');
+                        if (filtroCat) filtroCat.value = categoriaFiltro;
+                    }
+                } else {
+                    const error = await response.json();
+                    content.innerHTML = `<div class="module-content"><p style="color: red;">Error: ${error.error || 'Error desconocido'}</p></div>`;
+                }
+            } catch (error) {
+                console.error('Error al cargar documentación:', error);
+                content.innerHTML = `<div class="module-content"><p style="color: red;">Error de conexión: ${error.message}</p></div>`;
+            }
+        }
+        
+        function aplicarFiltrosDocumentacion() {
+            const tipoEntidad = document.getElementById('filtroTipoEntidad').value;
+            const categoria = document.getElementById('filtroCategoria').value;
+            
+            // Actualizar URL sin recargar página
+            const params = new URLSearchParams();
+            if (tipoEntidad) params.append('tipo_entidad', tipoEntidad);
+            if (categoria) params.append('categoria', categoria);
+            
+            window.history.pushState({}, '', params.toString() ? `?${params.toString()}` : window.location.pathname);
+            
+            // Recargar documentación con filtros
+            loadDocumentacion();
+        }
+        
+        async function actualizarEntidadesDocumento() {
+            const tipoEntidad = document.getElementById('doc_tipo_entidad').value;
+            const selectEntidad = document.getElementById('doc_id_entidad');
+            const token = localStorage.getItem('violetas_token');
+            
+            selectEntidad.innerHTML = '<option value="">Cargando...</option>';
+            
+            if (!tipoEntidad) {
+                selectEntidad.innerHTML = '<option value="">Seleccione primero el tipo de entidad</option>';
+                return;
+            }
+            
+            try {
+                let url = '';
+                if (tipoEntidad === 'residente') {
+                    url = `${API_URL}/api/v1/residentes`;
+                } else if (tipoEntidad === 'proveedor') {
+                    url = `${API_URL}/api/v1/proveedores`;
+                } else if (tipoEntidad === 'personal') {
+                    url = `${API_URL}/api/v1/personal`;
+                }
+                
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    selectEntidad.innerHTML = '<option value="">Seleccione una entidad</option>';
+                    
+                    if (tipoEntidad === 'residente' && data.residentes) {
+                        data.residentes.filter(r => r.activo).forEach(res => {
+                            selectEntidad.innerHTML += `<option value="${res.id_residente}">${res.nombre} ${res.apellido}</option>`;
+                        });
+                    } else if (tipoEntidad === 'proveedor' && data.proveedores) {
+                        data.proveedores.filter(p => p.activo).forEach(prov => {
+                            selectEntidad.innerHTML += `<option value="${prov.id_proveedor}">${prov.nombre}</option>`;
+                        });
+                    } else if (tipoEntidad === 'personal' && data.personal) {
+                        data.personal.filter(p => p.activo).forEach(per => {
+                            selectEntidad.innerHTML += `<option value="${per.id_personal}">${per.nombre} ${per.apellido}</option>`;
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error al cargar entidades:', error);
+                selectEntidad.innerHTML = '<option value="">Error al cargar entidades</option>';
+            }
+        }
+        
+        function resetFormDocumento() {
+            document.getElementById('formSubirDocumento').reset();
+            document.getElementById('doc_id_entidad').innerHTML = '<option value="">Seleccione primero el tipo de entidad</option>';
+        }
+        
+        async function saveDocumento(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('violetas_token');
+            const form = event.target;
+            const saveBtn = document.getElementById('saveDocumentoBtn');
+            const originalText = saveBtn.textContent;
+            
+            const formData = new FormData(form);
+            
+            // Validar campos requeridos
+            if (!formData.get('tipo_entidad') || !formData.get('id_entidad') || !formData.get('categoria_documento') || !formData.get('tipo_documento') || !formData.get('archivo').files[0]) {
+                showDocumentoModalError('Todos los campos son requeridos');
+                return;
+            }
+            
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Subiendo...';
+            hideDocumentoModalAlert();
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/documentacion`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+                
+                let result;
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        result = await response.json();
+                    } else {
+                        const text = await response.text();
+                        throw new Error(`Error del servidor (${response.status}): ${text.substring(0, 100)}`);
+                    }
+                } catch (parseError) {
+                    showDocumentoModalError(`Error del servidor (${response.status}). Por favor, intenta de nuevo.`);
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                    return;
+                }
+                
+                if (response.ok) {
+                    showDocumentoModalSuccess('Documento subido exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalSubirDocumento');
+                        loadDocumentacion();
+                    }, 1500);
+                } else {
+                    showDocumentoModalError(result.error || 'Error al subir el documento');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            } catch (error) {
+                console.error('Error al subir documento:', error);
+                showDocumentoModalError('Error de conexión: ' + error.message);
+                saveBtn.disabled = false;
+                saveBtn.textContent = originalText;
+            }
+        }
+        
+        async function descargarDocumento(idDocumento) {
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/documentacion/${idDocumento}/descargar`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.url_descarga) {
+                        window.open(data.url_descarga, '_blank');
+                    }
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.error || 'Error al descargar el documento'));
+                }
+            } catch (error) {
+                console.error('Error al descargar documento:', error);
+                alert('Error de conexión: ' + error.message);
+            }
+        }
+        
+        async function eliminarDocumentoUnificado(idDocumento) {
+            if (!confirm('¿Está seguro de que desea eliminar este documento?')) {
+                return;
+            }
+            
+            const token = localStorage.getItem('violetas_token');
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/documentacion/${idDocumento}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    alert('Documento eliminado exitosamente');
+                    loadDocumentacion();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.error || 'Error al eliminar el documento'));
+                }
+            } catch (error) {
+                console.error('Error al eliminar documento:', error);
+                alert('Error de conexión: ' + error.message);
+            }
+        }
+        
+        function showDocumentoModalError(message) {
+            const alert = document.getElementById('documentoAlert');
+            if (alert) {
+                alert.className = 'alert error';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function showDocumentoModalSuccess(message) {
+            const alert = document.getElementById('documentoAlert');
+            if (alert) {
+                alert.className = 'alert success';
+                alert.textContent = message;
+                alert.style.display = 'block';
+            }
+        }
+        
+        function hideDocumentoModalAlert() {
+            const alert = document.getElementById('documentoAlert');
+            if (alert) {
+                alert.style.display = 'none';
+            }
+        }
+
     </script>
     
 </body>
