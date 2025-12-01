@@ -17,10 +17,10 @@ pip install -r requirements.txt
 
 ### 2. Configuración Inicial
 
-**Opción A: Con Cloud SQL Proxy (Recomendado - Solución Definitiva)**
+**Opción A: Con Cloud SQL Proxy (Recomendado)**
 
 ```powershell
-# 1. Configurar Cloud SQL Proxy (no necesitas autorizar IPs)
+# 1. Configurar Cloud SQL Proxy
 .\setup_cloud_sql_proxy.ps1
 
 # 2. Configurar .env automáticamente
@@ -39,11 +39,24 @@ pip install -r requirements.txt
 .\start_server.ps1
 ```
 
-### 3. Acceder al Sistema
+### 3. Crear Super Administrador
+
+El sistema requiere un super administrador inicial:
+
+```powershell
+python init_database.py
+```
+
+**Credenciales por defecto:**
+- Email: `admin@residencias.com`
+- Password: `CambiarContraseña123!`
+- ⚠️ **IMPORTANTE**: Deberás cambiar la contraseña en el primer login
+
+### 4. Acceder al Sistema
 
 - **URL**: http://localhost:5000
-- **Usuario**: `admin@violetas1.com`
-- **Contraseña**: `admin123`
+- **Usuario**: `admin@residencias.com`
+- **Contraseña**: `CambiarContraseña123!` (luego cambiarás esta)
 
 ---
 
@@ -52,11 +65,11 @@ pip install -r requirements.txt
 ### Gestión de Residentes
 - Listado, creación y edición de residentes
 - Información completa: habitación, costos, servicios, medicaciones
-- Documentos adjuntos
+- Documentos adjuntos (Cloud Storage)
 - Filtrado automático por residencia
 
 ### Facturación
-- Cobros previstos (generación automática)
+- Cobros previstos (generación automática mensual)
 - Cobros completados
 - Pagos a proveedores
 - Gráficos de estimaciones mensuales
@@ -65,11 +78,15 @@ pip install -r requirements.txt
 ### Personal
 - Gestión del personal de la residencia
 - Información de contacto y cargos
+- Turnos y asistencia
 
-### Seguridad
-- Autenticación JWT
-- Separación de datos por residencia
-- Filtrado automático por `id_residencia`
+### Seguridad Avanzada
+- Autenticación JWT con expiración de 24 horas
+- Sistema de roles y permisos granulares (ACL)
+- Multi-residencia (usuarios pueden acceder a múltiples residencias)
+- Super administrador con acceso total
+- Cambio obligatorio de contraseña en primer login
+- Rate limiting para prevenir ataques de fuerza bruta
 
 ---
 
@@ -78,6 +95,7 @@ pip install -r requirements.txt
 - **Backend**: Python 3.11+ (Flask, PyJWT, Werkzeug)
 - **Base de Datos**: PostgreSQL (Cloud SQL en GCP)
 - **Frontend**: HTML/CSS/JavaScript (SPA)
+- **Almacenamiento**: Google Cloud Storage (documentos)
 - **Autenticación**: JWT con expiración de 24 horas
 
 ---
@@ -88,6 +106,7 @@ pip install -r requirements.txt
 .
 ├── app.py                      # Aplicación principal Flask
 ├── db_connector.py             # Conexión a PostgreSQL
+├── init_database.py            # Script para crear super_admin
 ├── static/
 │   └── index.html             # Frontend SPA
 ├── .env                       # Variables de entorno (no versionado)
@@ -98,30 +117,39 @@ pip install -r requirements.txt
 
 ---
 
-## ⚙️ Configuración de Variables de Entorno
+## 📚 Documentación
 
-Crear archivo `.env` en la raíz del proyecto:
+La documentación está organizada en 5 documentos principales:
 
-```env
-# Base de Datos
-DB_NAME=postgres
-DB_USER=postgres
-DB_PASSWORD=tu-contraseña
-DB_PORT=5432
+1. **`README.md`** (este archivo) - Inicio rápido y características
+2. **`GUIA_INSTALACION_Y_CONFIGURACION.md`** - Instalación detallada, configuración de Cloud SQL, base de datos
+3. **`GUIA_SEGURIDAD_Y_USUARIOS.md`** - Sistema de seguridad, autenticación, gestión de usuarios y roles
+4. **`REFERENCIA_API.md`** - Referencia completa de endpoints de la API
+5. **`GUIA_TECNICA.md`** - Troubleshooting, desarrollo, detalles técnicos
 
-# Opción A: Con Cloud SQL Proxy (Recomendado)
-DB_USE_PROXY=true
-DB_HOST=127.0.0.1
-CLOUD_SQL_CONNECTION_NAME=residencias-479706:europe-west9:residencias
-GOOGLE_APPLICATION_CREDENTIALS=residencias-479706-8c3bdbf8bbf8.json
+---
 
-# Opción B: Conexión Directa
-# DB_USE_PROXY=false
-# DB_HOST=34.155.185.9
+## 🔐 Sistema de Usuarios
 
-# Autenticación
-JWT_SECRET_KEY=tu-clave-secreta-muy-segura
-```
+### Super Administrador
+
+- **Acceso total** a todas las residencias
+- Puede crear otros usuarios (incluyendo otros super_admin)
+- Bypass completo de permisos
+- **Solo debe haber UN super_admin** (o muy pocos)
+
+### Usuarios Administradores
+
+- Acceso a residencias asignadas (pueden ser múltiples)
+- Permisos según su rol
+- Gestión de datos de las residencias asignadas
+
+### Crear Usuarios
+
+Solo el super_admin puede crear usuarios mediante el endpoint:
+- `POST /api/v1/usuarios`
+
+Ver `GUIA_SEGURIDAD_Y_USUARIOS.md` para más detalles.
 
 ---
 
@@ -165,106 +193,6 @@ python test_conexion_bd.py
 
 ---
 
-## 🔐 Autenticación
-
-### Login
-
-```bash
-POST /api/v1/login
-Content-Type: application/json
-
-{
-  "email": "admin@violetas1.com",
-  "password": "admin123"
-}
-```
-
-### Uso del Token
-
-Todas las peticiones protegidas requieren:
-
-```
-Authorization: Bearer <token_jwt>
-```
-
-El token contiene:
-- `id_usuario`: ID del usuario
-- `id_rol`: ID del rol
-- `id_residencia`: ID de la residencia (filtrado automático)
-- `exp`: Fecha de expiración (24 horas)
-
----
-
-## 📡 Endpoints Principales
-
-### Públicos
-- `GET /health` - Health check
-- `POST /api/v1/login` - Autenticación
-
-### Protegidos (requieren token JWT)
-
-**Residentes:**
-- `GET /api/v1/residentes` - Listar residentes
-- `GET /api/v1/residentes/<id>` - Obtener residente
-- `POST /api/v1/residentes` - Crear residente
-- `PUT /api/v1/residentes/<id>` - Actualizar residente
-
-**Facturación:**
-- `GET /api/v1/facturacion/cobros` - Listar cobros
-- `POST /api/v1/facturacion/cobros` - Crear cobro
-- `PUT /api/v1/facturacion/cobros/<id>` - Actualizar cobro
-- `GET /api/v1/facturacion/cobros/estadisticas` - Estadísticas
-
-**Proveedores:**
-- `GET /api/v1/proveedores` - Listar proveedores
-- `POST /api/v1/proveedores` - Crear proveedor
-- `GET /api/v1/facturacion/proveedores` - Listar pagos a proveedores
-
-**Personal:**
-- `GET /api/v1/personal` - Listar personal
-
-> Para lista completa de endpoints, ver `REFERENCIA_API.md`
-
----
-
-## 🗄️ Base de Datos
-
-### Tablas Principales
-
-- `residencia` - Residencias (Violetas 1 y Violetas 2)
-- `usuario` - Usuarios del sistema
-- `residente` - Residentes
-- `pago_residente` - Pagos de residentes
-- `proveedor` - Proveedores
-- `pago_proveedor` - Pagos a proveedores
-- `personal` - Personal de la residencia
-
-### Crear Esquema
-
-```powershell
-python create_database.py
-```
-
----
-
-## 🔒 Seguridad
-
-**IMPERATIVO**: Todo acceso a datos filtra automáticamente por `id_residencia` obtenida del token de sesión. El personal de Violetas 1 no puede ver datos de Violetas 2.
-
-- Filtrado obligatorio por `id_residencia` en todas las consultas
-- Tokens JWT con expiración de 24 horas
-- Contraseñas hasheadas con Werkzeug
-- Validación de entrada en todos los endpoints
-
----
-
-## 📚 Documentación Adicional
-
-- **`GUIA_TECNICA.md`** - Configuración avanzada, Cloud SQL Proxy, solución de problemas
-- **`REFERENCIA_API.md`** - Referencia completa de endpoints, estructura de datos, scripts
-
----
-
 ## 🆘 Solución de Problemas Rápida
 
 ### No se conecta a la base de datos
@@ -285,26 +213,32 @@ python create_database.py
 
 1. Verificar conexión: `python test_conexion_bd.py`
 2. Verificar token en localStorage (F12 → Console)
-3. Verificar que hay residentes en la BD para tu `id_residencia`
+3. Verificar que hay residentes en la BD para tus residencias asignadas
 
 > Para más detalles, ver `GUIA_TECNICA.md`
 
 ---
 
-## 👤 Usuario de Prueba
+## 🔒 Seguridad
 
-- **Email**: `admin@violetas1.com`
-- **Contraseña**: `admin123`
-- **Rol**: Administrador
-- **Residencia**: Violetas 1 (ID: 1)
+El sistema implementa múltiples capas de seguridad:
+
+- ✅ **Autenticación JWT** con expiración de 24 horas
+- ✅ **Separación de datos por residencia** (filtrado automático)
+- ✅ **Sistema de roles y permisos granulares** (ACL)
+- ✅ **Contraseñas hasheadas** con Werkzeug
+- ✅ **Cambio obligatorio de contraseña** en primer login
+- ✅ **Rate limiting** para prevenir ataques de fuerza bruta
+- ✅ **Validación de entrada** en todos los endpoints
 
 ---
 
 ## 📝 Convenciones
 
 - **Nomenclatura**: snake_case para tablas, campos y funciones Python
-- **Seguridad**: Filtrado obligatorio por `id_residencia` en todas las consultas
+- **Seguridad**: Filtrado automático por residencias asignadas
 - **Tokens**: Expiración de 24 horas
+- **Roles**: Sistema jerárquico con super_admin como máximo nivel
 
 ---
 
@@ -318,6 +252,9 @@ Este proyecto es privado y está destinado para uso interno de las residencias V
 
 ---
 
-Para más información técnica, consulta:
-- `GUIA_TECNICA.md` - Configuración avanzada y solución de problemas
-- `REFERENCIA_API.md` - Referencia completa de la API
+## 📖 Más Información
+
+- **`GUIA_INSTALACION_Y_CONFIGURACION.md`** - Configuración detallada paso a paso
+- **`GUIA_SEGURIDAD_Y_USUARIOS.md`** - Sistema de seguridad y gestión de usuarios
+- **`REFERENCIA_API.md`** - Referencia completa de la API
+- **`GUIA_TECNICA.md`** - Troubleshooting y detalles técnicos
