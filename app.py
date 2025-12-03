@@ -42,6 +42,7 @@ app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
 # Constantes de seguridad
 SUPER_ADMIN_ROLE_ID = 1  # ID fijo del rol super_admin
+ADMIN_ROLE_ID = 2  # ID fijo del rol Administrador (acceso a todos los módulos y residencias)
 
 # Rate limiting simple en memoria (en producción usar Redis)
 login_attempts = defaultdict(list)
@@ -170,6 +171,160 @@ def validate_residencia_access(id_residencia_from_db, allow_super_admin=True):
     return True, None
 
 
+def verificar_cobro_mensual_duplicado(cursor, id_residente, id_residencia, mes_pagado, concepto):
+    """
+    Verifica si ya existe un cobro mensual (concepto de mes) para el mismo residente y mes.
+    Previene duplicados tanto para cobros pendientes como completados.
+    
+    Args:
+        cursor: Cursor de base de datos
+        id_residente: ID del residente
+        id_residencia: ID de la residencia
+        mes_pagado: Mes en formato 'YYYY-MM' o None
+        concepto: Concepto del cobro (puede ser "Diciembre 25", "Enero 26", etc.)
+    
+    Returns:
+        tuple: (existe_duplicado, id_pago_duplicado) o (False, None)
+    """
+    meses_espanol_list = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
+                          'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+    
+    # Verificar si el concepto es un concepto mensual (empieza con un mes en español)
+    es_concepto_mensual = concepto and any(concepto.lower().startswith(mes) for mes in meses_espanol_list)
+    
+    if not es_concepto_mensual:
+        return False, None
+    
+    # Construir query de validación
+    condiciones = []
+    params = [id_residente, id_residencia]
+    
+    # Si tenemos mes_pagado, usarlo para validación más precisa
+    if mes_pagado:
+        condiciones.append("mes_pagado = %s")
+        params.append(mes_pagado)
+    
+    # Validar por concepto de mes (cualquier concepto que empiece con un mes)
+    condiciones_concepto = []
+    for mes in meses_espanol_list:
+        condiciones_concepto.append(f"concepto ILIKE '{mes} %%'")
+    condiciones_concepto.append("concepto ILIKE 'Pago %%'")
+    
+    condiciones.append(f"({' OR '.join(condiciones_concepto)})")
+    
+    query = f"""
+        SELECT id_pago, estado, concepto, mes_pagado
+        FROM pago_residente
+        WHERE id_residente = %s 
+          AND id_residencia = %s
+          AND {' AND '.join(condiciones)}
+        LIMIT 1
+    """
+    
+    cursor.execute(query, params)
+    resultado = cursor.fetchone()
+    
+    if resultado:
+        return True, resultado[0]  # Existe duplicado, retornar id_pago
+    
+    return False, None
+
+
+def generar_cobros_historicos_completados(cursor, id_residente, id_residencia, fecha_ingreso, costo_habitacion, metodo_pago):
+    """
+    Genera cobros completados históricos desde la fecha_ingreso hasta el mes anterior al actual.
+    Estos cobros aparecerán como completados en Facturación e Históricos.
+    
+    Args:
+        cursor: Cursor de base de datos
+        id_residente: ID del residente
+        id_residencia: ID de la residencia
+        fecha_ingreso: Fecha de ingreso del residente (datetime.date o string YYYY-MM-DD)
+        costo_habitacion: Costo mensual de la habitación
+        metodo_pago: Método de pago preferido
+    
+    Returns:
+        int: Número de cobros históricos generados
+    """
+    if not fecha_ingreso or not costo_habitacion or costo_habitacion <= 0:
+        return 0
+    
+    # Convertir fecha_ingreso a date si es string
+    if isinstance(fecha_ingreso, str):
+        try:
+            fecha_ingreso = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
+        except:
+            app.logger.warning(f"Fecha de ingreso inválida: {fecha_ingreso}")
+            return 0
+    
+    hoy = datetime.now().date()
+    mes_actual = datetime(hoy.year, hoy.month, 1).date()
+    
+    # Calcular mes de ingreso (primer día del mes de ingreso)
+    mes_ingreso = datetime(fecha_ingreso.year, fecha_ingreso.month, 1).date()
+    
+    # Si el mes de ingreso es futuro, no generar históricos
+    if mes_ingreso > mes_actual:
+        return 0
+    
+    meses_espanol = {
+        1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+        5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+        9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+    }
+    
+    cobros_generados = 0
+    fecha_actual = mes_ingreso
+    
+    # Generar cobros para cada mes desde mes_ingreso hasta mes_actual (incluido)
+    # Si el residente ingresó antes del mes actual, generar todos los meses hasta el actual
+    # Incluir el mes actual si ya pasó el día 1 (es decir, si estamos en cualquier día del mes)
+    while fecha_actual <= mes_actual:
+        mes_pagado_str = fecha_actual.strftime('%Y-%m')
+        nombre_mes = meses_espanol.get(fecha_actual.month, 'mes')
+        año_corto = str(fecha_actual.year)[-2:]
+        concepto = f"{nombre_mes.capitalize()} {año_corto}"
+        
+        # Verificar si ya existe un cobro para este mes
+        existe_duplicado, _ = verificar_cobro_mensual_duplicado(
+            cursor, id_residente, id_residencia, mes_pagado_str, concepto
+        )
+        
+        if not existe_duplicado:
+            try:
+                # Crear cobro completado (con fecha_pago = día 1 del mes correspondiente)
+                cursor.execute("""
+                    INSERT INTO pago_residente (
+                        id_residente, id_residencia, monto, fecha_pago, fecha_prevista,
+                        mes_pagado, concepto, metodo_pago, estado, es_cobro_previsto
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    id_residente,
+                    id_residencia,
+                    costo_habitacion,
+                    fecha_actual,  # fecha_pago = día 1 del mes (cobro completado)
+                    fecha_actual,  # fecha_prevista también día 1 del mes
+                    mes_pagado_str,
+                    concepto,
+                    metodo_pago or 'transferencia',
+                    'cobrado',  # Estado completado
+                    False  # No es cobro previsto, es histórico completado
+                ))
+                cobros_generados += 1
+                app.logger.info(f"Cobro histórico completado generado para residente {id_residente}: €{costo_habitacion}, mes: {mes_pagado_str}")
+            except Exception as e:
+                app.logger.error(f"Error al generar cobro histórico para residente {id_residente}, mes {mes_pagado_str}: {str(e)}")
+        
+        # Avanzar al siguiente mes
+        if fecha_actual.month == 12:
+            fecha_actual = datetime(fecha_actual.year + 1, 1, 1).date()
+        else:
+            fecha_actual = datetime(fecha_actual.year, fecha_actual.month + 1, 1).date()
+    
+    return cobros_generados
+
+
 def build_residencia_filter(table_alias='', column_name='id_residencia'):
     """
     Construye la cláusula WHERE para filtrar por residencias de acceso.
@@ -278,12 +433,17 @@ def before_request():
     # Obtener token del header Authorization
     auth_header = request.headers.get('Authorization')
     if not auth_header:
+        app.logger.warning(f"Petición sin token a {request.path}")
         return jsonify({'error': 'Token de autenticación requerido'}), 401
     
     # Verificar formato Bearer
     try:
         token = auth_header.split(' ')[1]  # "Bearer <token>"
+        if not token:
+            app.logger.warning(f"Token vacío en petición a {request.path}")
+            return jsonify({'error': 'Formato de token inválido. Use: Bearer <token>'}), 401
     except IndexError:
+        app.logger.warning(f"Formato de token inválido en petición a {request.path}: {auth_header[:20]}...")
         return jsonify({'error': 'Formato de token inválido. Use: Bearer <token>'}), 401
     
     # Validar y decodificar token
@@ -293,39 +453,88 @@ def before_request():
         g.id_usuario = payload.get('id_usuario')
         g.id_rol = payload.get('id_rol')
         
+        app.logger.debug(f"Token válido para usuario {g.id_usuario}, rol {g.id_rol}, ruta {request.path}")
+        
         # Validar que los campos requeridos estén presentes (YA NO incluye id_residencia)
         if not all([g.id_usuario, g.id_rol]):
+            app.logger.warning(f"Token inválido: faltan campos. id_usuario={g.id_usuario}, id_rol={g.id_rol}")
             return jsonify({'error': 'Token inválido: faltan campos requeridos'}), 401
             
     except jwt.ExpiredSignatureError:
+        app.logger.warning(f"Token expirado en petición a {request.path}")
         return jsonify({'error': 'Token expirado'}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({'error': 'Token inválido'}), 401
+    except jwt.InvalidTokenError as e:
+        app.logger.warning(f"Token inválido en petición a {request.path}: {str(e)}")
+        return jsonify({'error': f'Token inválido: {str(e)}'}), 401
+    except Exception as e:
+        app.logger.error(f"Error inesperado al decodificar token: {str(e)}")
+        return jsonify({'error': 'Error al validar token'}), 401
     
     # Cargar residencias del usuario desde usuario_residencia
     conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
-        # Si es super_admin, establecer lista vacía (bypass total)
-        if g.id_rol == SUPER_ADMIN_ROLE_ID:
+        # Si es super_admin o Administrador, establecer lista vacía (bypass total)
+        app.logger.debug(f"Usuario {g.id_usuario} con rol {g.id_rol}, SUPER_ADMIN_ROLE_ID={SUPER_ADMIN_ROLE_ID}, ADMIN_ROLE_ID={ADMIN_ROLE_ID}")
+        if g.id_rol == SUPER_ADMIN_ROLE_ID or g.id_rol == ADMIN_ROLE_ID:
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                app.logger.debug(f"Usuario {g.id_usuario} es super_admin, estableciendo residencias_acceso = []")
+            else:
+                app.logger.debug(f"Usuario {g.id_usuario} es Administrador, estableciendo residencias_acceso = []")
             g.residencias_acceso = []  # Lista vacía = acceso total a todas las residencias
         else:
-            # Cargar residencias desde usuario_residencia
-            cursor.execute("""
-                SELECT ur.id_residencia 
-                FROM usuario_residencia ur
-                JOIN residencia r ON ur.id_residencia = r.id_residencia
-                WHERE ur.id_usuario = %s AND r.activa = TRUE
-            """, (g.id_usuario,))
-            
-            g.residencias_acceso = [row[0] for row in cursor.fetchall()]
-            
-            # Validar que el usuario tenga al menos una residencia asignada
-            if not g.residencias_acceso:
-                return jsonify({
-                    'error': 'Usuario sin residencias asignadas. Contacte al administrador.'
-                }), 403
+            # Verificar si la tabla usuario_residencia existe
+            try:
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public'
+                        AND table_name = 'usuario_residencia'
+                    )
+                """)
+                resultado = cursor.fetchone()
+                tabla_existe = resultado[0] if resultado else False
+                
+                if tabla_existe:
+                    # Cargar residencias desde usuario_residencia
+                    cursor.execute("""
+                        SELECT ur.id_residencia 
+                        FROM usuario_residencia ur
+                        JOIN residencia r ON ur.id_residencia = r.id_residencia
+                        WHERE ur.id_usuario = %s AND r.activa = TRUE
+                    """, (g.id_usuario,))
+                    
+                    g.residencias_acceso = [row[0] for row in cursor.fetchall()]
+                else:
+                    # Modo legacy: obtener id_residencia directamente de usuario
+                    cursor.execute("""
+                        SELECT id_residencia 
+                        FROM usuario 
+                        WHERE id_usuario = %s
+                    """, (g.id_usuario,))
+                    resultado = cursor.fetchone()
+                    g.residencias_acceso = [resultado[0]] if resultado and resultado[0] else []
+                
+                # Validar que el usuario tenga al menos una residencia asignada
+                if not g.residencias_acceso:
+                    return jsonify({
+                        'error': 'Usuario sin residencias asignadas. Contacte al administrador.'
+                    }), 403
+            except Exception as e:
+                app.logger.error(f"Error al cargar residencias del usuario: {str(e)}")
+                # En caso de error, intentar modo legacy
+                try:
+                    cursor.execute("""
+                        SELECT id_residencia 
+                        FROM usuario 
+                        WHERE id_usuario = %s
+                    """, (g.id_usuario,))
+                    resultado = cursor.fetchone()
+                    g.residencias_acceso = [resultado[0]] if resultado and resultado[0] else []
+                except Exception as e2:
+                    app.logger.error(f"Error en modo legacy: {str(e2)}")
+                    g.residencias_acceso = []
         
         # Validar cambio de contraseña obligatorio (excepto para rutas permitidas)
         # Permitir también actualización del propio usuario (para cambiar contraseña inicial)
@@ -335,20 +544,32 @@ def before_request():
                                    request.path.split('/')[-1].isdigit() and
                                    int(request.path.split('/')[-1]) == g.id_usuario)
         if request.path not in rutas_cambio_clave and not es_actualizacion_propia:
-            cursor.execute(
-                "SELECT requiere_cambio_clave FROM usuario WHERE id_usuario = %s",
-                (g.id_usuario,)
-            )
-            usuario = cursor.fetchone()
-            if usuario and usuario[0]:  # Si requiere_cambio_clave = TRUE
-                return jsonify({
-                    'error': 'Debes cambiar tu contraseña antes de continuar',
-                    'requiere_cambio_clave': True
-                }), 403
+            try:
+                cursor.execute(
+                    "SELECT requiere_cambio_clave FROM usuario WHERE id_usuario = %s",
+                    (g.id_usuario,)
+                )
+                usuario = cursor.fetchone()
+                if usuario and usuario[0]:  # Si requiere_cambio_clave = TRUE
+                    return jsonify({
+                        'error': 'Debes cambiar tu contraseña antes de continuar',
+                        'requiere_cambio_clave': True
+                    }), 403
+            except Exception as e:
+                app.logger.error(f"Error al validar cambio de contraseña: {str(e)}")
+                # Si hay error, permitir continuar para evitar bloqueos
                 
+    except Exception as e:
+        app.logger.error(f"Error en middleware before_request: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        # Si hay un error crítico en el middleware, devolver error 500
+        return jsonify({'error': 'Error interno del servidor al validar autenticación'}), 500
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
     
     return None
 
@@ -414,10 +635,15 @@ def login():
             }), 429
         
         # Conectar a la base de datos
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+        except Exception as e:
+            app.logger.error(f"Error al conectar a la base de datos en login: {str(e)}")
+            return jsonify({'error': 'Error de conexión a la base de datos'}), 500
         
         try:
+            app.logger.info(f"Intento de login para email: {email}")
             # Buscar usuario por email (SIN id_residencia, ahora se obtiene de usuario_residencia)
             cursor.execute(
                 "SELECT id_usuario, email, password_hash, id_rol, requiere_cambio_clave FROM usuario WHERE email = %s",
@@ -426,13 +652,23 @@ def login():
             usuario = cursor.fetchone()
             
             if not usuario:
+                app.logger.warning(f"Usuario no encontrado: {email}")
                 log_security_event('login_fallido', None, {'email': email, 'razon': 'usuario_no_encontrado'})
                 return jsonify({'error': 'Credenciales inválidas'}), 401
             
             id_usuario, email_db, password_hash, id_rol, requiere_cambio_clave = usuario
+            app.logger.info(f"Usuario encontrado: id={id_usuario}, rol={id_rol}, requiere_cambio_clave={requiere_cambio_clave}")
             
             # Verificar contraseña
-            if not check_password_hash(password_hash, password):
+            try:
+                password_valida = check_password_hash(password_hash, password)
+                app.logger.debug(f"Verificación de contraseña: {password_valida}")
+            except Exception as e:
+                app.logger.error(f"Error al verificar contraseña: {str(e)}")
+                password_valida = False
+            
+            if not password_valida:
+                app.logger.warning(f"Contraseña incorrecta para usuario: {email}")
                 log_security_event('login_fallido', id_usuario, {'email': email, 'razon': 'contraseña_incorrecta'})
                 return jsonify({'error': 'Credenciales inválidas'}), 401
             
@@ -463,10 +699,15 @@ def login():
             conn.close()
             
     except ValueError as e:
+        app.logger.error(f"Error de valor en login: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
     except Exception as e:
         app.logger.error(f"Error en login: {str(e)}")
-        return jsonify({'error': 'Error interno del servidor'}), 500
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': f'Error interno del servidor: {str(e)}'}), 500
 
 
 @app.route('/api/v1/usuario/cambio-clave', methods=['POST'])
@@ -575,9 +816,9 @@ def crear_usuario():
     }
     """
     try:
-        # Verificación adicional: solo super_admin puede crear usuarios
-        if g.id_rol != SUPER_ADMIN_ROLE_ID:
-            return jsonify({'error': 'Solo super administradores pueden crear usuarios'}), 403
+        # Verificación adicional: solo super_admin y admin pueden crear usuarios
+        if g.id_rol not in [SUPER_ADMIN_ROLE_ID, 2]:
+            return jsonify({'error': 'Solo administradores pueden crear usuarios'}), 403
         
         data = request.get_json()
         
@@ -588,6 +829,7 @@ def crear_usuario():
         password = data.get('password')
         id_rol = data.get('id_rol')
         residencias = data.get('residencias', [])
+        permisos = data.get('permisos', [])  # Array de nombres de permisos personalizados
         
         if not email or not password or not id_rol:
             return jsonify({'error': 'Email, contraseña e id_rol son requeridos'}), 400
@@ -595,7 +837,13 @@ def crear_usuario():
         if not residencias or len(residencias) == 0:
             return jsonify({'error': 'Debe asignar al menos una residencia'}), 400
         
-        # Prevenir creación accidental de super_admin
+        # Prevenir creación de super_admin por usuarios que no son super_admin
+        if id_rol == SUPER_ADMIN_ROLE_ID and g.id_rol != SUPER_ADMIN_ROLE_ID:
+            return jsonify({
+                'error': 'No tienes permisos para crear usuarios con rol super_admin'
+            }), 403
+        
+        # Prevenir creación accidental de super_admin (protección adicional)
         if id_rol == SUPER_ADMIN_ROLE_ID:
             return jsonify({
                 'error': 'No se puede crear super_admin a través de este endpoint. Contacte al administrador del sistema.'
@@ -666,6 +914,25 @@ def crear_usuario():
                     VALUES (%s, %s)
                     ON CONFLICT DO NOTHING
                 """, (id_usuario, id_residencia))
+            
+            # Crear tabla usuario_permiso si no existe
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS usuario_permiso (
+                    id_usuario INTEGER NOT NULL,
+                    nombre_permiso VARCHAR(255) NOT NULL,
+                    PRIMARY KEY (id_usuario, nombre_permiso),
+                    FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE
+                )
+            """)
+            
+            # Asignar permisos personalizados si se proporcionaron
+            if permisos and len(permisos) > 0:
+                for nombre_permiso in permisos:
+                    cursor.execute("""
+                        INSERT INTO usuario_permiso (id_usuario, nombre_permiso)
+                        VALUES (%s, %s)
+                        ON CONFLICT DO NOTHING
+                    """, (id_usuario, nombre_permiso))
             
             conn.commit()
             
@@ -1162,21 +1429,12 @@ def crear_residente():
                     concepto = f"{nombre_mes.capitalize()} {año_corto}"
                     metodo_pago = data.get('metodo_pago_preferido') or 'transferencia'
                     
-                    # Verificar si ya existe un cobro para el mes siguiente con concepto "Pago [mes]"
-                    # Prevenir duplicados: no puede haber dos cobros con concepto "Pago [mes]" para el mismo residente y mes
-                    cursor.execute("""
-                        SELECT id_pago FROM pago_residente
-                        WHERE id_residente = %s 
-                          AND id_residencia = %s
-                          AND mes_pagado = %s
-                          AND (concepto ILIKE 'enero %%' OR concepto ILIKE 'febrero %%' OR concepto ILIKE 'marzo %%' 
-                               OR concepto ILIKE 'abril %%' OR concepto ILIKE 'mayo %%' OR concepto ILIKE 'junio %%'
-                               OR concepto ILIKE 'julio %%' OR concepto ILIKE 'agosto %%' OR concepto ILIKE 'septiembre %%'
-                               OR concepto ILIKE 'octubre %%' OR concepto ILIKE 'noviembre %%' OR concepto ILIKE 'diciembre %%'
-                               OR concepto ILIKE 'Pago %%')
-                    """, (id_residente, id_residencia, mes_siguiente_str))
+                    # Verificar si ya existe un cobro mensual duplicado (pendiente o completado)
+                    existe_duplicado, id_pago_duplicado = verificar_cobro_mensual_duplicado(
+                        cursor, id_residente, id_residencia, mes_siguiente_str, concepto
+                    )
                     
-                    if not cursor.fetchone():
+                    if not existe_duplicado:
                         # Crear el cobro previsto para el mes siguiente
                         cursor.execute("""
                             INSERT INTO pago_residente (
@@ -1200,6 +1458,19 @@ def crear_residente():
                 except Exception as e:
                     app.logger.error(f"Error al generar cobro previsto automático para nuevo residente {id_residente}: {str(e)}")
                     # No fallar la creación del residente si falla la generación del cobro
+            
+            # Generar cobros históricos completados desde fecha_ingreso hasta mes anterior al actual
+            fecha_ingreso = data.get('fecha_ingreso')
+            if fecha_ingreso and costo_habitacion and costo_habitacion > 0:
+                try:
+                    cobros_historicos = generar_cobros_historicos_completados(
+                        cursor, id_residente, id_residencia, fecha_ingreso, costo_habitacion, metodo_pago
+                    )
+                    if cobros_historicos > 0:
+                        app.logger.info(f"Generados {cobros_historicos} cobros históricos completados para nuevo residente {nombre} {apellido} (ID: {id_residente})")
+                except Exception as e:
+                    app.logger.error(f"Error al generar cobros históricos para nuevo residente {id_residente}: {str(e)}")
+                    # No fallar la creación del residente si falla la generación de históricos
             
             conn.commit()
             
@@ -1268,6 +1539,100 @@ def dar_baja_residente(id_residente):
             # Actualizar el residente: activo = False, motivo_baja, fecha_baja = hoy
             from datetime import date
             fecha_baja = date.today()
+            
+            # PASO 1: Guardar los pagos pendientes que están después de la fecha de baja
+            # Buscar pagos pendientes con fecha_pago o fecha_prevista posterior a fecha_baja
+            # Verificar si existe la columna fecha_prevista
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'pago_residente' 
+                  AND column_name = 'fecha_prevista'
+            """)
+            tiene_fecha_prevista = cursor.fetchone() is not None
+            
+            if tiene_fecha_prevista:
+                cursor.execute("""
+                    SELECT id_pago, id_residente, id_residencia, monto, fecha_pago, mes_pagado, 
+                           concepto, metodo_pago, estado, fecha_creacion, fecha_prevista
+                    FROM pago_residente
+                    WHERE id_residente = %s
+                      AND estado IN ('pendiente', 'previsto')
+                      AND (fecha_pago > %s OR fecha_prevista > %s)
+                """, (id_residente, fecha_baja, fecha_baja))
+            else:
+                cursor.execute("""
+                    SELECT id_pago, id_residente, id_residencia, monto, fecha_pago, mes_pagado, 
+                           concepto, metodo_pago, estado, fecha_creacion
+                    FROM pago_residente
+                    WHERE id_residente = %s
+                      AND estado IN ('pendiente', 'previsto')
+                      AND fecha_pago > %s
+                """, (id_residente, fecha_baja))
+            
+            pagos_a_eliminar = cursor.fetchall()
+            
+            # Guardar los pagos en la tabla auxiliar antes de eliminarlos
+            if pagos_a_eliminar:
+                try:
+                    # Verificar si la tabla pago_residente_baja existe
+                    cursor.execute("""
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables 
+                            WHERE table_schema = 'public'
+                            AND table_name = 'pago_residente_baja'
+                        )
+                    """)
+                    tabla_existe = cursor.fetchone()[0]
+                    
+                    if tabla_existe:
+                        for pago in pagos_a_eliminar:
+                            # Verificar si la tabla auxiliar tiene fecha_prevista
+                            cursor.execute("""
+                                SELECT column_name 
+                                FROM information_schema.columns 
+                                WHERE table_name = 'pago_residente_baja' 
+                                  AND column_name = 'fecha_prevista'
+                            """)
+                            tabla_tiene_fecha_prevista = cursor.fetchone() is not None
+                            
+                            if tabla_tiene_fecha_prevista and tiene_fecha_prevista and len(pago) > 10:
+                                cursor.execute("""
+                                    INSERT INTO pago_residente_baja 
+                                    (id_pago, id_residente, id_residencia, monto, fecha_pago, mes_pagado,
+                                     concepto, metodo_pago, estado, fecha_creacion, fecha_baja_residente, fecha_prevista)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                """, (pago[0], pago[1], pago[2], pago[3], pago[4], pago[5], 
+                                      pago[6], pago[7], pago[8], pago[9], fecha_baja, pago[10] if len(pago) > 10 else None))
+                            else:
+                                cursor.execute("""
+                                    INSERT INTO pago_residente_baja 
+                                    (id_pago, id_residente, id_residencia, monto, fecha_pago, mes_pagado,
+                                     concepto, metodo_pago, estado, fecha_creacion, fecha_baja_residente)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                """, (pago[0], pago[1], pago[2], pago[3], pago[4], pago[5], 
+                                      pago[6], pago[7], pago[8], pago[9], fecha_baja))
+                        
+                        # Eliminar los pagos pendientes posteriores a la fecha de baja
+                        if tiene_fecha_prevista:
+                            cursor.execute("""
+                                DELETE FROM pago_residente
+                                WHERE id_residente = %s
+                                  AND estado IN ('pendiente', 'previsto')
+                                  AND (fecha_pago > %s OR fecha_prevista > %s)
+                            """, (id_residente, fecha_baja, fecha_baja))
+                        else:
+                            cursor.execute("""
+                                DELETE FROM pago_residente
+                                WHERE id_residente = %s
+                                  AND estado IN ('pendiente', 'previsto')
+                                  AND fecha_pago > %s
+                            """, (id_residente, fecha_baja))
+                        
+                        app.logger.info(f"Eliminados {len(pagos_a_eliminar)} pagos pendientes del residente {id_residente} por baja")
+                except Exception as e:
+                    app.logger.warning(f"Error al eliminar pagos pendientes (tabla puede no existir): {str(e)}")
+                    # Continuar con la baja aunque falle la eliminación de pagos
             
             # Construir la consulta dinámicamente según las columnas que existan
             # Al dar de baja, NO se libera la habitación (se mantiene para referencia histórica)
@@ -1349,6 +1714,117 @@ def dar_alta_residente(id_residente):
                   AND column_name IN ('motivo_baja', 'fecha_baja')
             """)
             columnas_baja = {row[0] for row in cursor.fetchall()}
+            
+            # PASO 1: Restaurar los pagos que fueron eliminados por la baja
+            try:
+                # Verificar si la tabla pago_residente_baja existe
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public'
+                        AND table_name = 'pago_residente_baja'
+                    )
+                """)
+                tabla_existe = cursor.fetchone()[0]
+                
+                if tabla_existe:
+                    # Buscar pagos eliminados que aún no han sido restaurados
+                    # Verificar si la tabla tiene fecha_prevista
+                    cursor.execute("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'pago_residente_baja' 
+                          AND column_name = 'fecha_prevista'
+                    """)
+                    tabla_tiene_fecha_prevista = cursor.fetchone() is not None
+                    
+                    if tabla_tiene_fecha_prevista:
+                        cursor.execute("""
+                            SELECT id_pago, id_residente, id_residencia, monto, fecha_pago, mes_pagado,
+                                   concepto, metodo_pago, estado, fecha_creacion, fecha_prevista
+                            FROM pago_residente_baja
+                            WHERE id_residente = %s
+                              AND fecha_restauracion IS NULL
+                        """, (id_residente,))
+                    else:
+                        cursor.execute("""
+                            SELECT id_pago, id_residente, id_residencia, monto, fecha_pago, mes_pagado,
+                                   concepto, metodo_pago, estado, fecha_creacion
+                            FROM pago_residente_baja
+                            WHERE id_residente = %s
+                              AND fecha_restauracion IS NULL
+                        """, (id_residente,))
+                    
+                    pagos_a_restaurar = cursor.fetchall()
+                    
+                    if pagos_a_restaurar:
+                        from datetime import datetime
+                        fecha_restauracion = datetime.now()
+                        
+                        for pago in pagos_a_restaurar:
+                            # Verificar si el pago original aún existe (por si acaso)
+                            cursor.execute("""
+                                SELECT id_pago FROM pago_residente WHERE id_pago = %s
+                            """, (pago[0],))
+                            
+                            if not cursor.fetchone():
+                                # El pago fue eliminado, restaurarlo
+                                # Verificar si existe fecha_prevista en la tabla pago_residente
+                                cursor.execute("""
+                                    SELECT column_name 
+                                    FROM information_schema.columns 
+                                    WHERE table_name = 'pago_residente' 
+                                      AND column_name = 'fecha_prevista'
+                                """)
+                                tiene_fecha_prevista_tabla = cursor.fetchone() is not None
+                                
+                                if tiene_fecha_prevista_tabla and tabla_tiene_fecha_prevista and len(pago) > 10:
+                                    cursor.execute("""
+                                        INSERT INTO pago_residente 
+                                        (id_residente, id_residencia, monto, fecha_pago, fecha_prevista, mes_pagado,
+                                         concepto, metodo_pago, estado, fecha_creacion)
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                        RETURNING id_pago
+                                    """, (pago[1], pago[2], pago[3], pago[4], pago[10] if len(pago) > 10 else None, 
+                                          pago[5], pago[6], pago[7], pago[8], pago[9]))
+                                else:
+                                    cursor.execute("""
+                                        INSERT INTO pago_residente 
+                                        (id_residente, id_residencia, monto, fecha_pago, mes_pagado,
+                                         concepto, metodo_pago, estado, fecha_creacion)
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                        RETURNING id_pago
+                                    """, (pago[1], pago[2], pago[3], pago[4], pago[5], 
+                                          pago[6], pago[7], pago[8], pago[9]))
+                                
+                                nuevo_id_pago = cursor.fetchone()[0]
+                                
+                                # Actualizar el registro en pago_residente_baja con la fecha de restauración
+                                cursor.execute("""
+                                    UPDATE pago_residente_baja
+                                    SET fecha_restauracion = %s, id_pago = %s
+                                    WHERE id_registro = (
+                                        SELECT id_registro FROM pago_residente_baja
+                                        WHERE id_residente = %s
+                                          AND fecha_restauracion IS NULL
+                                          AND id_pago = %s
+                                        LIMIT 1
+                                    )
+                                """, (fecha_restauracion, nuevo_id_pago, id_residente, pago[0]))
+                            else:
+                                # El pago ya existe, solo marcar como restaurado
+                                cursor.execute("""
+                                    UPDATE pago_residente_baja
+                                    SET fecha_restauracion = %s
+                                    WHERE id_residente = %s
+                                      AND id_pago = %s
+                                      AND fecha_restauracion IS NULL
+                                """, (fecha_restauracion, id_residente, pago[0]))
+                        
+                        app.logger.info(f"Restaurados {len(pagos_a_restaurar)} pagos del residente {id_residente} al dar de alta")
+            except Exception as e:
+                app.logger.warning(f"Error al restaurar pagos (tabla puede no existir): {str(e)}")
+                # Continuar con el alta aunque falle la restauración de pagos
             
             # Reactivar el residente: activo = True, limpiar motivo_baja y fecha_baja
             updates = ['activo = TRUE']
@@ -1578,11 +2054,41 @@ def actualizar_residente(id_residente):
                 RETURNING id_residente
             """
             
+            # Obtener el costo_habitacion y fecha_ingreso ANTES de actualizar para comparar
+            cursor.execute("""
+                SELECT costo_habitacion, fecha_ingreso FROM residente
+                WHERE id_residente = %s
+            """, (id_residente,))
+            datos_anteriores_result = cursor.fetchone()
+            costo_anterior = float(datos_anteriores_result[0]) if datos_anteriores_result and datos_anteriores_result[0] else None
+            fecha_ingreso_anterior = datos_anteriores_result[1] if datos_anteriores_result and datos_anteriores_result[1] else None
+            
             cursor.execute(query, valores)
             
-            # Si se actualizó costo_habitacion o el residente no tiene cobro previsto, generar cobro del mes siguiente
-            costo_habitacion = data.get('costo_habitacion')
+            # Si se actualizó costo_habitacion, actualizar cobros pendientes futuros
+            costo_habitacion_nuevo = data.get('costo_habitacion')
             id_residencia_final = data.get('id_residencia', id_residencia_actual)
+            
+            # Verificar si cambió el costo_habitacion
+            if costo_habitacion_nuevo is not None and costo_anterior is not None:
+                costo_nuevo_float = float(costo_habitacion_nuevo)
+                if abs(costo_nuevo_float - costo_anterior) > 0.01:  # Si cambió significativamente
+                    # Actualizar todos los cobros pendientes (futuros) del residente con concepto de mes
+                    cursor.execute("""
+                        UPDATE pago_residente
+                        SET monto = %s
+                        WHERE id_residente = %s
+                          AND id_residencia = %s
+                          AND estado = 'pendiente'
+                          AND (concepto ILIKE 'enero %%' OR concepto ILIKE 'febrero %%' OR concepto ILIKE 'marzo %%' 
+                               OR concepto ILIKE 'abril %%' OR concepto ILIKE 'mayo %%' OR concepto ILIKE 'junio %%'
+                               OR concepto ILIKE 'julio %%' OR concepto ILIKE 'agosto %%' OR concepto ILIKE 'septiembre %%'
+                               OR concepto ILIKE 'octubre %%' OR concepto ILIKE 'noviembre %%' OR concepto ILIKE 'diciembre %%'
+                               OR concepto ILIKE 'Pago %%')
+                    """, (costo_nuevo_float, id_residente, id_residencia_final))
+                    cobros_actualizados = cursor.rowcount
+                    if cobros_actualizados > 0:
+                        app.logger.info(f"Actualizados {cobros_actualizados} cobros pendientes del residente {id_residente} con nuevo costo: €{costo_anterior} → €{costo_nuevo_float}")
             
             # Obtener el costo_habitacion actualizado o el existente
             cursor.execute("""
@@ -1608,21 +2114,12 @@ def actualizar_residente(id_residente):
                     mes_siguiente_str = siguiente_mes.strftime('%Y-%m')
                     fecha_prevista = siguiente_mes.date()  # Día 1 del mes siguiente
                     
-                    # Verificar si ya existe un cobro para el mes siguiente con concepto "Pago [mes]"
-                    # Prevenir duplicados: no puede haber dos cobros con concepto "Pago [mes]" para el mismo residente y mes
-                    cursor.execute("""
-                        SELECT id_pago FROM pago_residente
-                        WHERE id_residente = %s 
-                          AND id_residencia = %s
-                          AND mes_pagado = %s
-                          AND (concepto ILIKE 'enero %%' OR concepto ILIKE 'febrero %%' OR concepto ILIKE 'marzo %%' 
-                               OR concepto ILIKE 'abril %%' OR concepto ILIKE 'mayo %%' OR concepto ILIKE 'junio %%'
-                               OR concepto ILIKE 'julio %%' OR concepto ILIKE 'agosto %%' OR concepto ILIKE 'septiembre %%'
-                               OR concepto ILIKE 'octubre %%' OR concepto ILIKE 'noviembre %%' OR concepto ILIKE 'diciembre %%'
-                               OR concepto ILIKE 'Pago %%')
-                    """, (id_residente, id_residencia_final, mes_siguiente_str))
+                    # Verificar si ya existe un cobro mensual duplicado (pendiente o completado)
+                    existe_duplicado, id_pago_duplicado = verificar_cobro_mensual_duplicado(
+                        cursor, id_residente, id_residencia_final, mes_siguiente_str, concepto
+                    )
                     
-                    if not cursor.fetchone():
+                    if not existe_duplicado:
                         # Crear el cobro previsto para el mes siguiente
                         meses_espanol = {
                             1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
@@ -1631,8 +2128,8 @@ def actualizar_residente(id_residente):
                         }
                         nombre_mes = meses_espanol.get(siguiente_mes.month, 'mes')
                         # Formato: "Diciembre 25", "Enero 26" (solo mes y año corto, sin "Pago")
-                    año_corto = str(siguiente_mes.year)[-2:]  # Últimos 2 dígitos
-                    concepto = f"{nombre_mes.capitalize()} {año_corto}"
+                        año_corto = str(siguiente_mes.year)[-2:]  # Últimos 2 dígitos
+                        concepto = f"{nombre_mes.capitalize()} {año_corto}"
                         metodo_pago = metodo_pago_actual or 'transferencia'
                         
                         cursor.execute("""
@@ -1657,6 +2154,59 @@ def actualizar_residente(id_residente):
                 except Exception as e:
                     app.logger.error(f"Error al generar cobro previsto automático para residente actualizado {id_residente}: {str(e)}")
                     # No fallar la actualización del residente si falla la generación del cobro
+            
+            # Si se actualizó fecha_ingreso, eliminar cobros completados anteriores a la nueva fecha
+            fecha_ingreso_nueva = data.get('fecha_ingreso')
+            if 'fecha_ingreso' in data and fecha_ingreso_nueva:
+                try:
+                    # Convertir fecha_ingreso_nueva a date si es string
+                    if isinstance(fecha_ingreso_nueva, str):
+                        fecha_ingreso_nueva_date = datetime.strptime(fecha_ingreso_nueva, '%Y-%m-%d').date()
+                    else:
+                        fecha_ingreso_nueva_date = fecha_ingreso_nueva
+                    
+                    # Calcular mes de ingreso (primer día del mes)
+                    mes_ingreso_nuevo = datetime(fecha_ingreso_nueva_date.year, fecha_ingreso_nueva_date.month, 1).date()
+                    
+                    # Eliminar TODOS los cobros completados que tengan fecha_pago anterior al mes de ingreso nuevo
+                    # Esto asegura que si se cambió la fecha de ingreso por error, se eliminen los cobros incorrectos
+                    cursor.execute("""
+                        DELETE FROM pago_residente
+                        WHERE id_residente = %s
+                          AND estado = 'cobrado'
+                          AND fecha_pago IS NOT NULL
+                          AND fecha_pago < %s
+                    """, (id_residente, mes_ingreso_nuevo))
+                    cobros_eliminados = cursor.rowcount
+                    if cobros_eliminados > 0:
+                        app.logger.info(f"Eliminados {cobros_eliminados} cobros completados anteriores a la nueva fecha de ingreso ({mes_ingreso_nuevo}) para residente {id_residente}")
+                        
+                except Exception as e:
+                    app.logger.error(f"Error al eliminar cobros anteriores a nueva fecha de ingreso para residente {id_residente}: {str(e)}")
+                    # Continuar aunque falle la eliminación
+            
+            # Generar cobros históricos completados si se actualizó fecha_ingreso o si no existen históricos previos
+            if fecha_ingreso_nueva and costo_actual and costo_actual > 0:
+                try:
+                    # Verificar si ya existen cobros históricos completados para este residente
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM pago_residente
+                        WHERE id_residente = %s
+                          AND estado = 'cobrado'
+                          AND es_cobro_previsto = FALSE
+                    """, (id_residente,))
+                    cobros_historicos_existentes = cursor.fetchone()[0]
+                    
+                    # Si no hay cobros históricos o se actualizó fecha_ingreso, generar históricos
+                    if cobros_historicos_existentes == 0 or 'fecha_ingreso' in data:
+                        cobros_historicos = generar_cobros_historicos_completados(
+                            cursor, id_residente, id_residencia_final, fecha_ingreso_nueva, costo_actual, metodo_pago_actual
+                        )
+                        if cobros_historicos > 0:
+                            app.logger.info(f"Generados {cobros_historicos} cobros históricos completados para residente actualizado (ID: {id_residente})")
+                except Exception as e:
+                    app.logger.error(f"Error al generar cobros históricos para residente actualizado {id_residente}: {str(e)}")
+                    # No fallar la actualización del residente si falla la generación de históricos
             
             conn.commit()
             
@@ -1745,7 +2295,7 @@ def listar_cobros():
                         ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
                     ),
                     cobros_mes_actual_anterior AS (
-                        -- Cobros completados del mes actual y mes anterior
+                        -- Cobros completados del mes actual y mes anterior (excluyendo los que ya están en ultimos_cobros_completados)
                         SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
                                p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
                                p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
@@ -1758,6 +2308,16 @@ def listar_cobros():
                           AND p.estado = 'cobrado'
                           AND p.fecha_pago IS NOT NULL
                           AND p.fecha_pago >= %s
+                          AND NOT EXISTS (
+                              -- Excluir cobros que ya están en ultimos_cobros_completados
+                              SELECT 1 FROM pago_residente p2
+                              JOIN residente r2 ON p2.id_residente = r2.id_residente
+                              WHERE p2.id_residente = p.id_residente
+                                AND p2.estado = 'cobrado'
+                                AND p2.fecha_pago IS NOT NULL
+                                AND (p2.fecha_pago > p.fecha_pago 
+                                     OR (p2.fecha_pago = p.fecha_pago AND p2.fecha_creacion > p.fecha_creacion))
+                          )
                     ),
                     cobros_periodo_cercano AS (
                         SELECT * FROM cobros_pendientes
@@ -1765,13 +2325,9 @@ def listar_cobros():
                         SELECT * FROM ultimos_cobros_completados
                         UNION
                         SELECT * FROM cobros_mes_actual_anterior
-                    ),
-                    cobros_sin_duplicados AS (
-                        SELECT DISTINCT ON (id_pago) * FROM cobros_periodo_cercano
-                        ORDER BY id_pago
                     )
-                    SELECT * FROM cobros_sin_duplicados
-                    ORDER BY id_residencia, orden_prioridad,
+                    SELECT DISTINCT ON (id_pago) * FROM cobros_periodo_cercano
+                    ORDER BY id_pago, orden_prioridad,
                              CASE 
                                  WHEN fecha_prevista IS NOT NULL THEN fecha_prevista
                                  WHEN fecha_pago IS NOT NULL THEN fecha_pago
@@ -1835,7 +2391,13 @@ def listar_cobros():
                         SELECT * FROM cobros_mes_actual_anterior
                     )
                     SELECT DISTINCT ON (id_pago) * FROM cobros_periodo_cercano
-                    ORDER BY id_pago
+                    ORDER BY id_pago, orden_prioridad,
+                             CASE 
+                                 WHEN fecha_prevista IS NOT NULL THEN fecha_prevista
+                                 WHEN fecha_pago IS NOT NULL THEN fecha_pago
+                                 ELSE '9999-12-31'::date
+                             END ASC,
+                             fecha_creacion DESC
                 """
                 params_extended = [mes_anterior_inicio]
                 params_query = params_extended  # Guardar params para reutilizar
@@ -1910,12 +2472,16 @@ def listar_cobros():
                       AND r.costo_habitacion > 0
                       AND p.estado = 'cobrado'
                       AND p.fecha_pago IS NOT NULL
-                      AND NOT EXISTS (
-                          SELECT 1 FROM pago_residente p2
-                          WHERE p2.id_residente = r.id_residente
-                            AND p2.id_residencia = r.id_residencia
-                            AND p2.mes_pagado = %s
-                            AND p2.concepto ILIKE 'Pago %%'
+                          AND NOT EXISTS (
+                              SELECT 1 FROM pago_residente p2
+                              WHERE p2.id_residente = r.id_residente
+                                AND p2.id_residencia = r.id_residencia
+                                AND p2.mes_pagado = %s
+                                AND (p2.concepto ILIKE 'enero %%' OR p2.concepto ILIKE 'febrero %%' OR p2.concepto ILIKE 'marzo %%' 
+                                     OR p2.concepto ILIKE 'abril %%' OR p2.concepto ILIKE 'mayo %%' OR p2.concepto ILIKE 'junio %%'
+                                     OR p2.concepto ILIKE 'julio %%' OR p2.concepto ILIKE 'agosto %%' OR p2.concepto ILIKE 'septiembre %%'
+                                     OR p2.concepto ILIKE 'octubre %%' OR p2.concepto ILIKE 'noviembre %%' OR p2.concepto ILIKE 'diciembre %%'
+                                     OR p2.concepto ILIKE 'Pago %%')
                       )
                 """
                 cursor.execute(query_residentes, [mes_siguiente_str])
@@ -1930,6 +2496,15 @@ def listar_cobros():
                 metodo_pago = res[3] or 'transferencia'
                 nombre = res[4]
                 apellido = res[5]
+                
+                # Verificar duplicados antes de insertar
+                existe_duplicado, id_pago_duplicado = verificar_cobro_mensual_duplicado(
+                    cursor, id_residente, id_residencia, mes_siguiente_str, concepto_siguiente
+                )
+                
+                if existe_duplicado:
+                    app.logger.warning(f"Se intentó generar cobro duplicado para residente {id_residente}, mes {mes_siguiente_str}. Ya existe cobro con ID {id_pago_duplicado}")
+                    continue
                 
                 try:
                     cursor.execute("""
@@ -1956,13 +2531,20 @@ def listar_cobros():
                 except Exception as e:
                     app.logger.error(f"Error al generar cobro pendiente automático para residente {id_residente}: {str(e)}")
             
-            # Si se generaron cobros, volver a consultar para incluirlos
+            # Si se generaron cobros, hacer commit y volver a consultar para incluirlos
             if cobros_generados > 0:
                 conn.commit()
+                app.logger.info(f"Se generaron {cobros_generados} cobros pendientes automáticamente. Reconsultando lista de cobros...")
                 # Volver a ejecutar la query original para incluir los nuevos cobros pendientes
                 if query and params_query:
                     cursor.execute(query, params_query)
-                    cobros = cursor.fetchall()
+                    cobros_nuevos = cursor.fetchall()
+                    # Combinar cobros originales con nuevos, eliminando duplicados por id_pago
+                    cobros_dict = {cobro[0]: cobro for cobro in cobros}  # id_pago como clave
+                    for cobro in cobros_nuevos:
+                        if cobro[0] not in cobros_dict:  # Solo agregar si no existe
+                            cobros_dict[cobro[0]] = cobro
+                    cobros = list(cobros_dict.values())
             
             # Agrupar por residencia
             cobros_por_residencia = {}
@@ -2113,28 +2695,40 @@ def crear_cobro():
                     concepto = f"{nombre_mes.capitalize()} {año_corto}"
             
             # Prevenir duplicados: Si el concepto es un mes (pago mensual de habitación), verificar que no exista otro cobro
-            # con el mismo id_residente, mes_pagado y concepto de mes
-            meses_espanol_list = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 
-                                  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
-            es_concepto_mensual = concepto and any(concepto.lower().startswith(mes) for mes in meses_espanol_list)
-            if es_concepto_mensual and mes_pagado:
-                cursor.execute("""
-                    SELECT id_pago FROM pago_residente
-                    WHERE id_residente = %s 
-                      AND id_residencia = %s
-                      AND mes_pagado = %s
-                      AND (concepto ILIKE 'enero %%' OR concepto ILIKE 'febrero %%' OR concepto ILIKE 'marzo %%' 
-                           OR concepto ILIKE 'abril %%' OR concepto ILIKE 'mayo %%' OR concepto ILIKE 'junio %%'
-                           OR concepto ILIKE 'julio %%' OR concepto ILIKE 'agosto %%' OR concepto ILIKE 'septiembre %%'
-                           OR concepto ILIKE 'octubre %%' OR concepto ILIKE 'noviembre %%' OR concepto ILIKE 'diciembre %%'
-                           OR concepto ILIKE 'Pago %%')
-                """, (id_residente, id_residencia_cobro, mes_pagado))
-                
-                cobro_duplicado = cursor.fetchone()
-                if cobro_duplicado:
-                    return jsonify({
-                        'error': f'Ya existe un cobro de habitación para este residente en el mes {mes_pagado}. No se pueden crear cobros duplicados con concepto de mes.'
-                    }), 400
+            # con el mismo id_residente, mes_pagado y concepto de mes (tanto pendientes como completados)
+            # Si no hay mes_pagado pero sí hay concepto de mes, intentar extraer el mes del concepto
+            mes_pagado_para_validacion = mes_pagado
+            if not mes_pagado_para_validacion and concepto:
+                # Intentar extraer mes y año del concepto (ej: "Diciembre 25" -> mes_pagado = "2025-12")
+                meses_espanol = {
+                    'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4,
+                    'mayo': 5, 'junio': 6, 'julio': 7, 'agosto': 8,
+                    'septiembre': 9, 'octubre': 10, 'noviembre': 11, 'diciembre': 12
+                }
+                concepto_lower = concepto.lower().strip()
+                for mes_nombre, mes_num in meses_espanol.items():
+                    if concepto_lower.startswith(mes_nombre):
+                        # Extraer año (puede ser 2 o 4 dígitos)
+                        partes = concepto_lower.split()
+                        if len(partes) >= 2:
+                            año_str = partes[1]
+                            try:
+                                año = int(año_str)
+                                if len(año_str) == 2:
+                                    año = 2000 + año  # Convertir "25" a "2025"
+                                mes_pagado_para_validacion = f"{año}-{mes_num:02d}"
+                                break
+                            except ValueError:
+                                pass
+            
+            existe_duplicado, id_pago_duplicado = verificar_cobro_mensual_duplicado(
+                cursor, id_residente, id_residencia_cobro, mes_pagado_para_validacion, concepto
+            )
+            
+            if existe_duplicado:
+                return jsonify({
+                    'error': f'Ya existe un cobro de habitación para este residente con el concepto "{concepto}". No se pueden crear cobros duplicados con concepto de mes (tanto pendientes como completados).'
+                }), 400
             
             cursor.execute("""
                 INSERT INTO pago_residente (id_residente, id_residencia, monto, fecha_pago, fecha_prevista,
@@ -2147,8 +2741,8 @@ def crear_cobro():
                 monto,
                 fecha_pago,  # Permitir fecha_pago siempre que se proporcione
                 fecha_prevista,  # Permitir fecha_prevista siempre que se proporcione
-                data.get('mes_pagado'),
-                data.get('concepto'),
+                mes_pagado,  # Usar mes_pagado (puede ser None)
+                concepto,  # Usar concepto actualizado (puede ser "Diciembre 25" en lugar de "Pago mensual habitación")
                 data.get('metodo_pago'),
                 estado_final,
                 es_cobro_previsto,
@@ -2167,6 +2761,122 @@ def crear_cobro():
             conn.rollback()
             app.logger.error(f"Error al crear cobro: {str(e)}")
             return jsonify({'error': 'Error al crear cobro'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/facturacion/cobros/regenerar-historicos', methods=['POST'])
+@permiso_requerido('crear:cobro')
+def regenerar_cobros_historicos_endpoint():
+    """
+    Regenera cobros históricos completados para todos los residentes activos.
+    Útil para corregir residentes que fueron creados recientemente pero tienen fecha_ingreso anterior.
+    Solo accesible por super_admin o Administrador.
+    """
+    try:
+        # Solo super_admin o Administrador pueden ejecutar esto
+        if g.id_rol not in [SUPER_ADMIN_ROLE_ID, ADMIN_ROLE_ID]:
+            return jsonify({'error': 'Solo administradores pueden regenerar cobros históricos'}), 403
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Obtener todos los residentes activos con fecha_ingreso y costo_habitacion
+            cursor.execute("""
+                SELECT id_residente, nombre, apellido, fecha_ingreso, costo_habitacion, 
+                       metodo_pago_preferido, id_residencia
+                FROM residente
+                WHERE activo = TRUE
+                  AND fecha_ingreso IS NOT NULL
+                  AND costo_habitacion IS NOT NULL
+                  AND costo_habitacion > 0
+                ORDER BY id_residente
+            """)
+            
+            residentes = cursor.fetchall()
+            
+            total_cobros_generados = 0
+            residentes_procesados = 0
+            detalles = []
+            
+            for residente in residentes:
+                id_residente, nombre, apellido, fecha_ingreso, costo_habitacion, metodo_pago, id_residencia = residente
+                
+                # Verificar cuántos cobros históricos completados tiene actualmente
+                cursor.execute("""
+                    SELECT COUNT(*) FROM pago_residente
+                    WHERE id_residente = %s
+                      AND estado = 'cobrado'
+                      AND es_cobro_previsto = FALSE
+                """, (id_residente,))
+                cobros_existentes = cursor.fetchone()[0]
+                
+                # Calcular cuántos cobros debería tener
+                if isinstance(fecha_ingreso, str):
+                    fecha_ingreso_date = datetime.strptime(fecha_ingreso, '%Y-%m-%d').date()
+                else:
+                    fecha_ingreso_date = fecha_ingreso
+                
+                hoy = datetime.now().date()
+                mes_actual = datetime(hoy.year, hoy.month, 1).date()
+                mes_ingreso = datetime(fecha_ingreso_date.year, fecha_ingreso_date.month, 1).date()
+                
+                meses_esperados = 0
+                if mes_ingreso <= mes_actual:
+                    fecha_temp = mes_ingreso
+                    while fecha_temp <= mes_actual:
+                        meses_esperados += 1
+                        if fecha_temp.month == 12:
+                            fecha_temp = datetime(fecha_temp.year + 1, 1, 1).date()
+                        else:
+                            fecha_temp = datetime(fecha_temp.year, fecha_temp.month + 1, 1).date()
+                
+                # Si faltan cobros, regenerar
+                if cobros_existentes < meses_esperados:
+                    try:
+                        cobros_generados = generar_cobros_historicos_completados(
+                            cursor, id_residente, id_residencia, fecha_ingreso_date, 
+                            costo_habitacion, metodo_pago or 'transferencia'
+                        )
+                        conn.commit()
+                        
+                        if cobros_generados > 0:
+                            total_cobros_generados += cobros_generados
+                            detalles.append({
+                                'residente': f"{nombre} {apellido}",
+                                'id_residente': id_residente,
+                                'cobros_generados': cobros_generados,
+                                'cobros_existentes': cobros_existentes,
+                                'meses_esperados': meses_esperados
+                            })
+                        
+                        residentes_procesados += 1
+                    except Exception as e:
+                        conn.rollback()
+                        app.logger.error(f"Error al generar cobros para {nombre} {apellido}: {str(e)}")
+                        detalles.append({
+                            'residente': f"{nombre} {apellido}",
+                            'id_residente': id_residente,
+                            'error': str(e)
+                        })
+            
+            return jsonify({
+                'mensaje': 'Regeneración de cobros históricos completada',
+                'residentes_procesados': residentes_procesados,
+                'total_cobros_generados': total_cobros_generados,
+                'detalles': detalles
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al regenerar cobros históricos: {str(e)}")
+            return jsonify({'error': f'Error al regenerar cobros históricos: {str(e)}'}), 500
         finally:
             cursor.close()
             conn.close()
@@ -2330,35 +3040,31 @@ def generar_cobros_previstos():
                     app.logger.warning(f"Residente {nombre} {apellido} (ID: {id_residente}) no tiene fecha_ingreso, saltando")
                     continue
                 
-                # Verificar si ya existe un cobro (completado o previsto) para el mes siguiente con concepto "Pago [mes]"
-                # Prevenir duplicados: no puede haber dos cobros con concepto "Pago [mes]" para el mismo residente y mes
-                cursor.execute("""
-                    SELECT id_pago, estado FROM pago_residente
-                    WHERE id_residente = %s 
-                      AND id_residencia = %s
-                      AND mes_pagado = %s
-                      AND (concepto ILIKE 'enero %%' OR concepto ILIKE 'febrero %%' OR concepto ILIKE 'marzo %%' 
-                           OR concepto ILIKE 'abril %%' OR concepto ILIKE 'mayo %%' OR concepto ILIKE 'junio %%'
-                           OR concepto ILIKE 'julio %%' OR concepto ILIKE 'agosto %%' OR concepto ILIKE 'septiembre %%'
-                           OR concepto ILIKE 'octubre %%' OR concepto ILIKE 'noviembre %%' OR concepto ILIKE 'diciembre %%'
-                           OR concepto ILIKE 'Pago %%')
-                """, (id_residente, residencia_del_residente, mes_siguiente_str))
+                # Generar concepto con el nombre del mes (formato nuevo: "Mes Año")
+                nombre_mes = meses_espanol.get(siguiente_mes.month, 'mes')
+                año_corto = str(siguiente_mes.year)[-2:]  # Últimos 2 dígitos
+                concepto = f"{nombre_mes.capitalize()} {año_corto}"
                 
-                cobro_existente = cursor.fetchone()
+                # Verificar si ya existe un cobro mensual duplicado (pendiente o completado)
+                existe_duplicado, id_pago_duplicado = verificar_cobro_mensual_duplicado(
+                    cursor, id_residente, residencia_del_residente, mes_siguiente_str, concepto
+                )
                 
-                if cobro_existente:
+                if existe_duplicado:
                     # Ya existe un cobro para el mes siguiente
-                    if cobro_existente[1] == 'cobrado':
+                    cursor.execute("""
+                        SELECT estado FROM pago_residente WHERE id_pago = %s
+                    """, (id_pago_duplicado,))
+                    estado_result = cursor.fetchone()
+                    estado_duplicado = estado_result[0] if estado_result else None
+                    
+                    if estado_duplicado == 'cobrado':
                         cobros_ya_existentes += 1
                         app.logger.debug(f"Residente {nombre} {apellido} (ID: {id_residente}) ya tiene cobro completado para {mes_siguiente_str}")
                     else:
                         cobros_duplicados += 1
                         app.logger.debug(f"Residente {nombre} {apellido} (ID: {id_residente}) ya tiene cobro previsto para {mes_siguiente_str}")
                     continue
-                
-                # Generar concepto con el nombre del mes
-                nombre_mes = meses_espanol.get(siguiente_mes.month, 'mes')
-                concepto = f"Pago {nombre_mes} {siguiente_mes.year}"
                 
                 # Crear el cobro previsto para el mes siguiente
                 try:
@@ -3080,15 +3786,15 @@ def actualizar_cobro(id_pago):
 
 @app.route('/api/v1/facturacion/cobros/<int:id_pago>', methods=['DELETE'])
 def eliminar_cobro(id_pago):
-    """Elimina un cobro completamente."""
+    """Elimina un cobro completamente. Solo permite eliminar cobros pendientes/previstos."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
-            # Verificar que el cobro existe
+            # Verificar que el cobro existe y obtener su estado
             cursor.execute("""
-                SELECT id_pago, id_residencia FROM pago_residente
+                SELECT id_pago, id_residencia, estado, es_cobro_previsto FROM pago_residente
                 WHERE id_pago = %s
             """, (id_pago,))
             
@@ -3097,10 +3803,19 @@ def eliminar_cobro(id_pago):
             if not cobro:
                 return jsonify({'error': 'Cobro no encontrado'}), 404
             
+            id_pago_db, id_residencia, estado, es_cobro_previsto = cobro
+            
             # Verificar acceso a la residencia del cobro
-            is_valid, error_response = validate_residencia_access(cobro[1])
+            is_valid, error_response = validate_residencia_access(id_residencia)
             if not is_valid:
                 return error_response
+            
+            # Solo permitir eliminar cobros pendientes o previstos
+            # No permitir eliminar cobros completados (cobrados)
+            if estado == 'cobrado':
+                return jsonify({
+                    'error': 'No se pueden eliminar cobros completados. Solo se pueden eliminar cobros pendientes o previstos.'
+                }), 400
             
             # Eliminar el cobro
             cursor.execute("""
@@ -3258,26 +3973,127 @@ def crear_pago_proveedor():
         cursor = conn.cursor()
         
         try:
+            # Verificar si existe la columna factura_blob_path
             cursor.execute("""
-                INSERT INTO pago_proveedor (id_residencia, proveedor, concepto, monto, fecha_pago,
-                                          fecha_prevista, metodo_pago, estado, numero_factura,
-                                          observaciones)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                RETURNING id_pago
-            """, (
-                id_residencia,
-                proveedor,
-                concepto,
-                monto,
-                fecha_pago,
-                fecha_prevista,
-                data.get('metodo_pago'),
-                estado,  # Calculado automáticamente
-                data.get('numero_factura'),
-                data.get('observaciones')
-            ))
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'pago_proveedor' 
+                  AND column_name = 'factura_blob_path'
+            """)
+            tiene_columna_factura = cursor.fetchone() is not None
+            
+            if tiene_columna_factura:
+                cursor.execute("""
+                    INSERT INTO pago_proveedor (id_residencia, proveedor, concepto, monto, fecha_pago,
+                                              fecha_prevista, metodo_pago, estado, numero_factura,
+                                              observaciones, factura_blob_path)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id_pago
+                """, (
+                    id_residencia,
+                    proveedor,
+                    concepto,
+                    monto,
+                    fecha_pago,
+                    fecha_prevista,
+                    data.get('metodo_pago'),
+                    estado,  # Calculado automáticamente
+                    data.get('numero_factura'),
+                    data.get('observaciones'),
+                    data.get('factura_blob_path')
+                ))
+            else:
+                cursor.execute("""
+                    INSERT INTO pago_proveedor (id_residencia, proveedor, concepto, monto, fecha_pago,
+                                              fecha_prevista, metodo_pago, estado, numero_factura,
+                                              observaciones)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id_pago
+                """, (
+                    id_residencia,
+                    proveedor,
+                    concepto,
+                    monto,
+                    fecha_pago,
+                    fecha_prevista,
+                    data.get('metodo_pago'),
+                    estado,  # Calculado automáticamente
+                    data.get('numero_factura'),
+                    data.get('observaciones')
+                ))
             
             id_pago = cursor.fetchone()[0]
+            
+            # Si hay factura_blob_path, también guardar en documentación
+            factura_blob_path = data.get('factura_blob_path')
+            if factura_blob_path:
+                try:
+                    # Verificar si existe la tabla documento
+                    cursor.execute("""
+                        SELECT EXISTS (
+                            SELECT FROM information_schema.tables 
+                            WHERE table_schema = 'public' 
+                            AND table_name = 'documento'
+                        )
+                    """)
+                    tabla_documento_existe = cursor.fetchone()[0]
+                    
+                    if tabla_documento_existe:
+                        # Intentar obtener id_proveedor del nombre del proveedor
+                        id_proveedor = None
+                        cursor.execute("""
+                            SELECT id_proveedor FROM proveedor 
+                            WHERE nombre = %s AND id_residencia = %s AND activo = TRUE
+                            LIMIT 1
+                        """, (proveedor, id_residencia))
+                        
+                        proveedor_result = cursor.fetchone()
+                        if proveedor_result:
+                            id_proveedor = proveedor_result[0]
+                        else:
+                            # Si el proveedor no existe, crear uno nuevo automáticamente
+                            app.logger.info(f"Proveedor '{proveedor}' no encontrado, creando automáticamente")
+                            cursor.execute("""
+                                INSERT INTO proveedor (id_residencia, nombre, activo)
+                                VALUES (%s, %s, TRUE)
+                                RETURNING id_proveedor
+                            """, (id_residencia, proveedor))
+                            id_proveedor = cursor.fetchone()[0]
+                            app.logger.info(f"Proveedor '{proveedor}' creado con ID {id_proveedor}")
+                        
+                        # Obtener nombre del archivo del blob_path
+                        numero_factura = data.get('numero_factura')
+                        nombre_archivo = factura_blob_path.split('/')[-1] if '/' in factura_blob_path else f"Factura_{numero_factura or id_pago}.pdf"
+                        
+                        # Crear documento en la tabla documento
+                        cursor.execute("""
+                            INSERT INTO documento (tipo_entidad, id_entidad, id_residencia, categoria_documento,
+                                                  tipo_documento, nombre_archivo, descripcion, url_archivo,
+                                                  tamaño_bytes, tipo_mime, id_usuario_subida, activo)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                            RETURNING id_documento
+                        """, (
+                            'proveedor',
+                            id_proveedor,
+                            id_residencia,
+                            'Pagos',  # Nueva categoría para pagos a proveedores
+                            'Pago a proveedor',  # Tipo de documento específico
+                            nombre_archivo,
+                            f"Factura de pago: {proveedor} - {concepto}",
+                            factura_blob_path,
+                            None,  # tamaño_bytes - no lo tenemos aquí
+                            'application/pdf',
+                            g.id_usuario
+                        ))
+                        
+                        id_documento = cursor.fetchone()[0]
+                        app.logger.info(f"Documento de factura creado (ID: {id_documento}) para proveedor {id_proveedor}, pago {id_pago}")
+                except Exception as doc_error:
+                    # Si falla crear el documento, no fallar el pago
+                    app.logger.warning(f"Error al crear documento de factura: {str(doc_error)}")
+                    import traceback
+                    app.logger.warning(traceback.format_exc())
+            
             conn.commit()
             
             return jsonify({
@@ -3306,12 +4122,29 @@ def obtener_pago_proveedor(id_pago):
         cursor = conn.cursor()
         
         try:
+            # Verificar si existe la columna factura_blob_path
             cursor.execute("""
-                SELECT id_pago, id_residencia, proveedor, concepto, monto, fecha_pago, fecha_prevista,
-                       metodo_pago, estado, numero_factura, observaciones, fecha_creacion
-                FROM pago_proveedor
-                WHERE id_pago = %s
-            """, (id_pago,))
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'pago_proveedor' 
+                  AND column_name = 'factura_blob_path'
+            """)
+            tiene_columna_factura = cursor.fetchone() is not None
+            
+            if tiene_columna_factura:
+                cursor.execute("""
+                    SELECT id_pago, id_residencia, proveedor, concepto, monto, fecha_pago, fecha_prevista,
+                           metodo_pago, estado, numero_factura, observaciones, fecha_creacion, factura_blob_path
+                    FROM pago_proveedor
+                    WHERE id_pago = %s
+                """, (id_pago,))
+            else:
+                cursor.execute("""
+                    SELECT id_pago, id_residencia, proveedor, concepto, monto, fecha_pago, fecha_prevista,
+                           metodo_pago, estado, numero_factura, observaciones, fecha_creacion
+                    FROM pago_proveedor
+                    WHERE id_pago = %s
+                """, (id_pago,))
             
             pago = cursor.fetchone()
             if not pago:
@@ -3322,57 +4155,989 @@ def obtener_pago_proveedor(id_pago):
             if not is_valid:
                 return error_response
             
-            # Reconstruir resultado con índices correctos
-            pago = (
-                pago[0],  # id_pago
-                pago[2],  # proveedor
-                pago[3],  # concepto
-                pago[4],  # monto
-                pago[5],  # fecha_pago
-                pago[6],  # fecha_prevista
-                pago[7],  # metodo_pago
-                pago[8],  # estado
-                pago[9],  # numero_factura
-                pago[10], # observaciones
-                pago[11]  # fecha_creacion
-            )
+            # Construir respuesta
+            respuesta = {
+                'id_pago': pago[0],
+                'id_residencia': pago[1],
+                'proveedor': pago[2],
+                'concepto': pago[3],
+                'monto': float(pago[4]),
+                'fecha_pago': str(pago[5]) if pago[5] else None,
+                'fecha_prevista': str(pago[6]) if pago[6] else None,
+                'metodo_pago': pago[7],
+                'estado': pago[8],
+                'numero_factura': pago[9],
+                'observaciones': pago[10],
+                'fecha_creacion': pago[11].isoformat() if pago[11] else None,
+                'factura_blob_path': None,
+                'factura_url': None
+            }
+            
+            # Añadir factura_blob_path y URL si existe
+            app.logger.info(f"DEBUG obtener_pago_proveedor: id_pago={id_pago}, tiene_columna_factura={tiene_columna_factura}, len(pago)={len(pago) if pago else 0}")
+            if tiene_columna_factura and len(pago) > 12:
+                factura_blob_path = pago[12]
+                app.logger.info(f"DEBUG: factura_blob_path obtenido de BD: '{factura_blob_path}', tipo: {type(factura_blob_path)}, es None: {factura_blob_path is None}, es vacío: {factura_blob_path == '' if factura_blob_path else 'N/A'}")
+                if factura_blob_path and factura_blob_path != '' and str(factura_blob_path).strip() != '':
+                    respuesta['factura_blob_path'] = factura_blob_path
+                    # Generar URL firmada para la factura
+                    try:
+                        pdf_url = get_document_url(factura_blob_path, expiration_minutes=60)
+                        respuesta['factura_url'] = pdf_url
+                        app.logger.info(f"URL de factura generada exitosamente: {pdf_url}")
+                    except Exception as e:
+                        app.logger.warning(f"Error al generar URL firmada para factura: {str(e)}")
+                        respuesta['factura_url'] = None
+                else:
+                    app.logger.warning(f"Factura blob_path es None o vacío para pago {id_pago}. Valor: '{factura_blob_path}'")
+                    respuesta['factura_blob_path'] = None
+                    respuesta['factura_url'] = None
+            else:
+                app.logger.warning(f"No se puede obtener factura_blob_path: tiene_columna_factura={tiene_columna_factura}, len(pago)={len(pago) if pago else 0}")
+            
+            return jsonify(respuesta), 200
+            
+        except Exception as e:
+            app.logger.error(f"Error al obtener pago a proveedor: {str(e)}")
+            import traceback
+            app.logger.error(traceback.format_exc())
+            return jsonify({'error': 'Error al obtener pago a proveedor'}), 500
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
+    except Exception as e:
+        app.logger.error(f"Error al obtener conexión a la base de datos: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': 'Error al obtener pago a proveedor'}), 500
+
+
+@app.route('/api/v1/facturacion/proveedores/<int:id_pago>', methods=['DELETE'])
+def eliminar_pago_proveedor(id_pago):
+    """Elimina completamente un pago a proveedor de la base de datos."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar si existe la columna factura_blob_path
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'pago_proveedor' 
+                  AND column_name = 'factura_blob_path'
+            """)
+            tiene_columna_factura = cursor.fetchone() is not None
+            
+            # Verificar que el pago existe y obtener datos para validar acceso
+            if tiene_columna_factura:
+                cursor.execute("""
+                    SELECT id_residencia, factura_blob_path
+                    FROM pago_proveedor
+                    WHERE id_pago = %s
+                """, (id_pago,))
+            else:
+                cursor.execute("""
+                    SELECT id_residencia
+                    FROM pago_proveedor
+                    WHERE id_pago = %s
+                """, (id_pago,))
             
             pago = cursor.fetchone()
-            
             if not pago:
                 return jsonify({'error': 'Pago no encontrado'}), 404
             
+            id_residencia = pago[0]
+            factura_blob_path = pago[1] if tiene_columna_factura and len(pago) > 1 else None
+            
+            # Verificar acceso a la residencia del pago
+            is_valid, error_response = validate_residencia_access(id_residencia)
+            if not is_valid:
+                return error_response
+            
+            # Eliminar factura de Cloud Storage si existe
+            if factura_blob_path:
+                try:
+                    from storage_manager import delete_document
+                    delete_document(factura_blob_path)
+                    app.logger.info(f"Factura eliminada de Cloud Storage: {factura_blob_path}")
+                except Exception as e:
+                    app.logger.warning(f"Error al eliminar factura de Cloud Storage: {str(e)}")
+                    # Continuar con la eliminación del registro aunque falle la eliminación del archivo
+            
+            # Eliminar el registro de la base de datos
+            cursor.execute("""
+                DELETE FROM pago_proveedor
+                WHERE id_pago = %s
+            """, (id_pago,))
+            
+            conn.commit()
+            
+            app.logger.info(f"Pago a proveedor {id_pago} eliminado exitosamente")
+            
             return jsonify({
-                'id_pago': pago[0],
-                'proveedor': pago[1],
-                'concepto': pago[2],
-                'monto': float(pago[3]),
-                'fecha_pago': str(pago[4]) if pago[4] else None,
-                'fecha_prevista': str(pago[5]) if pago[5] else None,
-                'metodo_pago': pago[6],
-                'estado': pago[7],
-                'numero_factura': pago[8],
-                'observaciones': pago[9],
-                'fecha_creacion': pago[10].isoformat() if pago[10] else None
+                'mensaje': 'Pago a proveedor eliminado exitosamente',
+                'id_pago': id_pago
             }), 200
             
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al eliminar pago a proveedor: {str(e)}")
+            import traceback
+            app.logger.error(traceback.format_exc())
+            return jsonify({'error': 'Error al eliminar pago a proveedor'}), 500
         finally:
             cursor.close()
             conn.close()
             
     except Exception as e:
-        app.logger.error(f"Error al obtener pago a proveedor: {str(e)}")
-        return jsonify({'error': 'Error al obtener pago a proveedor'}), 500
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/facturacion/procesar-factura', methods=['POST'])
+@permiso_requerido('escribir:pago_proveedor')
+def procesar_factura():
+    """
+    Procesa una factura PDF usando Google Document AI para extraer datos.
+    Guarda el PDF en Cloud Storage y devuelve los datos extraídos.
+    """
+    try:
+        if 'factura' not in request.files:
+            return jsonify({'error': 'No se proporcionó archivo de factura'}), 400
+        
+        archivo = request.files['factura']
+        if archivo.filename == '':
+            return jsonify({'error': 'Nombre de archivo vacío'}), 400
+        
+        # Validar que sea PDF
+        if not archivo.filename.lower().endswith('.pdf') and archivo.content_type != 'application/pdf':
+            return jsonify({'error': 'El archivo debe ser un PDF'}), 400
+        
+        # Obtener id_residencia si se proporciona
+        id_residencia = request.form.get('id_residencia', type=int)
+        if not id_residencia:
+            # Si no se proporciona, usar la primera residencia del usuario
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                # Para superadmin, usar 1 por defecto
+                id_residencia = 1
+            else:
+                if not g.residencias_acceso:
+                    return jsonify({'error': 'No se pudo determinar la residencia'}), 400
+                id_residencia = g.residencias_acceso[0]
+        
+        # Verificar acceso a la residencia
+        is_valid, error_response = validate_residencia_access(id_residencia)
+        if not is_valid:
+            return error_response
+        
+        # Leer contenido del archivo
+        file_content = archivo.read()
+        nombre_archivo = archivo.filename
+        
+        # Inicializar variables para detección automática de residencia
+        id_residencia_detectada = None
+        residencias_usuario = None
+        
+        # Procesar con Google Document AI
+        datos_extraidos = {}
+        try:
+            from google.cloud import documentai
+            
+            # Obtener configuración de Document AI
+            # Valores por defecto basados en la configuración proporcionada
+            project_id = os.getenv('GOOGLE_CLOUD_PROJECT_ID', '621063984498')
+            location = os.getenv('DOCUMENT_AI_LOCATION', 'eu')  # Región europea por defecto
+            # Usar Invoice Parser especializado por defecto
+            processor_id = os.getenv('DOCUMENT_AI_PROCESSOR_ID', 'cdb6e7f4178248c4')
+            
+            if project_id and processor_id:
+                # Inicializar cliente de Document AI con el endpoint correcto según la región
+                from google.api_core.client_options import ClientOptions
+                
+                # Configurar endpoint según la región
+                if location == 'eu':
+                    api_endpoint = 'eu-documentai.googleapis.com:443'
+                elif location == 'asia':
+                    api_endpoint = 'asia-documentai.googleapis.com:443'
+                else:  # us o por defecto
+                    api_endpoint = 'us-documentai.googleapis.com:443'
+                
+                client_options = ClientOptions(api_endpoint=api_endpoint)
+                client = documentai.DocumentProcessorServiceClient(client_options=client_options)
+                name = f"projects/{project_id}/locations/{location}/processors/{processor_id}"
+                
+                # Configurar la solicitud
+                raw_document = documentai.RawDocument(
+                    content=file_content,
+                    mime_type='application/pdf'
+                )
+                
+                request_doc = documentai.ProcessRequest(
+                    name=name,
+                    raw_document=raw_document
+                )
+                
+                # Procesar el documento
+                result = client.process_document(request=request_doc)
+                document = result.document
+                
+                # Extraer texto completo
+                texto_completo = document.text
+                app.logger.info(f"Document AI procesado. Texto extraído: {len(texto_completo)} caracteres")
+                app.logger.debug(f"Primeros 500 caracteres del texto: {texto_completo[:500]}")
+                
+                import re
+                
+                # EXTRAER DATOS ESTRUCTURADOS DEL INVOICE PARSER
+                # El Invoice Parser proporciona entidades estructuradas con campos específicos
+                if hasattr(document, 'entities') and document.entities:
+                    app.logger.info(f"Invoice Parser detectado. Extrayendo {len(document.entities)} entidades estructuradas...")
+                    
+                    # Log de todas las entidades disponibles para debugging
+                    tipos_entidades = set()
+                    for entity in document.entities:
+                        tipos_entidades.add(entity.type_)
+                    app.logger.debug(f"Tipos de entidades encontradas: {sorted(tipos_entidades)}")
+                    
+                    # Función auxiliar para obtener valor de entidad
+                    def get_entity_value(entity_type, alternative_types=None):
+                        tipos_buscar = [entity_type]
+                        if alternative_types:
+                            tipos_buscar.extend(alternative_types)
+                        
+                        for tipo_buscar in tipos_buscar:
+                            for entity in document.entities:
+                                if entity.type_ == tipo_buscar:
+                                    # Prioridad 1: normalized_value (valores estructurados)
+                                    if hasattr(entity, 'normalized_value') and entity.normalized_value:
+                                        norm_val = entity.normalized_value
+                                        
+                                        # Money value (montos)
+                                        if hasattr(norm_val, 'money_value') and norm_val.money_value:
+                                            money = norm_val.money_value
+                                            unidades = float(money.units) if hasattr(money, 'units') else 0
+                                            nanos = float(money.nanos) / 1e9 if hasattr(money, 'nanos') else 0
+                                            return unidades + nanos
+                                        
+                                        # Date value (fechas)
+                                        if hasattr(norm_val, 'date_value') and norm_val.date_value:
+                                            date_val = norm_val.date_value
+                                            year = date_val.year if hasattr(date_val, 'year') else None
+                                            month = date_val.month if hasattr(date_val, 'month') else 1
+                                            day = date_val.day if hasattr(date_val, 'day') else 1
+                                            if year:
+                                                return f"{year}-{month:02d}-{day:02d}"
+                                        
+                                        # Text value (texto normalizado)
+                                        if hasattr(norm_val, 'text') and norm_val.text:
+                                            return norm_val.text
+                                    
+                                    # Prioridad 2: mention_text (texto mencionado)
+                                    if hasattr(entity, 'mention_text') and entity.mention_text:
+                                        return entity.mention_text
+                                    
+                                    # Prioridad 3: text_anchor (extraer del texto completo)
+                                    if hasattr(entity, 'text_anchor') and entity.text_anchor and entity.text_anchor.text_segments:
+                                        for segment in entity.text_anchor.text_segments:
+                                            start_index = segment.start_index if hasattr(segment, 'start_index') else 0
+                                            end_index = segment.end_index if hasattr(segment, 'end_index') else len(texto_completo)
+                                            if end_index > start_index:
+                                                return texto_completo[start_index:end_index]
+                        return None
+                    
+                    # Extraer campos del Invoice Parser
+                    # Mapeo de tipos de entidades del Invoice Parser de Google
+                    
+                    # 1. Número de factura
+                    invoice_id = get_entity_value('invoice_id', ['invoice_number', 'invoice_id_number'])
+                    if invoice_id:
+                        datos_extraidos['numero_factura'] = str(invoice_id).strip()
+                        app.logger.info(f"✅ Número de factura (Invoice Parser): {datos_extraidos['numero_factura']}")
+                    
+                    # 2. Fecha de factura
+                    invoice_date = get_entity_value('invoice_date', ['invoice_date_invoice'])
+                    if invoice_date:
+                        datos_extraidos['fecha_pago'] = str(invoice_date).strip()
+                        app.logger.info(f"✅ Fecha de factura (Invoice Parser): {datos_extraidos['fecha_pago']}")
+                    
+                    # 3. Fecha de vencimiento
+                    due_date = get_entity_value('due_date', ['invoice_date_due'])
+                    if due_date:
+                        datos_extraidos['fecha_vencimiento'] = str(due_date).strip()
+                        app.logger.info(f"✅ Fecha de vencimiento (Invoice Parser): {datos_extraidos['fecha_vencimiento']}")
+                    
+                    # 4. Nombre del proveedor
+                    supplier_name = get_entity_value('supplier_name', ['supplier', 'supplier_name_supplier_name'])
+                    if supplier_name:
+                        datos_extraidos['proveedor'] = str(supplier_name).strip()
+                        app.logger.info(f"✅ Proveedor (Invoice Parser): {datos_extraidos['proveedor']}")
+                    
+                    # 5. Dirección del proveedor
+                    supplier_address = get_entity_value('supplier_address', ['supplier_address_supplier_address'])
+                    if supplier_address:
+                        datos_extraidos['proveedor_direccion'] = str(supplier_address).strip()[:500]
+                        app.logger.info(f"✅ Dirección proveedor (Invoice Parser): {datos_extraidos['proveedor_direccion']}")
+                    
+                    # 6. Email del proveedor
+                    supplier_email = get_entity_value('supplier_email', ['supplier_email_supplier_email'])
+                    if supplier_email:
+                        datos_extraidos['proveedor_email'] = str(supplier_email).strip().lower()
+                        app.logger.info(f"✅ Email proveedor (Invoice Parser): {datos_extraidos['proveedor_email']}")
+                    
+                    # 7. Teléfono del proveedor
+                    supplier_phone = get_entity_value('supplier_phone', ['supplier_phone_supplier_phone'])
+                    if supplier_phone:
+                        datos_extraidos['proveedor_telefono'] = str(supplier_phone).strip().replace(' ', '').replace('-', '')
+                        app.logger.info(f"✅ Teléfono proveedor (Invoice Parser): {datos_extraidos['proveedor_telefono']}")
+                    
+                    # 8. Monto total
+                    total_amount = get_entity_value('total_amount', ['invoice_amount', 'total_amount_total_amount', 'invoice_amount_invoice_amount'])
+                    if total_amount:
+                        try:
+                            # Si es un número (money_value normalizado)
+                            if isinstance(total_amount, (int, float)):
+                                monto = float(total_amount)
+                            else:
+                                # Si es texto, convertir
+                                monto_str = str(total_amount).replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
+                                monto = float(monto_str)
+                            
+                            if monto > 0:
+                                datos_extraidos['monto'] = round(monto, 2)
+                                app.logger.info(f"✅ Monto (Invoice Parser): {datos_extraidos['monto']}")
+                        except (ValueError, AttributeError, TypeError) as e:
+                            app.logger.warning(f"No se pudo convertir monto '{total_amount}': {str(e)}")
+                    
+                    # 9. IVA/Tax
+                    tax_amount = get_entity_value('tax_amount', ['total_tax_amount', 'tax_amount_tax_amount'])
+                    if tax_amount:
+                        try:
+                            if isinstance(tax_amount, (int, float)):
+                                iva = float(tax_amount)
+                            else:
+                                iva_str = str(tax_amount).replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
+                                iva = float(iva_str)
+                            if iva > 0:
+                                datos_extraidos['iva'] = round(iva, 2)
+                                app.logger.info(f"✅ IVA (Invoice Parser): {datos_extraidos['iva']}")
+                        except (ValueError, AttributeError, TypeError) as e:
+                            app.logger.warning(f"No se pudo convertir IVA '{tax_amount}': {str(e)}")
+                    
+                    # 10. Términos de pago / Método de pago
+                    payment_terms = get_entity_value('payment_terms', ['payment_terms_payment_terms'])
+                    if payment_terms:
+                        terminos = str(payment_terms).strip().lower()
+                        # Intentar inferir método de pago de los términos
+                        if 'transferencia' in terminos or 'transfer' in terminos:
+                            datos_extraidos['metodo_pago'] = 'transferencia'
+                        elif 'remesa' in terminos:
+                            datos_extraidos['metodo_pago'] = 'remesa'
+                        elif 'metálico' in terminos or 'efectivo' in terminos or 'cash' in terminos or 'metalico' in terminos:
+                            datos_extraidos['metodo_pago'] = 'metálico'
+                        elif 'cheque' in terminos:
+                            datos_extraidos['metodo_pago'] = 'cheque'
+                        app.logger.info(f"✅ Términos de pago (Invoice Parser): {payment_terms}")
+                    
+                    # 11. Concepto / Descripción de líneas de factura
+                    line_items = []
+                    line_descriptions = []
+                    for entity in document.entities:
+                        if entity.type_ in ['line_item', 'line_item_description', 'line_item_description_line_item_description']:
+                            valor = None
+                            if hasattr(entity, 'mention_text') and entity.mention_text:
+                                valor = entity.mention_text
+                            elif hasattr(entity, 'text_anchor') and entity.text_anchor and entity.text_anchor.text_segments:
+                                for segment in entity.text_anchor.text_segments:
+                                    start_index = segment.start_index if hasattr(segment, 'start_index') else 0
+                                    end_index = segment.end_index if hasattr(segment, 'end_index') else len(texto_completo)
+                                    if end_index > start_index:
+                                        valor = texto_completo[start_index:end_index]
+                                        break
+                            if valor:
+                                line_descriptions.append(str(valor).strip())
+                    
+                    if line_descriptions and 'concepto' not in datos_extraidos:
+                        # Usar la primera descripción o concatenar las primeras (máximo 3)
+                        concepto = line_descriptions[0] if len(line_descriptions) == 1 else ', '.join(line_descriptions[:3])
+                        datos_extraidos['concepto'] = concepto[:500]
+                        app.logger.info(f"✅ Concepto (Invoice Parser): {datos_extraidos['concepto']}")
+                    
+                    app.logger.info(f"📊 Resumen datos extraídos con Invoice Parser: {len([k for k in datos_extraidos.keys() if k != 'texto_completo'])} campos")
+                
+                # Si no se extrajeron datos con Invoice Parser o faltan campos, usar regex como respaldo
+                usar_regex_respaldo = (
+                    'numero_factura' not in datos_extraidos or
+                    'monto' not in datos_extraidos or
+                    'fecha_pago' not in datos_extraidos or
+                    'proveedor' not in datos_extraidos
+                )
+                
+                if usar_regex_respaldo:
+                    app.logger.info("Usando extracción con regex como respaldo o complemento...")
+                
+                # DETECTAR RESIDENCIA AUTOMÁTICAMENTE desde el texto de la factura
+                # Obtener residencias del usuario si aún no se han obtenido
+                if residencias_usuario is None:
+                    conn_residencias = get_db_connection()
+                    cursor_residencias = conn_residencias.cursor()
+                    try:
+                        # Verificar qué columnas existen en la tabla residencia
+                        cursor_residencias.execute("""
+                            SELECT column_name 
+                            FROM information_schema.columns 
+                            WHERE table_name = 'residencia'
+                            ORDER BY ordinal_position
+                        """)
+                        columnas_existentes = {row[0] for row in cursor_residencias.fetchall()}
+                        
+                        # Construir SELECT dinámicamente según las columnas disponibles
+                        columnas_select_list = ['id_residencia', 'nombre']
+                        columnas_adicionales = {
+                            'nombre_fiscal': 'nombre_fiscal',
+                            'nif': 'nif',
+                            'direccion': 'direccion',
+                            'ciudad': 'ciudad',
+                            'provincia': 'provincia',
+                            'codigo_postal': 'codigo_postal'
+                        }
+                        
+                        for columna_db, columna_alias in columnas_adicionales.items():
+                            if columna_db in columnas_existentes:
+                                columnas_select_list.append(columna_db)
+                            else:
+                                columnas_select_list.append(f'NULL as {columna_alias}')
+                        
+                        columnas_select = ', '.join(columnas_select_list)
+                        
+                        if g.id_rol == SUPER_ADMIN_ROLE_ID or g.id_rol == ADMIN_ROLE_ID:
+                            cursor_residencias.execute(f"""
+                                SELECT {columnas_select}
+                                FROM residencia
+                                WHERE activa = TRUE
+                                ORDER BY nombre
+                            """)
+                        else:
+                            if g.residencias_acceso:
+                                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                                cursor_residencias.execute(f"""
+                                    SELECT {columnas_select}
+                                    FROM residencia
+                                    WHERE activa = TRUE AND id_residencia IN ({placeholders})
+                                    ORDER BY nombre
+                                """, tuple(g.residencias_acceso))
+                        residencias_usuario = cursor_residencias.fetchall()
+                    except Exception as e:
+                        app.logger.error(f"Error al obtener residencias para detección automática: {str(e)}")
+                        residencias_usuario = []
+                    finally:
+                        cursor_residencias.close()
+                        conn_residencias.close()
+                
+                texto_lower = texto_completo.lower()
+                mejor_coincidencia = None
+                mejor_puntuacion = 0
+                
+                for residencia_data in residencias_usuario:
+                    # Manejar diferentes números de columnas según lo que exista
+                    id_res = residencia_data[0]
+                    nombre = residencia_data[1] if len(residencia_data) > 1 else None
+                    nombre_fiscal = residencia_data[2] if len(residencia_data) > 2 else None
+                    nif = residencia_data[3] if len(residencia_data) > 3 else None
+                    direccion = residencia_data[4] if len(residencia_data) > 4 else None
+                    ciudad = residencia_data[5] if len(residencia_data) > 5 else None
+                    provincia = residencia_data[6] if len(residencia_data) > 6 else None
+                    codigo_postal = residencia_data[7] if len(residencia_data) > 7 else None
+                    puntuacion = 0
+                    
+                    # Buscar coincidencias con el nombre de la residencia
+                    if nombre:
+                        nombre_lower = nombre.lower()
+                        if nombre_lower in texto_lower:
+                            puntuacion += 10
+                            # Si aparece completo, más puntos
+                            if f' {nombre_lower} ' in f' {texto_lower} ':
+                                puntuacion += 5
+                    
+                    # Buscar coincidencias con el nombre fiscal
+                    if nombre_fiscal:
+                        nombre_fiscal_lower = nombre_fiscal.lower()
+                        if nombre_fiscal_lower in texto_lower:
+                            puntuacion += 15  # Nombre fiscal es más específico
+                    
+                    # Buscar coincidencias con el NIF/CIF
+                    if nif:
+                        nif_limpio = nif.replace(' ', '').replace('-', '').upper()
+                        nif_pattern = re.escape(nif_limpio).replace('\\', '')
+                        if re.search(nif_pattern, texto_completo, re.IGNORECASE):
+                            puntuacion += 20  # NIF es muy específico
+                    
+                    # Buscar coincidencias con ciudad
+                    if ciudad:
+                        ciudad_lower = ciudad.lower()
+                        if ciudad_lower in texto_lower:
+                            puntuacion += 3
+                    
+                    # Buscar coincidencias con código postal
+                    if codigo_postal:
+                        if codigo_postal in texto_completo:
+                            puntuacion += 5
+                    
+                    # Si hay una buena coincidencia, guardarla
+                    if puntuacion > mejor_puntuacion:
+                        mejor_puntuacion = puntuacion
+                        mejor_coincidencia = {
+                            'id_residencia': id_res,
+                            'nombre': nombre,
+                            'puntuacion': puntuacion
+                        }
+                
+                # Si encontramos una buena coincidencia (mínimo 10 puntos), usarla
+                if mejor_coincidencia and mejor_puntuacion >= 10:
+                    id_residencia_detectada = mejor_coincidencia['id_residencia']
+                    app.logger.info(f"Residencia detectada automáticamente: {mejor_coincidencia['nombre']} (ID: {id_residencia_detectada}, Puntuación: {mejor_puntuacion})")
+                    datos_extraidos['id_residencia_detectada'] = id_residencia_detectada
+                    datos_extraidos['nombre_residencia_detectada'] = mejor_coincidencia['nombre']
+                else:
+                    app.logger.info(f"No se pudo detectar la residencia automáticamente (mejor puntuación: {mejor_puntuacion})")
+                
+                # Guardar texto_completo para incluirlo en la respuesta (solo para debugging/pruebas)
+                datos_extraidos['texto_completo'] = texto_completo
+                
+                # EXTRACCIÓN CON REGEX (respaldo o complemento)
+                # Solo extraer campos que no se hayan extraído con Invoice Parser
+                
+                # 1. Extraer NÚMERO DE FACTURA (campo: numero_factura) - solo si no se extrajo antes
+                if 'numero_factura' not in datos_extraidos:
+                    # Buscar patrones como "SP/1472", "FAC-2025-001", etc.
+                    patrones_factura = [
+                        r'(?:factura|invoice|n[úu]mero|n[úu]m\.|n[úu]m|ref|referencia)[\s:]*([A-Z0-9\-/]+)',
+                        r'([A-Z]{1,3}[/\-]\d{1,6})',  # Patrón como SP/1472, FAC-001
+                        r'([A-Z]{2,}\s*\d{4,}[\-/\d]*)',
+                        r'(?:factura|invoice)\s*[#:]?\s*([A-Z0-9\-/]+)',
+                        r'\b([A-Z]{1,3}[-/]\d{1,6})\b'  # Patrón más específico para códigos como SP/1472
+                    ]
+                    for patron in patrones_factura:
+                        match = re.search(patron, texto_completo, re.IGNORECASE)
+                        if match:
+                            numero = match.group(1).strip()
+                            # Validar que no sea solo un número o código postal
+                            if len(numero) <= 100 and not re.match(r'^\d{5}$', numero):  # Excluir códigos postales
+                                datos_extraidos['numero_factura'] = numero
+                                app.logger.info(f"Número de factura extraído (regex): {datos_extraidos['numero_factura']}")
+                                break
+                
+                # 2. Extraer MONTO (campo: monto) - solo si no se extrajo antes
+                if 'monto' not in datos_extraidos:
+                    patrones_monto = [
+                        r'(?:total|importe|amount|precio|price|suma)[\s:]*([\d.,]+)\s*(?:€|EUR|euros)?',
+                        r'([\d.,]+)\s*(?:€|EUR|euros)',
+                        r'€\s*([\d.,]+)',
+                        r'(?:total|importe)[\s:]*([\d.,]+)'
+                    ]
+                    for patron in patrones_monto:
+                        match = re.search(patron, texto_completo, re.IGNORECASE)
+                        if match:
+                            monto_str = match.group(1).replace(',', '.').replace(' ', '')
+                            try:
+                                monto = float(monto_str)
+                                if monto > 0 and monto <= 99999999.99:  # Validar rango razonable
+                                    datos_extraidos['monto'] = round(monto, 2)
+                                    app.logger.info(f"Monto extraído: {datos_extraidos['monto']}")
+                                    break
+                            except ValueError:
+                                continue
+                
+                # 3. Extraer FECHA DE PAGO/FACTURA (campo: fecha_pago) - solo si no se extrajo antes
+                if 'fecha_pago' not in datos_extraidos:
+                    # Buscar fechas en formato DD/MM/YYYY o DD-MM-YYYY
+                    patrones_fecha = [
+                        r'(?:fecha|date|vencimiento)[\s:]*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})',
+                        r'(\d{2}[/\-]\d{2}[/\-]\d{4})',  # Formato específico DD/MM/YYYY (prioridad)
+                        r'(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})',
+                    ]
+                    for patron in patrones_fecha:
+                        matches = re.finditer(patron, texto_completo, re.IGNORECASE)
+                        for match in matches:
+                            fecha_str = match.group(1)
+                            try:
+                                from datetime import datetime
+                                # Intentar diferentes formatos, priorizando DD/MM/YYYY
+                                for fmt in ['%d/%m/%Y', '%d-%m-%Y', '%d/%m/%y', '%d-%m-%y', '%Y-%m-%d']:
+                                    try:
+                                        fecha = datetime.strptime(fecha_str, fmt)
+                                        # Validar que la fecha sea razonable (no futura más de 1 año, no anterior a 2000)
+                                        if fecha.year >= 2000 and fecha.year <= datetime.now().year + 1:
+                                            datos_extraidos['fecha_pago'] = fecha.strftime('%Y-%m-%d')
+                                            app.logger.info(f"Fecha extraída: {datos_extraidos['fecha_pago']} (de: {fecha_str})")
+                                            break
+                                    except ValueError:
+                                        continue
+                                if 'fecha_pago' in datos_extraidos:
+                                    break
+                            except:
+                                pass
+                        if 'fecha_pago' in datos_extraidos:
+                            break
+                
+                # 4. Extraer PROVEEDOR (campo: proveedor) - buscar nombre del emisor - solo si no se extrajo antes
+                if 'proveedor' not in datos_extraidos:
+                    # Buscar en las primeras líneas del documento (donde suele estar el emisor)
+                    lineas = texto_completo.split('\n')
+                    proveedor_encontrado = None
+                    
+                    # Buscar patrones comunes de emisor/proveedor en las primeras líneas
+                    # Evitar líneas que contengan teléfono, email, dirección completa, etc.
+                    patrones_excluir = [
+                        r'^Telf:', r'^Tel:', r'^Teléfono:', r'^Phone:',
+                        r'^E-mail:', r'^Email:', r'^@',
+                        r'^\d{5,}',  # Códigos postales o números largos
+                        r'^\d{2,3}[-/]\d{2,3}[-/]\d{4}',  # Fechas
+                        r'^NIF:', r'^CIF:', r'^N[úu]m\.', r'^RGSEAA',
+                        r'^PARTIDO', r'^APTDO', r'^CORREOS',
+                    ]
+                    
+                    for i, linea in enumerate(lineas[:15]):  # Primeras 15 líneas (donde suele estar el emisor)
+                        linea_limpia = linea.strip()
+                        
+                        # Saltar líneas vacías o muy cortas
+                        if len(linea_limpia) < 3 or len(linea_limpia) > 255:
+                            continue
+                        
+                        # Saltar líneas que coinciden con patrones a excluir
+                        debe_excluir = False
+                        for patron in patrones_excluir:
+                            if re.match(patron, linea_limpia, re.IGNORECASE):
+                                debe_excluir = True
+                                break
+                        if debe_excluir:
+                            continue
+                        
+                        # Saltar líneas que son solo números, fechas, códigos o NIFs
+                        if (re.match(r'^[\d\s\-\/]+$', linea_limpia) or 
+                            re.match(r'^[A-Z0-9\-/]+$', linea_limpia) or
+                            re.match(r'^[A-Z]\d{8}', linea_limpia)):  # Evitar NIFs como B13944905
+                            continue
+                        
+                        # Buscar líneas que parezcan nombres de empresa
+                        # Debe empezar con mayúscula y tener al menos una palabra con minúsculas
+                        if (re.match(r'^[A-ZÁÉÍÓÚÑ]', linea_limpia) and 
+                            re.search(r'[a-záéíóúñ]', linea_limpia)):  # Debe tener minúsculas
+                            
+                            # Preferir líneas que contengan indicadores de empresa
+                            tiene_indicador_empresa = (
+                                'S.L' in linea_limpia.upper() or 
+                                'S.A' in linea_limpia.upper() or 
+                                'S.L.U' in linea_limpia.upper() or
+                                len(linea_limpia.split()) >= 2
+                            )
+                            
+                            if tiene_indicador_empresa:
+                                # Verificar si la siguiente línea también es parte del nombre
+                                nombre_completo = linea_limpia
+                                if i < len(lineas) - 1:
+                                    siguiente_linea = lineas[i + 1].strip() if i + 1 < len(lineas) else ''
+                                    # Si la siguiente línea también parece nombre de empresa (no tiene números, teléfono, email)
+                                    if (len(siguiente_linea) > 3 and len(siguiente_linea) < 100 and
+                                        re.match(r'^[A-ZÁÉÍÓÚÑ]', siguiente_linea) and
+                                        not re.match(r'^[\d\s\-\/]+$', siguiente_linea) and
+                                        not any(re.match(p, siguiente_linea, re.IGNORECASE) for p in patrones_excluir)):
+                                        nombre_completo = f"{linea_limpia} {siguiente_linea}".strip()[:255]
+                                
+                                # Limpiar el proveedor (remover espacios extra, etc.)
+                                proveedor_encontrado = ' '.join(nombre_completo.split())
+                                datos_extraidos['proveedor'] = proveedor_encontrado
+                                app.logger.info(f"Proveedor extraído (regex): {datos_extraidos['proveedor']}")
+                                break
+                    
+                    # Si no se encontró en las primeras líneas, buscar con regex
+                    if 'proveedor' not in datos_extraidos:
+                        patrones_proveedor = [
+                            r'(?:de|from|proveedor|supplier|emisor|emite)[\s:]*([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ\s]+(?:S\.?L\.?|S\.?A\.?|S\.?L\.?U\.?)?)',
+                        ]
+                        for patron in patrones_proveedor:
+                            match = re.search(patron, texto_completo, re.IGNORECASE)
+                            if match:
+                                proveedor = match.group(1).strip()[:255]
+                                if len(proveedor) > 3:
+                                    datos_extraidos['proveedor'] = proveedor
+                                    app.logger.info(f"Proveedor extraído (regex): {datos_extraidos['proveedor']}")
+                                    break
+                
+                # 4.1. Extraer NIF del proveedor
+                patrones_nif = [
+                    r'NIF[:\s]*([A-Z]\d{8})',
+                    r'CIF[:\s]*([A-Z]\d{8})',
+                    r'([A-Z]\d{8})',  # Patrón genérico de NIF español
+                ]
+                for patron in patrones_nif:
+                    match = re.search(patron, texto_completo, re.IGNORECASE)
+                    if match:
+                        nif = match.group(1).strip().upper()
+                        # Verificar que no sea el NIF de la residencia (ya lo tenemos)
+                        if len(nif) == 9:
+                            datos_extraidos['proveedor_nif'] = nif
+                            app.logger.info(f"NIF del proveedor extraído: {datos_extraidos['proveedor_nif']}")
+                            break
+                
+                # 4.2. Extraer teléfono del proveedor
+                patrones_telefono = [
+                    r'Telf[:\s]*([\d\s\-]{9,15})',
+                    r'Tel[:\s]*([\d\s\-]{9,15})',
+                    r'Teléfono[:\s]*([\d\s\-]{9,15})',
+                    r'Phone[:\s]*([\d\s\-]{9,15})',
+                ]
+                for patron in patrones_telefono:
+                    match = re.search(patron, texto_completo, re.IGNORECASE)
+                    if match:
+                        telefono = match.group(1).strip().replace(' ', '').replace('-', '')
+                        if len(telefono) >= 9:
+                            datos_extraidos['proveedor_telefono'] = telefono
+                            app.logger.info(f"Teléfono del proveedor extraído: {datos_extraidos['proveedor_telefono']}")
+                            break
+                
+                # 4.3. Extraer email del proveedor
+                patron_email = r'[Ee]-?mail[:\s]*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+                match = re.search(patron_email, texto_completo)
+                if match:
+                    email = match.group(1).strip().lower()
+                    datos_extraidos['proveedor_email'] = email
+                    app.logger.info(f"Email del proveedor extraído: {datos_extraidos['proveedor_email']}")
+                
+                # 4.4. Extraer dirección del proveedor (líneas después del nombre)
+                if 'proveedor' in datos_extraidos:
+                    # Buscar líneas después del nombre del proveedor que parezcan dirección
+                    for i, linea in enumerate(lineas[:20]):
+                        if datos_extraidos['proveedor'].lower() in linea.lower():
+                            # Las siguientes 2-3 líneas podrían ser la dirección
+                            direccion_partes = []
+                            for j in range(i+1, min(i+4, len(lineas))):
+                                siguiente = lineas[j].strip()
+                                if (len(siguiente) > 5 and len(siguiente) < 200 and
+                                    not re.match(r'^Telf', siguiente, re.IGNORECASE) and
+                                    not re.match(r'^E-mail', siguiente, re.IGNORECASE) and
+                                    not re.match(r'^@', siguiente) and
+                                    not re.match(r'^\d{5,}', siguiente)):
+                                    direccion_partes.append(siguiente)
+                                else:
+                                    break
+                            if direccion_partes:
+                                datos_extraidos['proveedor_direccion'] = ', '.join(direccion_partes)[:500]
+                                app.logger.info(f"Dirección del proveedor extraída: {datos_extraidos['proveedor_direccion']}")
+                            break
+                
+                # 5. Extraer CONCEPTO (campo: concepto) - descripción del servicio/producto
+                # Buscar palabras clave como "MENSUAL", "SERVICIO", etc. o líneas descriptivas
+                conceptos_encontrados = []
+                
+                # Buscar palabras clave comunes de conceptos
+                palabras_clave_concepto = ['mensual', 'servicio', 'suministro', 'alquiler', 'mantenimiento', 
+                                          'facturación', 'servicios', 'productos', 'suministros']
+                for palabra in palabras_clave_concepto:
+                    if palabra in texto_lower:
+                        # Buscar la línea que contiene la palabra clave
+                        for linea in lineas:
+                            if palabra in linea.lower():
+                                linea_limpia = linea.strip()
+                                if len(linea_limpia) > 3 and len(linea_limpia) < 500:
+                                    conceptos_encontrados.append(linea_limpia.upper())
+                                    break
+                
+                # Si no se encontró con palabras clave, buscar líneas descriptivas
+                if not conceptos_encontrados:
+                    for linea in lineas[5:40]:  # Líneas intermedias donde suele estar la descripción
+                        linea_limpia = linea.strip()
+                        if len(linea_limpia) > 3 and len(linea_limpia) < 500:
+                            # Evitar líneas que son solo números, fechas, códigos o montos
+                            if (not re.match(r'^[\d\s\-\/]+$', linea_limpia) and 
+                                not re.match(r'^[A-Z0-9\-/]+$', linea_limpia) and
+                                not re.search(r'[\d.,]+\s*€', linea_limpia) and
+                                'total' not in linea_limpia.lower() and
+                                'importe' not in linea_limpia.lower() and
+                                'factura' not in linea_limpia.lower() and
+                                'fecha' not in linea_limpia.lower() and
+                                'cliente' not in linea_limpia.lower()):
+                                # Preferir líneas en mayúsculas que parecen conceptos
+                                if linea_limpia.isupper() and len(linea_limpia.split()) <= 5:
+                                    conceptos_encontrados.insert(0, linea_limpia)  # Prioridad
+                                else:
+                                    conceptos_encontrados.append(linea_limpia)
+                
+                if conceptos_encontrados:
+                    # Tomar el primer concepto válido
+                    concepto = conceptos_encontrados[0]
+                    if len(concepto) > 500:
+                        concepto = concepto[:500]
+                    datos_extraidos['concepto'] = concepto
+                    app.logger.info(f"Concepto extraído: {datos_extraidos['concepto']}")
+                
+                # Guardar texto_completo para la respuesta (fuera de datos_extraidos)
+                texto_completo_respuesta = texto_completo
+                
+                app.logger.info(f"Datos extraídos para factura: {datos_extraidos}")
+                
+        except ImportError as e:
+            # Si falta el paquete google-cloud-documentai
+            app.logger.error(f"Paquete google-cloud-documentai no instalado: {str(e)}")
+            app.logger.error("Instale el paquete con: pip install google-cloud-documentai")
+            app.logger.warning("Continuando sin extracción automática de datos")
+            texto_completo_respuesta = ''
+        except Exception as e:
+            # Si falla Document AI, continuar sin datos extraídos
+            error_msg = str(e)
+            
+            # Detectar errores específicos de permisos
+            if 'PermissionDenied' in error_msg or 'IAM_PERMISSION_DENIED' in error_msg or 'documentai.processors.processOnline' in error_msg:
+                app.logger.error("Error de permisos en Document AI: La cuenta de servicio no tiene permisos para usar Document AI")
+                app.logger.error("Asegúrese de que la cuenta de servicio tenga el rol 'Document AI API User' o 'Document AI API Editor'")
+                app.logger.error("Puede otorgar permisos en: https://console.cloud.google.com/iam-admin/iam")
+                app.logger.warning("Continuando sin extracción automática de datos")
+            elif 'Invalid location' in error_msg or 'must match the server deployment' in error_msg:
+                app.logger.error("Error de ubicación en Document AI: La ubicación del procesador no coincide con la del servidor")
+                app.logger.error(f"El procesador está configurado para '{location}' pero el servidor está en otra región")
+                app.logger.error("Configure DOCUMENT_AI_LOCATION en .env con la ubicación correcta (us, eu, etc.)")
+                app.logger.warning("Continuando sin extracción automática de datos")
+            elif 'processor' in error_msg.lower() and ('not exist' in error_msg.lower() or 'not found' in error_msg.lower() or 'does not exist' in error_msg.lower() or 'not available' in error_msg.lower()):
+                app.logger.error("Error: El procesador de Document AI no existe o no está disponible")
+                app.logger.error(f"PROCESSOR_ID configurado: {processor_id}")
+                app.logger.error(f"LOCATION configurada: {location}")
+                app.logger.error("Verifique que el PROCESSOR_ID y DOCUMENT_AI_LOCATION en las variables de entorno sean correctos")
+                app.logger.error("Puede verificar los procesadores disponibles en: https://console.cloud.google.com/ai/document-ai/processors")
+                app.logger.warning("Continuando sin extracción automática de datos")
+            else:
+                app.logger.warning(f"Error al procesar factura con Document AI: {error_msg}")
+                app.logger.warning("Continuando sin extracción automática de datos")
+                import traceback
+                app.logger.debug(traceback.format_exc())
+            
+            texto_completo_respuesta = ''
+        
+        # Si se detectó una residencia automáticamente y el usuario tiene acceso, usarla
+        if id_residencia_detectada:
+            # Verificar que el usuario tiene acceso a la residencia detectada
+            if g.id_rol == SUPER_ADMIN_ROLE_ID or g.id_rol == ADMIN_ROLE_ID or id_residencia_detectada in g.residencias_acceso:
+                id_residencia = id_residencia_detectada
+                app.logger.info(f"Usando residencia detectada automáticamente: {id_residencia}")
+            else:
+                app.logger.warning(f"Usuario no tiene acceso a la residencia detectada {id_residencia_detectada}, usando residencia proporcionada")
+        
+        # Guardar PDF en Cloud Storage (usar id_residencia detectada o proporcionada)
+        from storage_manager import upload_document_unificado
+        blob_path = upload_document_unificado(
+            file_content, id_residencia, 'pago_proveedor', 0,  # id_entidad será 0 hasta que se cree el pago
+            'Factura', nombre_archivo, 'application/pdf'
+        )
+        
+        if not blob_path:
+            return jsonify({'error': 'Error al subir el archivo a Cloud Storage'}), 500
+        
+        app.logger.info(f"Retornando respuesta con datos_extraidos: {datos_extraidos}")
+        
+        # Generar URL firmada para el PDF (válida por 1 hora)
+        pdf_url = None
+        if blob_path:
+            from storage_manager import get_document_url
+            pdf_url = get_document_url(blob_path, expiration_minutes=60)
+        
+        # Preparar respuesta con texto completo si está disponible
+        respuesta = {
+            'mensaje': 'Factura procesada exitosamente',
+            'blob_path': blob_path,  # Ruta del PDF guardado en Cloud Storage (para asociar al registro)
+            'pdf_url': pdf_url,  # URL firmada para visualizar el PDF
+            'id_residencia_detectada': id_residencia_detectada,  # ID de residencia detectada automáticamente
+            'datos_extraidos': datos_extraidos if datos_extraidos else {}
+        }
+        
+        # Incluir texto completo si se extrajo (útil para debugging y pruebas)
+        if 'texto_completo_respuesta' in locals() and texto_completo_respuesta:
+            respuesta['texto_completo'] = texto_completo_respuesta[:10000]  # Limitar a 10000 caracteres para no sobrecargar la respuesta
+        
+        return jsonify(respuesta), 200
+        
+    except Exception as e:
+        app.logger.error(f"Error al procesar factura: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': f'Error al procesar factura: {str(e)}'}), 500
 
 
 @app.route('/api/v1/facturacion/proveedores/<int:id_pago>', methods=['PUT'])
 def actualizar_pago_proveedor(id_pago):
-    """Actualiza un pago a proveedor."""
+    """Actualiza un pago a proveedor. Acepta JSON o multipart/form-data (si hay archivo)."""
     try:
-        data = request.get_json()
+        # Detectar si hay archivo en la petición (multipart/form-data)
+        archivo_factura = None
+        factura_blob_path = None
+        
+        if 'factura' in request.files:
+            archivo_factura = request.files['factura']
+            if archivo_factura and archivo_factura.filename:
+                # Validar que sea PDF
+                if not archivo_factura.filename.lower().endswith('.pdf'):
+                    return jsonify({'error': 'El archivo debe ser un PDF'}), 400
+                
+                # Obtener id_residencia del pago existente para subir el archivo
+                conn_temp = get_db_connection()
+                cursor_temp = conn_temp.cursor()
+                try:
+                    cursor_temp.execute("""
+                        SELECT id_residencia FROM pago_proveedor WHERE id_pago = %s
+                    """, (id_pago,))
+                    pago_existente = cursor_temp.fetchone()
+                    if not pago_existente:
+                        return jsonify({'error': 'Pago no encontrado'}), 404
+                    id_residencia = pago_existente[0]
+                finally:
+                    cursor_temp.close()
+                    conn_temp.close()
+                
+                # Subir archivo a Cloud Storage
+                from storage_manager import upload_document_unificado
+                file_content = archivo_factura.read()
+                nombre_archivo = archivo_factura.filename
+                factura_blob_path = upload_document_unificado(
+                    file_content, id_residencia, 'pago_proveedor', id_pago,
+                    'Factura', nombre_archivo, 'application/pdf'
+                )
+                
+                if not factura_blob_path:
+                    return jsonify({'error': 'Error al subir el archivo a Cloud Storage'}), 500
+        
+        # Obtener datos (pueden venir de JSON o form)
+        if request.is_json:
+            data = request.get_json()
+        else:
+            # Si es multipart/form-data, construir data desde form
+            data = {}
+            if request.form.get('proveedor'):
+                data['proveedor'] = request.form.get('proveedor')
+            if request.form.get('concepto'):
+                data['concepto'] = request.form.get('concepto')
+            if request.form.get('monto'):
+                data['monto'] = float(request.form.get('monto'))
+            if request.form.get('id_residencia'):
+                data['id_residencia'] = int(request.form.get('id_residencia'))
+            if request.form.get('fecha_pago'):
+                data['fecha_pago'] = request.form.get('fecha_pago')
+            if request.form.get('fecha_prevista'):
+                data['fecha_prevista'] = request.form.get('fecha_prevista')
+            if request.form.get('metodo_pago'):
+                data['metodo_pago'] = request.form.get('metodo_pago')
+            if request.form.get('numero_factura'):
+                data['numero_factura'] = request.form.get('numero_factura')
+            if request.form.get('observaciones'):
+                data['observaciones'] = request.form.get('observaciones')
+            if request.form.get('estado'):
+                data['estado'] = request.form.get('estado')
+        
+        # Si se subió un archivo, añadirlo a data
+        if factura_blob_path:
+            data['factura_blob_path'] = factura_blob_path
         
         if not data:
-            return jsonify({'error': 'Datos JSON requeridos'}), 400
+            return jsonify({'error': 'Datos requeridos'}), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -3394,9 +5159,20 @@ def actualizar_pago_proveedor(id_pago):
             if not is_valid:
                 return error_response
             
+            # Si se está cambiando la residencia, validar acceso a la nueva residencia
+            nueva_residencia = data.get('id_residencia')
+            if nueva_residencia and nueva_residencia != pago_existente[1]:
+                is_valid, error_response = validate_residencia_access(nueva_residencia)
+                if not is_valid:
+                    return error_response
+            
             # Preparar datos para actualizar
             updates = []
             valores = []
+            
+            if 'id_residencia' in data:
+                updates.append('id_residencia = %s')
+                valores.append(data['id_residencia'])
             
             if 'proveedor' in data:
                 updates.append('proveedor = %s')
@@ -3430,6 +5206,19 @@ def actualizar_pago_proveedor(id_pago):
                 updates.append('observaciones = %s')
                 valores.append(data['observaciones'])
             
+            # Verificar si existe la columna factura_blob_path y actualizarla si se proporciona
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'pago_proveedor' 
+                  AND column_name = 'factura_blob_path'
+            """)
+            tiene_columna_factura = cursor.fetchone() is not None
+            
+            if tiene_columna_factura and 'factura_blob_path' in data:
+                updates.append('factura_blob_path = %s')
+                valores.append(data['factura_blob_path'])
+            
             # Calcular estado automáticamente basado en las fechas
             if 'fecha_pago' in data or 'fecha_prevista' in data:
                 fecha_pago = data.get('fecha_pago')
@@ -3461,6 +5250,91 @@ def actualizar_pago_proveedor(id_pago):
             """
             
             cursor.execute(query, valores)
+            
+            # Si se añadió una factura_blob_path, también guardar en documentación
+            if tiene_columna_factura and 'factura_blob_path' in data and data.get('factura_blob_path'):
+                factura_blob_path = data.get('factura_blob_path')
+                try:
+                    # Obtener datos del pago actualizado
+                    cursor.execute("""
+                        SELECT proveedor, id_residencia, concepto, numero_factura 
+                        FROM pago_proveedor 
+                        WHERE id_pago = %s
+                    """, (id_pago,))
+                    
+                    pago_data = cursor.fetchone()
+                    if pago_data:
+                        proveedor_nombre = pago_data[0]
+                        id_residencia_pago = pago_data[1]
+                        concepto_pago = pago_data[2]
+                        numero_factura_pago = pago_data[3]
+                        
+                        # Obtener id_proveedor del nombre del proveedor
+                        cursor.execute("""
+                            SELECT id_proveedor FROM proveedor 
+                            WHERE nombre = %s AND id_residencia = %s AND activo = TRUE
+                            LIMIT 1
+                        """, (proveedor_nombre, id_residencia_pago))
+                        
+                        proveedor_result = cursor.fetchone()
+                        if proveedor_result:
+                            id_proveedor = proveedor_result[0]
+                            
+                            # Verificar si existe la tabla documento
+                            cursor.execute("""
+                                SELECT EXISTS (
+                                    SELECT FROM information_schema.tables 
+                                    WHERE table_schema = 'public' 
+                                    AND table_name = 'documento'
+                                )
+                            """)
+                            tabla_documento_existe = cursor.fetchone()[0]
+                            
+                            if tabla_documento_existe:
+                                # Verificar si ya existe un documento para este pago
+                                cursor.execute("""
+                                    SELECT id_documento FROM documento
+                                    WHERE tipo_entidad = 'proveedor' 
+                                      AND id_entidad = %s
+                                      AND url_archivo = %s
+                                      AND activo = TRUE
+                                    LIMIT 1
+                                """, (id_proveedor, factura_blob_path))
+                                
+                                doc_existente = cursor.fetchone()
+                                
+                                if not doc_existente:
+                                    # Obtener nombre del archivo del blob_path
+                                    nombre_archivo = factura_blob_path.split('/')[-1] if '/' in factura_blob_path else f"Factura_{numero_factura_pago or id_pago}.pdf"
+                                    
+                                    # Crear documento en la tabla documento
+                                    cursor.execute("""
+                                        INSERT INTO documento (tipo_entidad, id_entidad, id_residencia, categoria_documento,
+                                                              tipo_documento, nombre_archivo, descripcion, url_archivo,
+                                                              tamaño_bytes, tipo_mime, id_usuario_subida, activo)
+                                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                                        RETURNING id_documento
+                                    """, (
+                                        'proveedor',
+                                        id_proveedor,
+                                        id_residencia_pago,
+                                        'fiscal',
+                                        'Factura',
+                                        nombre_archivo,
+                                        f"Factura de pago: {proveedor_nombre} - {concepto_pago}",
+                                        factura_blob_path,
+                                        None,
+                                        'application/pdf',
+                                        g.id_usuario
+                                    ))
+                                    
+                                    app.logger.info(f"Documento de factura creado para proveedor {id_proveedor}, pago {id_pago}")
+                except Exception as doc_error:
+                    # Si falla crear el documento, no fallar la actualización del pago
+                    app.logger.warning(f"Error al crear documento de factura: {str(doc_error)}")
+                    import traceback
+                    app.logger.warning(traceback.format_exc())
+            
             conn.commit()
             
             return jsonify({
@@ -3588,7 +5462,8 @@ def crear_proveedor():
         # Si no se proporciona id_residencia, usar la primera residencia asignada (si solo hay una)
         if not id_residencia:
             if g.id_rol == SUPER_ADMIN_ROLE_ID:
-                return jsonify({'error': 'id_residencia es requerido para super_admin'}), 400
+                # Super admin debe especificar id_residencia explícitamente
+                return jsonify({'error': 'id_residencia es requerido. Por favor, especifica la residencia (1 o 2)'}), 400
             elif not g.residencias_acceso or len(g.residencias_acceso) == 0:
                 return jsonify({'error': 'Usuario sin residencias asignadas'}), 403
             elif len(g.residencias_acceso) == 1:
@@ -3662,49 +5537,42 @@ def obtener_proveedor(id_proveedor):
             prov = cursor.fetchone()
             
             if not prov:
+                app.logger.warning(f"Proveedor con ID {id_proveedor} no encontrado en la base de datos")
                 return jsonify({'error': 'Proveedor no encontrado'}), 404
             
             # Verificar acceso a la residencia del proveedor
             is_valid, error_response = validate_residencia_access(prov[1])
             if not is_valid:
+                app.logger.warning(f"Usuario no tiene acceso a la residencia {prov[1]} del proveedor {id_proveedor}")
                 return error_response
             
-            # Reconstruir resultado con índices correctos (omitir id_residencia en la respuesta)
-            prov = (
-                prov[0],  # id_proveedor
-                prov[2],  # nombre
-                prov[3],  # nif_cif
-                prov[4],  # direccion
-                prov[5],  # telefono
-                prov[6],  # email
-                prov[7],  # contacto
-                prov[8],  # tipo_servicio
-                prov[9],  # activo
-                prov[10], # observaciones
-                prov[11]  # fecha_creacion
-            )
-            
-            return jsonify({
+            # Devolver resultado con id_residencia incluido
+            resultado = {
                 'id_proveedor': prov[0],
-                'nombre': prov[1],
-                'nif_cif': prov[2],
-                'direccion': prov[3],
-                'telefono': prov[4],
-                'email': prov[5],
-                'contacto': prov[6],
-                'tipo_servicio': prov[7],
-                'activo': prov[8],
-                'observaciones': prov[9],
-                'fecha_creacion': prov[10].isoformat() if prov[10] else None
-            }), 200
+                'id_residencia': prov[1],
+                'nombre': prov[2],
+                'nif_cif': prov[3],
+                'direccion': prov[4],
+                'telefono': prov[5],
+                'email': prov[6],
+                'contacto': prov[7],
+                'tipo_servicio': prov[8],
+                'activo': prov[9],
+                'observaciones': prov[10],
+                'fecha_creacion': prov[11].isoformat() if prov[11] else None
+            }
+            app.logger.info(f"Proveedor {id_proveedor} obtenido exitosamente: {resultado['nombre']}")
+            return jsonify(resultado), 200
             
         finally:
             cursor.close()
             conn.close()
             
     except Exception as e:
-        app.logger.error(f"Error al obtener proveedor: {str(e)}")
-        return jsonify({'error': 'Error al obtener proveedor'}), 500
+        app.logger.error(f"Error al obtener proveedor {id_proveedor}: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': f'Error al obtener proveedor: {str(e)}'}), 500
 
 
 @app.route('/api/v1/proveedores/<int:id_proveedor>/baja', methods=['POST'])
@@ -3827,9 +5695,16 @@ def actualizar_proveedor(id_proveedor):
             if not is_valid:
                 return error_response
             
-            # Campos actualizables
+            # Si se está cambiando la residencia, validar acceso a la nueva residencia
+            nueva_residencia = data.get('id_residencia')
+            if nueva_residencia and nueva_residencia != proveedor_existente[1]:
+                is_valid, error_response = validate_residencia_access(nueva_residencia)
+                if not is_valid:
+                    return error_response
+            
+            # Campos actualizables (incluyendo id_residencia)
             campos_actualizables = [
-                'nombre', 'nif_cif', 'direccion', 'telefono', 'email',
+                'id_residencia', 'nombre', 'nif_cif', 'direccion', 'telefono', 'email',
                 'contacto', 'tipo_servicio', 'activo', 'observaciones'
             ]
             
@@ -3992,6 +5867,186 @@ def crear_personal():
             conn.rollback()
             app.logger.error(f"Error al crear personal: {str(e)}")
             return jsonify({'error': 'Error al crear personal'}), 500
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/v1/personal/<int:id_personal>', methods=['GET'])
+def obtener_personal(id_personal):
+    """Obtiene un empleado/personal específico por ID."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Construir query según acceso del usuario
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                cursor.execute("""
+                    SELECT id_personal, id_residencia, nombre, apellido, documento_identidad,
+                           telefono, email, cargo, activo, fecha_contratacion, fecha_creacion
+                    FROM personal
+                    WHERE id_personal = %s
+                """, (id_personal,))
+            else:
+                if not g.residencias_acceso:
+                    return jsonify({'error': 'Personal no encontrado'}), 404
+                
+                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                cursor.execute(f"""
+                    SELECT id_personal, id_residencia, nombre, apellido, documento_identidad,
+                           telefono, email, cargo, activo, fecha_contratacion, fecha_creacion
+                    FROM personal
+                    WHERE id_personal = %s AND id_residencia IN ({placeholders})
+                """, (id_personal,) + tuple(g.residencias_acceso))
+            
+            personal = cursor.fetchone()
+            
+            if not personal:
+                return jsonify({'error': 'Personal no encontrado'}), 404
+            
+            resultado = {
+                'id_personal': personal[0],
+                'id_residencia': personal[1],
+                'nombre': personal[2],
+                'apellido': personal[3],
+                'documento_identidad': personal[4],
+                'telefono': personal[5],
+                'email': personal[6],
+                'cargo': personal[7],
+                'activo': personal[8],
+                'fecha_contratacion': str(personal[9]) if personal[9] else None,
+                'fecha_creacion': personal[10].isoformat() if personal[10] else None
+            }
+            
+            return jsonify(resultado), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al obtener personal: {str(e)}")
+        return jsonify({'error': 'Error al obtener personal'}), 500
+
+
+@app.route('/api/v1/personal/<int:id_personal>', methods=['PUT'])
+def actualizar_personal(id_personal):
+    """Actualiza un empleado/personal existente."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        # Validar datos con el módulo de validación
+        is_valid, errors = validate_personal_data(data, is_update=True)
+        if not is_valid:
+            return jsonify({'error': 'Errores de validación', 'detalles': errors}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el personal existe y el usuario tiene acceso
+            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                cursor.execute("""
+                    SELECT id_personal, id_residencia FROM personal WHERE id_personal = %s
+                """, (id_personal,))
+            else:
+                if not g.residencias_acceso:
+                    return jsonify({'error': 'Personal no encontrado'}), 404
+                
+                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                cursor.execute(f"""
+                    SELECT id_personal, id_residencia FROM personal 
+                    WHERE id_personal = %s AND id_residencia IN ({placeholders})
+                """, (id_personal,) + tuple(g.residencias_acceso))
+            
+            personal_existente = cursor.fetchone()
+            
+            if not personal_existente:
+                return jsonify({'error': 'Personal no encontrado'}), 404
+            
+            personal_id_residencia = personal_existente[1]
+            
+            # Verificar que la residencia existe si se está cambiando
+            id_residencia = data.get('id_residencia', personal_id_residencia)
+            if id_residencia != personal_id_residencia:
+                cursor.execute("SELECT id_residencia FROM residencia WHERE id_residencia = %s", (id_residencia,))
+                if not cursor.fetchone():
+                    return jsonify({'error': 'Residencia no encontrada'}), 404
+            
+            # Construir query de actualización
+            updates = []
+            valores = []
+            
+            if 'id_residencia' in data:
+                updates.append('id_residencia = %s')
+                valores.append(data['id_residencia'])
+            
+            if 'nombre' in data:
+                updates.append('nombre = %s')
+                valores.append(data['nombre'])
+            
+            if 'apellido' in data:
+                updates.append('apellido = %s')
+                valores.append(data['apellido'])
+            
+            if 'documento_identidad' in data:
+                updates.append('documento_identidad = %s')
+                valores.append(data['documento_identidad'] if data['documento_identidad'] else None)
+            
+            if 'telefono' in data:
+                updates.append('telefono = %s')
+                valores.append(data['telefono'] if data['telefono'] else None)
+            
+            if 'email' in data:
+                updates.append('email = %s')
+                valores.append(data['email'] if data['email'] else None)
+            
+            if 'cargo' in data:
+                updates.append('cargo = %s')
+                valores.append(data['cargo'] if data['cargo'] else None)
+            
+            if 'fecha_contratacion' in data:
+                updates.append('fecha_contratacion = %s')
+                valores.append(data['fecha_contratacion'] if data['fecha_contratacion'] else None)
+            
+            if 'activo' in data:
+                updates.append('activo = %s')
+                valores.append(data['activo'])
+            
+            if not updates:
+                return jsonify({'error': 'No hay campos para actualizar'}), 400
+            
+            valores.append(id_personal)
+            
+            query = f"""
+                UPDATE personal
+                SET {', '.join(updates)}
+                WHERE id_personal = %s
+                RETURNING id_personal
+            """
+            
+            cursor.execute(query, tuple(valores))
+            conn.commit()
+            
+            return jsonify({
+                'id_personal': id_personal,
+                'mensaje': 'Personal actualizado exitosamente'
+            }), 200
+            
+        except Exception as e:
+            conn.rollback()
+            app.logger.error(f"Error al actualizar personal: {str(e)}")
+            import traceback
+            app.logger.error(traceback.format_exc())
+            return jsonify({'error': 'Error al actualizar personal', 'details': str(e)}), 500
         finally:
             cursor.close()
             conn.close()
@@ -4626,16 +6681,45 @@ def descargar_documento(id_documento):
 
 @app.route('/api/v1/roles', methods=['GET'])
 def listar_roles():
-    """Lista todos los roles disponibles."""
+    """Lista roles disponibles. Super_admin ve todos, admin ve desde admin hacia abajo."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
+            # Asegurar que el rol Administrador existe (id_rol = 2)
             cursor.execute("""
+                SELECT id_rol FROM rol WHERE id_rol = 2
+            """)
+            if not cursor.fetchone():
+                # Crear rol Administrador si no existe
+                try:
+                    cursor.execute("""
+                        INSERT INTO rol (id_rol, nombre, descripcion, activo)
+                        VALUES (2, 'Administrador', 'Administrador con acceso a todos los módulos y permisos de todas las residencias', TRUE)
+                    """)
+                    conn.commit()
+                except Exception as e:
+                    # Si falla, intentar actualizar el rol existente
+                    app.logger.warning(f"No se pudo crear rol Administrador: {str(e)}")
+                    cursor.execute("""
+                        UPDATE rol 
+                        SET nombre = 'Administrador', 
+                            descripcion = 'Administrador con acceso a todos los módulos y permisos de todas las residencias',
+                            activo = TRUE
+                        WHERE id_rol = 2
+                    """)
+                    conn.commit()
+            
+            # Filtrar roles según el rol del usuario actual
+            # Mostrar: Administrador (id_rol=2), Director (id_rol=3), Personal (id_rol=4)
+            # NO mostrar super_admin (id_rol=1)
+            filtro_rol = "AND id_rol IN (2, 3, 4)"
+            
+            cursor.execute(f"""
                 SELECT id_rol, nombre, descripcion, activo
                 FROM rol
-                WHERE activo = TRUE
+                WHERE activo = TRUE {filtro_rol}
                 ORDER BY id_rol
             """)
             
@@ -4662,16 +6746,94 @@ def listar_roles():
         return jsonify({'error': 'Error al obtener roles'}), 500
 
 
+@app.route('/api/v1/modulos', methods=['GET'])
+def listar_modulos():
+    """Lista los módulos/permisos disponibles en el sistema."""
+    modulos = [
+        {
+            'id_modulo': 'residentes',
+            'nombre': 'Residentes',
+            'permisos': [
+                {'id': 'leer:residente', 'nombre': 'Leer', 'descripcion': 'Ver lista de residentes'},
+                {'id': 'crear:residente', 'nombre': 'Crear', 'descripcion': 'Agregar nuevos residentes'},
+                {'id': 'editar:residente', 'nombre': 'Editar', 'descripcion': 'Modificar residentes existentes'},
+                {'id': 'eliminar:residente', 'nombre': 'Eliminar', 'descripcion': 'Dar de baja residentes'}
+            ]
+        },
+        {
+            'id_modulo': 'personal',
+            'nombre': 'Personal',
+            'permisos': [
+                {'id': 'leer:personal', 'nombre': 'Leer', 'descripcion': 'Ver lista de personal'},
+                {'id': 'crear:personal', 'nombre': 'Crear', 'descripcion': 'Agregar nuevo personal'},
+                {'id': 'editar:personal', 'nombre': 'Editar', 'descripcion': 'Modificar personal existente'},
+                {'id': 'eliminar:personal', 'nombre': 'Eliminar', 'descripcion': 'Dar de baja personal'}
+            ]
+        },
+        {
+            'id_modulo': 'proveedores',
+            'nombre': 'Proveedores',
+            'permisos': [
+                {'id': 'leer:proveedor', 'nombre': 'Leer', 'descripcion': 'Ver lista de proveedores'},
+                {'id': 'crear:proveedor', 'nombre': 'Crear', 'descripcion': 'Agregar nuevos proveedores'},
+                {'id': 'editar:proveedor', 'nombre': 'Editar', 'descripcion': 'Modificar proveedores existentes'},
+                {'id': 'eliminar:proveedor', 'nombre': 'Eliminar', 'descripcion': 'Eliminar proveedores'}
+            ]
+        },
+        {
+            'id_modulo': 'facturacion',
+            'nombre': 'Facturación',
+            'permisos': [
+                {'id': 'leer:cobro', 'nombre': 'Leer Cobros', 'descripcion': 'Ver cobros de residentes'},
+                {'id': 'crear:cobro', 'nombre': 'Crear Cobros', 'descripcion': 'Registrar nuevos cobros'},
+                {'id': 'editar:cobro', 'nombre': 'Editar Cobros', 'descripcion': 'Modificar cobros existentes'},
+                {'id': 'leer:pago_proveedor', 'nombre': 'Leer Pagos', 'descripcion': 'Ver pagos a proveedores'},
+                {'id': 'crear:pago_proveedor', 'nombre': 'Crear Pagos', 'descripcion': 'Registrar nuevos pagos'},
+                {'id': 'editar:pago_proveedor', 'nombre': 'Editar Pagos', 'descripcion': 'Modificar pagos existentes'}
+            ]
+        },
+        {
+            'id_modulo': 'documentacion',
+            'nombre': 'Documentación',
+            'permisos': [
+                {'id': 'leer:documento', 'nombre': 'Leer', 'descripcion': 'Ver documentos'},
+                {'id': 'crear:documento', 'nombre': 'Subir', 'descripcion': 'Subir nuevos documentos'},
+                {'id': 'eliminar:documento', 'nombre': 'Eliminar', 'descripcion': 'Eliminar documentos'}
+            ]
+        },
+        {
+            'id_modulo': 'turnos',
+            'nombre': 'Turnos',
+            'permisos': [
+                {'id': 'leer:turno', 'nombre': 'Leer', 'descripcion': 'Ver turnos del personal'},
+                {'id': 'crear:turno', 'nombre': 'Crear', 'descripcion': 'Registrar nuevos turnos'},
+                {'id': 'editar:turno', 'nombre': 'Editar', 'descripcion': 'Modificar turnos existentes'}
+            ]
+        },
+        {
+            'id_modulo': 'configuracion',
+            'nombre': 'Configuración',
+            'permisos': [
+                {'id': 'leer:usuario', 'nombre': 'Leer Usuarios', 'descripcion': 'Ver lista de usuarios'},
+                {'id': 'crear:usuario', 'nombre': 'Crear Usuarios', 'descripcion': 'Crear nuevos usuarios'},
+                {'id': 'editar:usuario', 'nombre': 'Editar Usuarios', 'descripcion': 'Modificar usuarios existentes'}
+            ]
+        }
+    ]
+    
+    return jsonify({'modulos': modulos}), 200
+
+
 @app.route('/api/v1/residencias', methods=['GET'])
 def listar_residencias():
-    """Lista todas las residencias disponibles."""
+    """Lista las residencias a las que el usuario tiene acceso."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
             # Si es superadmin, mostrar todas las residencias (activas e inactivas)
-            # Si no es superadmin, solo mostrar activas
+            # Si no es superadmin, solo mostrar las residencias a las que tiene acceso
             if g.id_rol == SUPER_ADMIN_ROLE_ID:
                 cursor.execute("""
                     SELECT id_residencia, nombre, direccion, telefono, activa, fecha_creacion
@@ -4679,12 +6841,18 @@ def listar_residencias():
                     ORDER BY id_residencia
                 """)
             else:
-                cursor.execute("""
+                # Usuario normal: solo mostrar residencias a las que tiene acceso
+                if not hasattr(g, 'residencias_acceso') or not g.residencias_acceso:
+                    return jsonify({'residencias': [], 'total': 0}), 200
+                
+                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                cursor.execute(f"""
                     SELECT id_residencia, nombre, direccion, telefono, activa, fecha_creacion
                     FROM residencia
-                    WHERE activa = TRUE
+                    WHERE id_residencia IN ({placeholders})
+                      AND activa = TRUE
                     ORDER BY id_residencia
-                """)
+                """, tuple(g.residencias_acceso))
             
             residencias = cursor.fetchall()
             
@@ -4728,8 +6896,17 @@ def crear_residencia():
             return jsonify({'error': 'El nombre es requerido'}), 400
         
         nombre = data.get('nombre', '').strip()
+        nombre_fiscal = data.get('nombre_fiscal', '').strip() if data.get('nombre_fiscal') else None
+        nif = data.get('nif', '').strip() if data.get('nif') else None
         direccion = data.get('direccion', '').strip() if data.get('direccion') else None
+        codigo_postal = data.get('codigo_postal', '').strip() if data.get('codigo_postal') else None
+        ciudad = data.get('ciudad', '').strip() if data.get('ciudad') else None
+        provincia = data.get('provincia', '').strip() if data.get('provincia') else None
         telefono = data.get('telefono', '').strip() if data.get('telefono') else None
+        email = data.get('email', '').strip() if data.get('email') else None
+        web = data.get('web', '').strip() if data.get('web') else None
+        cuenta_bancaria = data.get('cuenta_bancaria', '').strip() if data.get('cuenta_bancaria') else None
+        observaciones = data.get('observaciones', '').strip() if data.get('observaciones') else None
         activa = data.get('activa', True)
         
         # Validar nombre
@@ -4739,13 +6916,39 @@ def crear_residencia():
         if len(nombre) > 255:
             return jsonify({'error': 'El nombre es demasiado largo (máximo 255 caracteres)'}), 400
         
-        # Validar teléfono si se proporciona
+        # Validar campos opcionales
+        if nombre_fiscal and len(nombre_fiscal) > 255:
+            return jsonify({'error': 'El nombre fiscal es demasiado largo (máximo 255 caracteres)'}), 400
+        
+        if nif and len(nif) > 20:
+            return jsonify({'error': 'El NIF es demasiado largo (máximo 20 caracteres)'}), 400
+        
         if telefono and len(telefono) > 50:
             return jsonify({'error': 'El teléfono es demasiado largo (máximo 50 caracteres)'}), 400
         
-        # Validar dirección si se proporciona
         if direccion and len(direccion) > 500:
             return jsonify({'error': 'La dirección es demasiado larga (máximo 500 caracteres)'}), 400
+        
+        if codigo_postal and len(codigo_postal) > 10:
+            return jsonify({'error': 'El código postal es demasiado largo (máximo 10 caracteres)'}), 400
+        
+        if ciudad and len(ciudad) > 100:
+            return jsonify({'error': 'La ciudad es demasiado larga (máximo 100 caracteres)'}), 400
+        
+        if provincia and len(provincia) > 100:
+            return jsonify({'error': 'La provincia es demasiado larga (máximo 100 caracteres)'}), 400
+        
+        if email and len(email) > 255:
+            return jsonify({'error': 'El email es demasiado largo (máximo 255 caracteres)'}), 400
+        
+        if web and len(web) > 255:
+            return jsonify({'error': 'La web es demasiado larga (máximo 255 caracteres)'}), 400
+        
+        if cuenta_bancaria and len(cuenta_bancaria) > 34:
+            return jsonify({'error': 'La cuenta bancaria es demasiado larga (máximo 34 caracteres)'}), 400
+        
+        if observaciones and len(observaciones) > 1000:
+            return jsonify({'error': 'Las observaciones son demasiado largas (máximo 1000 caracteres)'}), 400
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -4761,10 +6964,13 @@ def crear_residencia():
             
             # Crear la residencia
             cursor.execute("""
-                INSERT INTO residencia (nombre, direccion, telefono, activa)
-                VALUES (%s, %s, %s, %s)
-                RETURNING id_residencia, nombre, direccion, telefono, activa, fecha_creacion
-            """, (nombre, direccion, telefono, activa))
+                INSERT INTO residencia (nombre, nombre_fiscal, nif, direccion, codigo_postal, ciudad, provincia, 
+                                       telefono, email, web, cuenta_bancaria, observaciones, activa)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id_residencia, nombre, nombre_fiscal, nif, direccion, codigo_postal, ciudad, provincia, 
+                          telefono, email, web, cuenta_bancaria, observaciones, activa, fecha_creacion
+            """, (nombre, nombre_fiscal, nif, direccion, codigo_postal, ciudad, provincia, 
+                  telefono, email, web, cuenta_bancaria, observaciones, activa))
             
             residencia = cursor.fetchone()
             conn.commit()
@@ -4774,10 +6980,19 @@ def crear_residencia():
                 'residencia': {
                     'id_residencia': residencia[0],
                     'nombre': residencia[1],
-                    'direccion': residencia[2],
-                    'telefono': residencia[3],
-                    'activa': residencia[4],
-                    'fecha_creacion': residencia[5].isoformat() if residencia[5] else None
+                    'nombre_fiscal': residencia[2],
+                    'nif': residencia[3],
+                    'direccion': residencia[4],
+                    'codigo_postal': residencia[5],
+                    'ciudad': residencia[6],
+                    'provincia': residencia[7],
+                    'telefono': residencia[8],
+                    'email': residencia[9],
+                    'web': residencia[10],
+                    'cuenta_bancaria': residencia[11],
+                    'observaciones': residencia[12],
+                    'activa': residencia[13],
+                    'fecha_creacion': residencia[14].isoformat() if residencia[14] else None
                 }
             }), 201
             
@@ -4858,6 +7073,69 @@ def actualizar_residencia(id_residencia):
                 updates.append("telefono = %s")
                 params.append(telefono)
             
+            if 'nombre_fiscal' in data:
+                nombre_fiscal = data.get('nombre_fiscal', '').strip() if data.get('nombre_fiscal') else None
+                if nombre_fiscal and len(nombre_fiscal) > 255:
+                    return jsonify({'error': 'El nombre fiscal es demasiado largo (máximo 255 caracteres)'}), 400
+                updates.append("nombre_fiscal = %s")
+                params.append(nombre_fiscal)
+            
+            if 'nif' in data:
+                nif = data.get('nif', '').strip() if data.get('nif') else None
+                if nif and len(nif) > 20:
+                    return jsonify({'error': 'El NIF es demasiado largo (máximo 20 caracteres)'}), 400
+                updates.append("nif = %s")
+                params.append(nif)
+            
+            if 'codigo_postal' in data:
+                codigo_postal = data.get('codigo_postal', '').strip() if data.get('codigo_postal') else None
+                if codigo_postal and len(codigo_postal) > 10:
+                    return jsonify({'error': 'El código postal es demasiado largo (máximo 10 caracteres)'}), 400
+                updates.append("codigo_postal = %s")
+                params.append(codigo_postal)
+            
+            if 'ciudad' in data:
+                ciudad = data.get('ciudad', '').strip() if data.get('ciudad') else None
+                if ciudad and len(ciudad) > 100:
+                    return jsonify({'error': 'La ciudad es demasiado larga (máximo 100 caracteres)'}), 400
+                updates.append("ciudad = %s")
+                params.append(ciudad)
+            
+            if 'provincia' in data:
+                provincia = data.get('provincia', '').strip() if data.get('provincia') else None
+                if provincia and len(provincia) > 100:
+                    return jsonify({'error': 'La provincia es demasiado larga (máximo 100 caracteres)'}), 400
+                updates.append("provincia = %s")
+                params.append(provincia)
+            
+            if 'email' in data:
+                email = data.get('email', '').strip() if data.get('email') else None
+                if email and len(email) > 255:
+                    return jsonify({'error': 'El email es demasiado largo (máximo 255 caracteres)'}), 400
+                updates.append("email = %s")
+                params.append(email)
+            
+            if 'web' in data:
+                web = data.get('web', '').strip() if data.get('web') else None
+                if web and len(web) > 255:
+                    return jsonify({'error': 'La web es demasiado larga (máximo 255 caracteres)'}), 400
+                updates.append("web = %s")
+                params.append(web)
+            
+            if 'cuenta_bancaria' in data:
+                cuenta_bancaria = data.get('cuenta_bancaria', '').strip() if data.get('cuenta_bancaria') else None
+                if cuenta_bancaria and len(cuenta_bancaria) > 34:
+                    return jsonify({'error': 'La cuenta bancaria es demasiado larga (máximo 34 caracteres)'}), 400
+                updates.append("cuenta_bancaria = %s")
+                params.append(cuenta_bancaria)
+            
+            if 'observaciones' in data:
+                observaciones = data.get('observaciones', '').strip() if data.get('observaciones') else None
+                if observaciones and len(observaciones) > 1000:
+                    return jsonify({'error': 'Las observaciones son demasiado largas (máximo 1000 caracteres)'}), 400
+                updates.append("observaciones = %s")
+                params.append(observaciones)
+            
             if 'activa' in data:
                 activa = bool(data.get('activa'))
                 updates.append("activa = %s")
@@ -4872,7 +7150,8 @@ def actualizar_residencia(id_residencia):
                 UPDATE residencia 
                 SET {', '.join(updates)}
                 WHERE id_residencia = %s
-                RETURNING id_residencia, nombre, direccion, telefono, activa, fecha_creacion
+                RETURNING id_residencia, nombre, nombre_fiscal, nif, direccion, codigo_postal, ciudad, provincia, 
+                         telefono, email, web, cuenta_bancaria, observaciones, activa, fecha_creacion
             """
             
             cursor.execute(query, params)
@@ -4884,10 +7163,19 @@ def actualizar_residencia(id_residencia):
                 'residencia': {
                     'id_residencia': residencia[0],
                     'nombre': residencia[1],
-                    'direccion': residencia[2],
-                    'telefono': residencia[3],
-                    'activa': residencia[4],
-                    'fecha_creacion': residencia[5].isoformat() if residencia[5] else None
+                    'nombre_fiscal': residencia[2],
+                    'nif': residencia[3],
+                    'direccion': residencia[4],
+                    'codigo_postal': residencia[5],
+                    'ciudad': residencia[6],
+                    'provincia': residencia[7],
+                    'telefono': residencia[8],
+                    'email': residencia[9],
+                    'web': residencia[10],
+                    'cuenta_bancaria': residencia[11],
+                    'observaciones': residencia[12],
+                    'activa': residencia[13],
+                    'fecha_creacion': residencia[14].isoformat() if residencia[14] else None
                 }
             }), 200
             
@@ -5002,25 +7290,50 @@ def obtener_usuario_actual():
             if not usuario:
                 return jsonify({'error': 'Usuario no encontrado'}), 404
             
-            # Si es super_admin, obtener todas las residencias asignadas desde usuario_residencia
+            # Obtener residencias asignadas
             residencias = []
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
-                # Super admin: acceso total (sin residencias específicas asignadas)
-                residencias = []
-                cursor.execute("SELECT id_residencia, nombre FROM residencia WHERE activa = TRUE ORDER BY nombre")
-                todas_residencias = cursor.fetchall()
-                residencias = [{'id_residencia': r[0], 'nombre': r[1]} for r in todas_residencias]
-            else:
-                # Usuario normal: obtener residencias asignadas
+            try:
+                # Verificar si la tabla usuario_residencia existe
                 cursor.execute("""
-                    SELECT ur.id_residencia, res.nombre
-                    FROM usuario_residencia ur
-                    JOIN residencia res ON ur.id_residencia = res.id_residencia
-                    WHERE ur.id_usuario = %s AND res.activa = TRUE
-                    ORDER BY res.nombre
-                """, (g.id_usuario,))
-                residencias_data = cursor.fetchall()
-                residencias = [{'id_residencia': r[0], 'nombre': r[1]} for r in residencias_data]
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public'
+                        AND table_name = 'usuario_residencia'
+                    )
+                """)
+                resultado = cursor.fetchone()
+                tabla_existe = resultado[0] if resultado else False
+                
+                if tabla_existe:
+                    # Usar usuario_residencia (modo nuevo)
+                    if g.id_rol == SUPER_ADMIN_ROLE_ID:
+                        # Super admin: acceso total
+                        cursor.execute("SELECT id_residencia, nombre FROM residencia WHERE activa = TRUE ORDER BY nombre")
+                        todas_residencias = cursor.fetchall()
+                        residencias = [{'id_residencia': r[0], 'nombre': r[1]} for r in todas_residencias]
+                    else:
+                        # Usuario normal: obtener residencias asignadas
+                        cursor.execute("""
+                            SELECT ur.id_residencia, res.nombre
+                            FROM usuario_residencia ur
+                            JOIN residencia res ON ur.id_residencia = res.id_residencia
+                            WHERE ur.id_usuario = %s AND res.activa = TRUE
+                            ORDER BY res.nombre
+                        """, (g.id_usuario,))
+                        residencias_data = cursor.fetchall()
+                        residencias = [{'id_residencia': r[0], 'nombre': r[1]} for r in residencias_data]
+                else:
+                    # Modo legacy: usar id_residencia de usuario
+                    if usuario[5]:  # id_residencia
+                        cursor.execute("SELECT id_residencia, nombre FROM residencia WHERE id_residencia = %s AND activa = TRUE", (usuario[5],))
+                        res_data = cursor.fetchone()
+                        if res_data:
+                            residencias = [{'id_residencia': res_data[0], 'nombre': res_data[1]}]
+            except Exception as e:
+                app.logger.error(f"Error al obtener residencias del usuario: {str(e)}")
+                # Si falla, usar id_residencia del usuario si existe
+                if usuario[5]:
+                    residencias = [{'id_residencia': usuario[5], 'nombre': usuario[7] if usuario[7] else 'N/A'}]
             
             return jsonify({
                 'id_usuario': usuario[0],
@@ -5049,8 +7362,9 @@ def obtener_usuario_actual():
 
 @app.route('/api/v1/usuarios', methods=['GET'])
 def listar_usuarios():
-    """Lista todos los usuarios del sistema (solo administradores)."""
-    if g.id_rol != 1:
+    """Lista usuarios del sistema. Super_admin ve todos, admin ve desde admin hacia abajo."""
+    # Solo super_admin (id_rol = 1) y admin (id_rol = 2) pueden acceder
+    if g.id_rol not in [1, 2]:
         return jsonify({'error': 'No tienes permisos para acceder a esta información'}), 403
     
     try:
@@ -5058,33 +7372,213 @@ def listar_usuarios():
         cursor = conn.cursor()
         
         try:
-            cursor.execute("""
-                SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.id_residencia,
-                       r.nombre as nombre_rol, res.nombre as nombre_residencia, u.activo, u.fecha_creacion
-                FROM usuario u
-                JOIN rol r ON u.id_rol = r.id_rol
-                JOIN residencia res ON u.id_residencia = res.id_residencia
-                ORDER BY u.fecha_creacion DESC
-            """)
+            # Verificar si la tabla usuario_residencia existe
+            tabla_existe = False
+            try:
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public'
+                        AND table_name = 'usuario_residencia'
+                    )
+                """)
+                resultado = cursor.fetchone()
+                tabla_existe = resultado[0] if resultado else False
+            except Exception as e:
+                app.logger.warning(f"No se pudo verificar existencia de tabla usuario_residencia: {str(e)}")
+                tabla_existe = False
             
-            usuarios = cursor.fetchall()
+            # Verificar si la columna id_residencia existe en usuario (modo legacy)
+            columna_id_residencia_existe = False
+            try:
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.columns 
+                        WHERE table_schema = 'public'
+                        AND table_name = 'usuario'
+                        AND column_name = 'id_residencia'
+                    )
+                """)
+                resultado = cursor.fetchone()
+                columna_id_residencia_existe = resultado[0] if resultado else False
+            except Exception as e:
+                app.logger.warning(f"No se pudo verificar existencia de columna id_residencia: {str(e)}")
+                columna_id_residencia_existe = False
             
-            return jsonify({
-                'usuarios': [
-                    {
+            if not tabla_existe:
+                # Si no existe usuario_residencia, intentar usar id_residencia de usuario (modo legacy)
+                if columna_id_residencia_existe:
+                    try:
+                        # Filtrar usuarios según el rol del usuario actual
+                        filtro_rol = ""
+                        if g.id_rol == 2:  # Si es admin, excluir super_admin
+                            filtro_rol = "WHERE u.id_rol != 1"
+                        
+                        cursor.execute(f"""
+                            SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.activo, u.fecha_creacion,
+                                   r.nombre as nombre_rol, u.id_residencia
+                            FROM usuario u
+                            JOIN rol r ON u.id_rol = r.id_rol
+                            {filtro_rol}
+                            ORDER BY u.fecha_creacion DESC
+                        """)
+                        
+                        usuarios = cursor.fetchall()
+                        
+                        usuarios_con_residencias = []
+                        for u in usuarios:
+                            id_residencia = u[8] if len(u) > 8 else None
+                            # Obtener nombre de residencia
+                            nombre_residencia = None
+                            if id_residencia:
+                                cursor.execute("SELECT nombre FROM residencia WHERE id_residencia = %s", (id_residencia,))
+                                res_result = cursor.fetchone()
+                                nombre_residencia = res_result[0] if res_result else None
+                            
+                            usuarios_con_residencias.append({
+                                'id_usuario': u[0],
+                                'email': u[1],
+                                'nombre': u[2],
+                                'apellido': u[3],
+                                'id_rol': u[4],
+                                'activo': u[5],
+                                'fecha_creacion': u[6].isoformat() if u[6] else None,
+                                'nombre_rol': u[7],
+                                'residencias': [
+                                    {
+                                        'id_residencia': id_residencia,
+                                        'nombre': nombre_residencia
+                                    }
+                                ] if id_residencia and nombre_residencia else []
+                            })
+                    except Exception as e:
+                        app.logger.error(f"Error al obtener usuarios con id_residencia: {str(e)}")
+                        # Si falla, usar modo sin residencias
+                        # Filtrar usuarios según el rol del usuario actual
+                        filtro_rol = ""
+                        if g.id_rol == 2:  # Si es admin, excluir super_admin
+                            filtro_rol = "WHERE u.id_rol != 1"
+                        
+                        cursor.execute(f"""
+                            SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.activo, u.fecha_creacion,
+                                   r.nombre as nombre_rol
+                            FROM usuario u
+                            JOIN rol r ON u.id_rol = r.id_rol
+                            {filtro_rol}
+                            ORDER BY u.fecha_creacion DESC
+                        """)
+                        
+                        usuarios = cursor.fetchall()
+                        
+                        usuarios_con_residencias = []
+                        for u in usuarios:
+                            usuarios_con_residencias.append({
+                                'id_usuario': u[0],
+                                'email': u[1],
+                                'nombre': u[2],
+                                'apellido': u[3],
+                                'id_rol': u[4],
+                                'activo': u[5],
+                                'fecha_creacion': u[6].isoformat() if u[6] else None,
+                                'nombre_rol': u[7],
+                                'residencias': []
+                            })
+                else:
+                    # No existe ni usuario_residencia ni id_residencia, devolver usuarios sin residencias
+                    # Filtrar usuarios según el rol del usuario actual
+                    filtro_rol = ""
+                    if g.id_rol == 2:  # Si es admin, excluir super_admin
+                        filtro_rol = "WHERE u.id_rol != 1"
+                    
+                    cursor.execute(f"""
+                        SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.activo, u.fecha_creacion,
+                               r.nombre as nombre_rol
+                        FROM usuario u
+                        JOIN rol r ON u.id_rol = r.id_rol
+                        {filtro_rol}
+                        ORDER BY u.fecha_creacion DESC
+                    """)
+                    
+                    usuarios = cursor.fetchall()
+                    
+                    usuarios_con_residencias = []
+                    for u in usuarios:
+                        usuarios_con_residencias.append({
+                            'id_usuario': u[0],
+                            'email': u[1],
+                            'nombre': u[2],
+                            'apellido': u[3],
+                            'id_rol': u[4],
+                            'activo': u[5],
+                            'fecha_creacion': u[6].isoformat() if u[6] else None,
+                            'nombre_rol': u[7],
+                            'residencias': []
+                        })
+            else:
+                # Usar usuario_residencia (modo nuevo)
+                # Filtrar usuarios según el rol del usuario actual
+                filtro_rol = ""
+                if g.id_rol == 2:  # Si es admin, excluir super_admin
+                    filtro_rol = "WHERE u.id_rol != 1"
+                
+                cursor.execute(f"""
+                    SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.activo, u.fecha_creacion,
+                           r.nombre as nombre_rol
+                    FROM usuario u
+                    JOIN rol r ON u.id_rol = r.id_rol
+                    {filtro_rol}
+                    ORDER BY u.fecha_creacion DESC
+                """)
+                
+                usuarios = cursor.fetchall()
+                
+                # Obtener residencias y permisos para cada usuario
+                usuarios_con_residencias = []
+                for u in usuarios:
+                    id_usuario = u[0]
+                    # Obtener residencias del usuario desde usuario_residencia
+                    cursor.execute("""
+                        SELECT ur.id_residencia, res.nombre
+                        FROM usuario_residencia ur
+                        JOIN residencia res ON ur.id_residencia = res.id_residencia
+                        WHERE ur.id_usuario = %s
+                        ORDER BY res.nombre
+                    """, (id_usuario,))
+                    residencias_usuario = cursor.fetchall()
+                    
+                    # Obtener permisos personalizados del usuario
+                    try:
+                        cursor.execute("""
+                            SELECT nombre_permiso
+                            FROM usuario_permiso
+                            WHERE id_usuario = %s
+                        """, (id_usuario,))
+                        permisos_usuario = [row[0] for row in cursor.fetchall()]
+                    except Exception:
+                        # Si la tabla no existe aún, usar lista vacía
+                        permisos_usuario = []
+                    
+                    usuarios_con_residencias.append({
                         'id_usuario': u[0],
                         'email': u[1],
                         'nombre': u[2],
                         'apellido': u[3],
                         'id_rol': u[4],
-                        'id_residencia': u[5],
-                        'nombre_rol': u[6],
-                        'nombre_residencia': u[7],
-                        'activo': u[8],
-                        'fecha_creacion': u[9].isoformat() if u[9] else None
-                    }
-                    for u in usuarios
-                ]
+                        'activo': u[5],
+                        'fecha_creacion': u[6].isoformat() if u[6] else None,
+                        'nombre_rol': u[7],
+                        'residencias': [
+                            {
+                                'id_residencia': r[0],
+                                'nombre': r[1]
+                            }
+                            for r in residencias_usuario
+                        ],
+                        'permisos': permisos_usuario
+                    })
+            
+            return jsonify({
+                'usuarios': usuarios_con_residencias
             }), 200
             
         finally:
@@ -5092,15 +7586,18 @@ def listar_usuarios():
             conn.close()
             
     except Exception as e:
-        app.logger.error(f"Error al listar usuarios: {str(e)}")
-        return jsonify({'error': 'Error al obtener usuarios'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        app.logger.error(f"Error al listar usuarios: {str(e)}\n{error_trace}")
+        return jsonify({'error': f'Error al obtener usuarios: {str(e)}'}), 500
 
 
 @app.route('/api/v1/usuarios/<int:id_usuario>', methods=['PUT'])
 def actualizar_usuario(id_usuario):
-    """Actualiza un usuario. Los usuarios pueden actualizar su propia información, los super_admin pueden actualizar cualquiera."""
-    # Verificar permisos: solo el propio usuario o un super_admin puede actualizar
-    if g.id_rol != SUPER_ADMIN_ROLE_ID and g.id_usuario != id_usuario:
+    """Actualiza un usuario. Los usuarios pueden actualizar su propia información, los super_admin y admin pueden actualizar otros usuarios."""
+    # Verificar permisos: el propio usuario, super_admin o admin pueden actualizar
+    # Pero admin no puede actualizar usuarios con rol super_admin
+    if g.id_rol not in [SUPER_ADMIN_ROLE_ID, 2] and g.id_usuario != id_usuario:
         return jsonify({'error': 'No tienes permisos para actualizar este usuario'}), 403
     
     try:
@@ -5120,8 +7617,12 @@ def actualizar_usuario(id_usuario):
             if not usuario_existente:
                 return jsonify({'error': 'Usuario no encontrado'}), 404
             
-            # Si no es super_admin, solo puede actualizar ciertos campos (y solo su propia cuenta)
-            if g.id_rol != SUPER_ADMIN_ROLE_ID:
+            # Si admin intenta actualizar un usuario con rol super_admin, denegar
+            if g.id_rol == 2 and usuario_existente[1] == SUPER_ADMIN_ROLE_ID:
+                return jsonify({'error': 'No tienes permisos para actualizar usuarios con rol super_admin'}), 403
+            
+            # Si no es super_admin ni admin, solo puede actualizar ciertos campos (y solo su propia cuenta)
+            if g.id_rol not in [SUPER_ADMIN_ROLE_ID, 2]:
                 # Usuario normal solo puede actualizar nombre, apellido y contraseña (solo su propia cuenta)
                 updates = []
                 params = []
@@ -5184,20 +7685,75 @@ def actualizar_usuario(id_usuario):
                     params.append(data.get('apellido'))
                 
                 if 'id_rol' in data:
+                    nuevo_id_rol = data.get('id_rol')
+                    # Prevenir que admin asigne rol super_admin
+                    if nuevo_id_rol == SUPER_ADMIN_ROLE_ID and g.id_rol != SUPER_ADMIN_ROLE_ID:
+                        return jsonify({'error': 'No tienes permisos para asignar el rol super_admin'}), 403
                     # Verificar que el rol existe
-                    cursor.execute("SELECT id_rol FROM rol WHERE id_rol = %s AND activo = TRUE", (data.get('id_rol'),))
+                    cursor.execute("SELECT id_rol FROM rol WHERE id_rol = %s AND activo = TRUE", (nuevo_id_rol,))
                     if not cursor.fetchone():
                         return jsonify({'error': 'Rol no válido'}), 400
                     updates.append("id_rol = %s")
-                    params.append(data.get('id_rol'))
+                    params.append(nuevo_id_rol)
                 
-                if 'id_residencia' in data:
-                    # Verificar que la residencia existe
-                    cursor.execute("SELECT id_residencia FROM residencia WHERE id_residencia = %s AND activa = TRUE", (data.get('id_residencia'),))
-                    if not cursor.fetchone():
-                        return jsonify({'error': 'Residencia no válida'}), 400
-                    updates.append("id_residencia = %s")
-                    params.append(data.get('id_residencia'))
+                # Manejar residencias múltiples (array)
+                if 'residencias' in data:
+                    residencias = data.get('residencias', [])
+                    if not residencias or len(residencias) == 0:
+                        return jsonify({'error': 'Debe asignar al menos una residencia'}), 400
+                    
+                    # Verificar que todas las residencias existen y están activas
+                    placeholders = ','.join(['%s'] * len(residencias))
+                    cursor.execute(f"""
+                        SELECT id_residencia FROM residencia 
+                        WHERE id_residencia IN ({placeholders}) AND activa = TRUE
+                    """, tuple(residencias))
+                    
+                    residencias_validas = [row[0] for row in cursor.fetchall()]
+                    
+                    if len(residencias_validas) != len(residencias):
+                        residencias_invalidas = [r for r in residencias if r not in residencias_validas]
+                        return jsonify({
+                            'error': 'Una o más residencias no existen o están inactivas',
+                            'residencias_invalidas': residencias_invalidas
+                        }), 400
+                    
+                    # Eliminar residencias actuales del usuario
+                    cursor.execute("DELETE FROM usuario_residencia WHERE id_usuario = %s", (id_usuario,))
+                    
+                    # Asignar nuevas residencias
+                    for id_residencia in residencias_validas:
+                        cursor.execute("""
+                            INSERT INTO usuario_residencia (id_usuario, id_residencia)
+                            VALUES (%s, %s)
+                            ON CONFLICT DO NOTHING
+                        """, (id_usuario, id_residencia))
+                
+                # Manejar permisos personalizados (array)
+                if 'permisos' in data:
+                    permisos = data.get('permisos', [])
+                    
+                    # Crear tabla usuario_permiso si no existe
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS usuario_permiso (
+                            id_usuario INTEGER NOT NULL,
+                            nombre_permiso VARCHAR(255) NOT NULL,
+                            PRIMARY KEY (id_usuario, nombre_permiso),
+                            FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE
+                        )
+                    """)
+                    
+                    # Eliminar permisos actuales del usuario
+                    cursor.execute("DELETE FROM usuario_permiso WHERE id_usuario = %s", (id_usuario,))
+                    
+                    # Asignar nuevos permisos
+                    if permisos and len(permisos) > 0:
+                        for nombre_permiso in permisos:
+                            cursor.execute("""
+                                INSERT INTO usuario_permiso (id_usuario, nombre_permiso)
+                                VALUES (%s, %s)
+                                ON CONFLICT DO NOTHING
+                            """, (id_usuario, nombre_permiso))
                 
                 if 'activo' in data:
                     updates.append("activo = %s")
@@ -5274,6 +7830,7 @@ def listar_documentacion():
         tipo_entidad = request.args.get('tipo_entidad')
         categoria = request.args.get('categoria')
         id_entidad = request.args.get('id_entidad', type=int)
+        id_residencia_filtro = request.args.get('id_residencia', type=int)
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -5292,59 +7849,125 @@ def listar_documentacion():
                     # Usuario sin residencias
                     return jsonify({'documentos': [], 'total': 0}), 200
             
+            # Si hay filtro específico por residencia, aplicarlo
+            if id_residencia_filtro:
+                # Verificar que el usuario tiene acceso a esa residencia
+                if g.id_rol != SUPER_ADMIN_ROLE_ID:
+                    if id_residencia_filtro not in g.residencias_acceso:
+                        return jsonify({'error': 'No tienes acceso a esta residencia'}), 403
+                # Aplicar filtro específico
+                residencias_filtro = " AND id_residencia = %s"
+                params = [id_residencia_filtro]
+            
+            # Verificar si la tabla 'documento' existe
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    AND table_name = 'documento'
+                )
+            """)
+            tabla_documento_existe = cursor.fetchone()[0]
+            
             # Construir query unificada: documentos unificados + documentos legacy de residentes
-            # Primero: documentos de la tabla unificada 'documento'
-            query_unificados = f"""
-                SELECT d.id_documento, d.tipo_entidad, d.id_entidad, d.id_residencia,
-                       d.categoria_documento, d.tipo_documento, d.nombre_archivo, d.descripcion,
-                       d.fecha_subida, d.url_archivo, d.tamaño_bytes, d.tipo_mime,
-                       d.id_usuario_subida, d.activo,
-                       res.nombre as nombre_residencia
-                FROM documento d
-                JOIN residencia res ON d.id_residencia = res.id_residencia
-                WHERE d.activo = TRUE
-                {residencias_filtro}
-            """
+            # Primero: documentos de la tabla unificada 'documento' (solo si existe)
+            query_unificados = None
+            params_unificados = []
             
-            params_unificados = params.copy()
-            
-            # Filtros opcionales para documentos unificados
-            if tipo_entidad:
-                query_unificados += " AND d.tipo_entidad = %s"
-                params_unificados.append(tipo_entidad)
-            
-            if categoria:
-                query_unificados += " AND d.categoria_documento = %s"
-                params_unificados.append(categoria)
-            
-            if id_entidad:
-                query_unificados += " AND d.id_entidad = %s"
-                params_unificados.append(id_entidad)
+            if tabla_documento_existe:
+                query_unificados = f"""
+                    SELECT d.id_documento, d.tipo_entidad, d.id_entidad, d.id_residencia,
+                           d.categoria_documento, d.tipo_documento, d.nombre_archivo, d.descripcion,
+                           d.fecha_subida, d.url_archivo, d.tamaño_bytes, d.tipo_mime,
+                           d.id_usuario_subida, d.activo,
+                           res.nombre as nombre_residencia
+                    FROM documento d
+                    JOIN residencia res ON d.id_residencia = res.id_residencia
+                    WHERE d.activo = TRUE
+                    {residencias_filtro}
+                """
+                
+                params_unificados = params.copy()
+                
+                # Filtros opcionales para documentos unificados
+                if tipo_entidad:
+                    query_unificados += " AND d.tipo_entidad = %s"
+                    params_unificados.append(tipo_entidad)
+                
+                if categoria:
+                    query_unificados += " AND d.categoria_documento = %s"
+                    params_unificados.append(categoria)
+                
+                if id_entidad:
+                    query_unificados += " AND d.id_entidad = %s"
+                    params_unificados.append(id_entidad)
+                
+                # El filtro de residencia ya está aplicado en residencias_filtro
             
             # Segundo: documentos legacy de residentes (tabla documento_residente)
             # Construir filtro de residencias para documento_residente
             residencias_filtro_legacy = ""
-            if residencias_filtro:
+            params_legacy_residencias = []
+            if id_residencia_filtro:
+                # Filtro específico por residencia
+                residencias_filtro_legacy = " AND dr.id_residencia = %s"
+                params_legacy_residencias = [id_residencia_filtro]
+            elif residencias_filtro:
                 # Construir el filtro con el alias correcto
                 if g.id_rol != SUPER_ADMIN_ROLE_ID and g.residencias_acceso:
                     placeholders = ','.join(['%s'] * len(g.residencias_acceso))
                     residencias_filtro_legacy = f" AND dr.id_residencia IN ({placeholders})"
+                    params_legacy_residencias = g.residencias_acceso.copy()
+            else:
+                # Si no hay filtro de residencias (superadmin sin filtro), no aplicar filtro
+                residencias_filtro_legacy = ""
+                params_legacy_residencias = []
             
-            query_legacy = f"""
-                SELECT dr.id_documento, 'residente' as tipo_entidad, dr.id_residente as id_entidad, 
-                       dr.id_residencia,
-                       COALESCE(dr.categoria_documento, 'otra') as categoria_documento, 
-                       dr.tipo_documento, dr.nombre_archivo, dr.descripcion,
-                       dr.fecha_subida, dr.url_archivo, dr.tamaño_bytes, dr.tipo_mime,
-                       NULL as id_usuario_subida, TRUE as activo,
-                       res.nombre as nombre_residencia
-                FROM documento_residente dr
-                JOIN residencia res ON dr.id_residencia = res.id_residencia
-                WHERE 1=1
-                {residencias_filtro_legacy}
-            """
+            # Verificar si existe la columna categoria_documento en documento_residente
+            tiene_categoria = False
+            try:
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'documento_residente' 
+                      AND column_name = 'categoria_documento'
+                """)
+                tiene_categoria = cursor.fetchone() is not None
+            except Exception as e:
+                app.logger.warning(f"Error al verificar columna categoria_documento: {str(e)}")
+                tiene_categoria = False
             
-            params_legacy = params.copy()
+            if tiene_categoria:
+                query_legacy = f"""
+                    SELECT dr.id_documento, 'residente' as tipo_entidad, dr.id_residente as id_entidad, 
+                           dr.id_residencia,
+                           COALESCE(dr.categoria_documento, 'otra') as categoria_documento, 
+                           dr.tipo_documento, dr.nombre_archivo, dr.descripcion,
+                           dr.fecha_subida, dr.url_archivo, dr.tamaño_bytes, dr.tipo_mime,
+                           NULL as id_usuario_subida, TRUE as activo,
+                           res.nombre as nombre_residencia
+                    FROM documento_residente dr
+                    JOIN residencia res ON dr.id_residencia = res.id_residencia
+                    WHERE 1=1
+                    {residencias_filtro_legacy}
+                """
+            else:
+                # Si no tiene columna categoria_documento, usar 'otra' por defecto
+                query_legacy = f"""
+                    SELECT dr.id_documento, 'residente' as tipo_entidad, dr.id_residente as id_entidad, 
+                           dr.id_residencia,
+                           'otra' as categoria_documento, 
+                           dr.tipo_documento, dr.nombre_archivo, dr.descripcion,
+                           dr.fecha_subida, dr.url_archivo, dr.tamaño_bytes, dr.tipo_mime,
+                           NULL as id_usuario_subida, TRUE as activo,
+                           res.nombre as nombre_residencia
+                    FROM documento_residente dr
+                    JOIN residencia res ON dr.id_residencia = res.id_residencia
+                    WHERE 1=1
+                    {residencias_filtro_legacy}
+                """
+            
+            params_legacy = params_legacy_residencias.copy()
             
             # Filtros opcionales para documentos legacy
             if tipo_entidad:
@@ -5360,13 +7983,19 @@ def listar_documentacion():
             
             if categoria and query_legacy:
                 # Para documentos legacy, mapear categorías si es necesario
-                # Si el documento_residente no tiene categoria_documento, se asume 'otra'
-                if categoria == 'otra':
-                    # Incluir documentos sin categoría o con categoría 'otra'
-                    query_legacy += " AND (dr.categoria_documento IS NULL OR dr.categoria_documento = 'otra')"
+                if tiene_categoria:
+                    # Si tiene columna categoria_documento, filtrar por ella
+                    if categoria == 'otra':
+                        # Incluir documentos sin categoría o con categoría 'otra'
+                        query_legacy += " AND (dr.categoria_documento IS NULL OR dr.categoria_documento = 'otra')"
+                    else:
+                        query_legacy += " AND dr.categoria_documento = %s"
+                        params_legacy.append(categoria)
                 else:
-                    query_legacy += " AND dr.categoria_documento = %s"
-                    params_legacy.append(categoria)
+                    # Si no tiene columna categoria_documento, solo mostrar si el filtro es 'otra'
+                    if categoria != 'otra':
+                        # Si el filtro no es 'otra', no mostrar documentos legacy sin categoría
+                        query_legacy = None
             
             if id_entidad and query_legacy:
                 query_legacy += " AND dr.id_residente = %s"
@@ -5375,67 +8004,156 @@ def listar_documentacion():
             # Ejecutar consultas y combinar resultados
             documentos = []
             
-            # Consultar documentos unificados
-            cursor.execute(query_unificados, params_unificados)
-            documentos.extend(cursor.fetchall())
+            # Consultar documentos unificados (solo si la tabla existe y hay query)
+            if query_unificados:
+                try:
+                    cursor.execute(query_unificados, params_unificados)
+                    documentos_unificados = cursor.fetchall()
+                    documentos.extend(documentos_unificados)
+                except Exception as e:
+                    app.logger.error(f"Error al consultar documentos unificados: {str(e)}")
+                    app.logger.error(f"Query: {query_unificados}")
+                    app.logger.error(f"Params: {params_unificados}")
+                    # Continuar con documentos legacy si hay error
             
             # Consultar documentos legacy (solo si no hay filtro de tipo o si es 'residente')
             if query_legacy and (not tipo_entidad or tipo_entidad == 'residente'):
-                cursor.execute(query_legacy, params_legacy)
-                documentos.extend(cursor.fetchall())
+                try:
+                    cursor.execute(query_legacy, params_legacy)
+                    documentos_legacy = cursor.fetchall()
+                    documentos.extend(documentos_legacy)
+                except Exception as e:
+                    app.logger.error(f"Error al consultar documentos legacy: {str(e)}")
+                    app.logger.error(f"Query: {query_legacy}")
+                    app.logger.error(f"Params: {params_legacy}")
+                    # Continuar sin documentos legacy
+            
+            # Consultar facturas de pagos a proveedores (si no hay filtro de tipo o si es 'proveedor')
+            if not tipo_entidad or tipo_entidad == 'proveedor':
+                try:
+                    # Verificar si existe la columna factura_blob_path
+                    cursor.execute("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'pago_proveedor' 
+                          AND column_name = 'factura_blob_path'
+                    """)
+                    tiene_columna_factura = cursor.fetchone() is not None
+                    
+                    if tiene_columna_factura:
+                        query_facturas = f"""
+                            SELECT pp.id_pago, 'pago_proveedor' as tipo_entidad, 
+                                   pp.id_residencia as id_entidad, pp.id_residencia,
+                                   'fiscal' as categoria_documento,
+                                   'Factura' as tipo_documento,
+                                   CONCAT('Factura_', COALESCE(pp.numero_factura, pp.id_pago::text), '.pdf') as nombre_archivo,
+                                   CONCAT('Factura de pago: ', pp.proveedor, ' - ', pp.concepto) as descripcion,
+                                   pp.fecha_creacion as fecha_subida,
+                                   pp.factura_blob_path as url_archivo,
+                                   NULL as tamaño_bytes,
+                                   'application/pdf' as tipo_mime,
+                                   NULL as id_usuario_subida,
+                                   TRUE as activo,
+                                   res.nombre as nombre_residencia
+                            FROM pago_proveedor pp
+                            JOIN residencia res ON pp.id_residencia = res.id_residencia
+                            WHERE pp.factura_blob_path IS NOT NULL 
+                              AND pp.factura_blob_path != ''
+                        """
+                        
+                        params_facturas = []
+                        if id_residencia_filtro:
+                            # Filtro específico por residencia
+                            query_facturas += " AND pp.id_residencia = %s"
+                            params_facturas.append(id_residencia_filtro)
+                        elif residencias_filtro:
+                            if g.id_rol != SUPER_ADMIN_ROLE_ID and g.residencias_acceso:
+                                placeholders = ','.join(['%s'] * len(g.residencias_acceso))
+                                query_facturas += f" AND pp.id_residencia IN ({placeholders})"
+                                params_facturas.extend(g.residencias_acceso)
+                        
+                        cursor.execute(query_facturas, params_facturas)
+                        facturas = cursor.fetchall()
+                        documentos.extend(facturas)
+                except Exception as e:
+                    app.logger.error(f"Error al consultar facturas de pagos: {str(e)}")
+                    # Continuar sin facturas
             
             # Ordenar por fecha_subida descendente
-            documentos.sort(key=lambda x: x[8] if x[8] else datetime.min, reverse=True)
+            try:
+                documentos.sort(key=lambda x: x[8] if x[8] else datetime.min, reverse=True)
+            except Exception as e:
+                app.logger.error(f"Error al ordenar documentos: {str(e)}")
+                # Si falla el ordenamiento, continuar sin ordenar
             
             # Obtener nombres de las entidades
             resultado = []
             for doc in documentos:
-                tipo_ent = doc[1]
-                id_ent = doc[2]
-                nombre_entidad = None
-                
-                # Obtener nombre de la entidad
                 try:
-                    if tipo_ent == 'residente':
-                        cursor.execute("SELECT nombre, apellido FROM residente WHERE id_residente = %s", (id_ent,))
-                        ent = cursor.fetchone()
-                        if ent:
-                            nombre_entidad = f"{ent[0]} {ent[1]}"
-                    elif tipo_ent == 'proveedor':
-                        cursor.execute("SELECT nombre FROM proveedor WHERE id_proveedor = %s", (id_ent,))
-                        ent = cursor.fetchone()
-                        if ent:
-                            nombre_entidad = ent[0]
-                    elif tipo_ent == 'personal':
-                        cursor.execute("SELECT nombre, apellido FROM personal WHERE id_personal = %s", (id_ent,))
-                        ent = cursor.fetchone()
-                        if ent:
-                            nombre_entidad = f"{ent[0]} {ent[1]}"
-                except:
-                    pass
-                
-                url_descarga = None
-                if doc[9]:  # Si hay url_archivo
-                    url_descarga = get_document_url(doc[9], expiration_minutes=60)
-                
-                resultado.append({
-                    'id_documento': doc[0],
-                    'tipo_entidad': doc[1],
-                    'id_entidad': doc[2],
-                    'nombre_entidad': nombre_entidad,
-                    'id_residencia': doc[3],
-                    'nombre_residencia': doc[14],
-                    'categoria_documento': doc[4],
-                    'tipo_documento': doc[5],
-                    'nombre_archivo': doc[6],
-                    'descripcion': doc[7],
-                    'fecha_subida': doc[8].isoformat() if doc[8] else None,
-                    'url_archivo': doc[9],
-                    'url_descarga': url_descarga,
-                    'tamaño_bytes': doc[10],
-                    'tipo_mime': doc[11],
-                    'id_usuario_subida': doc[12]
-                })
+                    # Verificar que el documento tiene suficientes campos
+                    if len(doc) < 15:
+                        app.logger.warning(f"Documento con menos campos de los esperados: {len(doc)} campos")
+                        continue
+                    
+                    tipo_ent = doc[1]
+                    id_ent = doc[2]
+                    nombre_entidad = None
+                    
+                    # Obtener nombre de la entidad
+                    try:
+                        if tipo_ent == 'residente':
+                            cursor.execute("SELECT nombre, apellido FROM residente WHERE id_residente = %s", (id_ent,))
+                            ent = cursor.fetchone()
+                            if ent:
+                                nombre_entidad = f"{ent[0]} {ent[1]}"
+                        elif tipo_ent == 'proveedor':
+                            cursor.execute("SELECT nombre FROM proveedor WHERE id_proveedor = %s", (id_ent,))
+                            ent = cursor.fetchone()
+                            if ent:
+                                nombre_entidad = ent[0]
+                        elif tipo_ent == 'personal':
+                            cursor.execute("SELECT nombre, apellido FROM personal WHERE id_personal = %s", (id_ent,))
+                            ent = cursor.fetchone()
+                            if ent:
+                                nombre_entidad = f"{ent[0]} {ent[1]}"
+                        elif tipo_ent == 'pago_proveedor':
+                            # Para facturas de pagos, obtener el nombre del proveedor del pago
+                            cursor.execute("SELECT proveedor FROM pago_proveedor WHERE id_pago = %s", (doc[0],))
+                            ent = cursor.fetchone()
+                            if ent:
+                                nombre_entidad = ent[0]
+                    except Exception as e:
+                        app.logger.warning(f"Error al obtener nombre de entidad {tipo_ent} {id_ent}: {str(e)}")
+                    
+                    url_descarga = None
+                    if doc[9]:  # Si hay url_archivo
+                        try:
+                            url_descarga = get_document_url(doc[9], expiration_minutes=60)
+                        except Exception as e:
+                            app.logger.warning(f"Error al generar URL de descarga: {str(e)}")
+                    
+                    resultado.append({
+                        'id_documento': doc[0],
+                        'tipo_entidad': doc[1],
+                        'id_entidad': doc[2],
+                        'nombre_entidad': nombre_entidad,
+                        'id_residencia': doc[3],
+                        'nombre_residencia': doc[14] if len(doc) > 14 else None,
+                        'categoria_documento': doc[4],
+                        'tipo_documento': doc[5],
+                        'nombre_archivo': doc[6],
+                        'descripcion': doc[7],
+                        'fecha_subida': doc[8].isoformat() if doc[8] else None,
+                        'url_archivo': doc[9],
+                        'url_descarga': url_descarga,
+                        'tamaño_bytes': doc[10],
+                        'tipo_mime': doc[11],
+                        'id_usuario_subida': doc[12]
+                    })
+                except Exception as e:
+                    app.logger.error(f"Error al procesar documento: {str(e)}")
+                    app.logger.error(f"Documento: {doc}")
+                    continue
             
             return jsonify({
                 'documentos': resultado,
@@ -5651,19 +8369,59 @@ def eliminar_documento_unificado(id_documento):
 
 @app.route('/api/v1/documentacion/<int:id_documento>/descargar', methods=['GET'])
 def descargar_documento_unificado(id_documento):
-    """Genera una URL firmada para descargar un documento."""
+    """
+    Genera una URL firmada para descargar un documento.
+    Soporta documentos de la tabla 'documento', 'documento_residente' y facturas de 'pago_proveedor'.
+    """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
-            # Buscar primero en la tabla unificada 'documento'
-            cursor.execute("""
-                SELECT url_archivo, id_residencia FROM documento
-                WHERE id_documento = %s AND activo = TRUE
-            """, (id_documento,))
+            # Buscar primero en pago_proveedor (facturas)
+            doc = None
+            try:
+                cursor.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name = 'pago_proveedor' 
+                      AND column_name = 'factura_blob_path'
+                """)
+                tiene_columna_factura = cursor.fetchone() is not None
+                
+                if tiene_columna_factura:
+                    cursor.execute("""
+                        SELECT factura_blob_path, id_residencia, proveedor FROM pago_proveedor
+                        WHERE id_pago = %s AND factura_blob_path IS NOT NULL AND factura_blob_path != ''
+                    """, (id_documento,))
+                    
+                    factura = cursor.fetchone()
+                    if factura:
+                        # Verificar permisos
+                        is_valid, error_response = validate_residencia_access(factura[1])
+                        if not is_valid:
+                            return error_response
+                        
+                        # Generar URL de descarga y devolver inmediatamente
+                        url_descarga = get_document_url(factura[0], expiration_minutes=60)
+                        if url_descarga:
+                            return jsonify({
+                                'url_descarga': url_descarga,
+                                'nombre_archivo': f"Factura_{factura[2] or id_documento}.pdf"
+                            }), 200
+                        else:
+                            return jsonify({'error': 'Error al generar URL de descarga'}), 500
+            except Exception as e:
+                app.logger.warning(f"Error al buscar factura: {str(e)}")
             
-            doc = cursor.fetchone()
+            # Si no se encuentra en facturas, buscar en la tabla unificada 'documento'
+            if not doc:
+                cursor.execute("""
+                    SELECT url_archivo, id_residencia FROM documento
+                    WHERE id_documento = %s AND activo = TRUE
+                """, (id_documento,))
+                
+                doc = cursor.fetchone()
             
             # Si no se encuentra, buscar en documento_residente (legacy)
             if not doc:
