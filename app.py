@@ -25,16 +25,33 @@ from validators import (
 )
 import mimetypes
 
-# Cargar variables de entorno desde .env
+# Cargar variables de entorno desde .env (solo en desarrollo local)
 load_dotenv()
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)  # Habilitar CORS para el frontend
 
 # Configuración
+# En Cloud Run, --set-secrets crea variables de entorno automáticamente
+# Permitir que la aplicación se importe sin JWT_SECRET_KEY (se validará al iniciar)
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')
-if not JWT_SECRET_KEY:
-    raise ValueError("JWT_SECRET_KEY debe estar definida como variable de entorno")
+
+# Función para validar JWT_SECRET_KEY cuando sea necesario
+def get_jwt_secret():
+    """Obtiene JWT_SECRET_KEY, validando que esté disponible."""
+    secret = os.getenv('JWT_SECRET_KEY')
+    if not secret:
+        # Intentar leer desde archivo como fallback (si se monta manualmente)
+        secret_path = '/secrets/jwt-secret-key'
+        if os.path.exists(secret_path):
+            try:
+                with open(secret_path, 'r') as f:
+                    secret = f.read().strip()
+            except:
+                pass
+    if not secret:
+        raise ValueError("JWT_SECRET_KEY debe estar definida como variable de entorno o archivo secreto")
+    return secret
 
 app.config['JSON_SORT_KEYS'] = False
 app.config['JSON_AS_ASCII'] = False  # Permitir caracteres Unicode en JSON (ñ, acentos, etc.)
@@ -644,11 +661,24 @@ def login():
         
         try:
             app.logger.info(f"Intento de login para email: {email}")
-            # Buscar usuario por email (SIN id_residencia, ahora se obtiene de usuario_residencia)
-            cursor.execute(
-                "SELECT id_usuario, email, password_hash, id_rol, requiere_cambio_clave FROM usuario WHERE email = %s",
-                (email,)
-            )
+            
+            # Verificar si la columna requiere_cambio_clave existe
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                AND table_name = 'usuario'
+                AND column_name = 'requiere_cambio_clave'
+            """)
+            tiene_requiere_cambio = cursor.fetchone() is not None
+            
+            # Construir query según columnas disponibles
+            if tiene_requiere_cambio:
+                query = "SELECT id_usuario, email, password_hash, id_rol, requiere_cambio_clave FROM usuario WHERE email = %s"
+            else:
+                query = "SELECT id_usuario, email, password_hash, id_rol FROM usuario WHERE email = %s"
+            
+            cursor.execute(query, (email,))
             usuario = cursor.fetchone()
             
             if not usuario:
@@ -656,7 +686,13 @@ def login():
                 log_security_event('login_fallido', None, {'email': email, 'razon': 'usuario_no_encontrado'})
                 return jsonify({'error': 'Credenciales inválidas'}), 401
             
-            id_usuario, email_db, password_hash, id_rol, requiere_cambio_clave = usuario
+            # Desempaquetar valores de forma segura
+            id_usuario = usuario[0]
+            email_db = usuario[1]
+            password_hash = usuario[2]
+            id_rol = usuario[3]
+            requiere_cambio_clave = usuario[4] if tiene_requiere_cambio and len(usuario) > 4 else False
+            
             app.logger.info(f"Usuario encontrado: id={id_usuario}, rol={id_rol}, requiere_cambio_clave={requiere_cambio_clave}")
             
             # Verificar contraseña
@@ -679,7 +715,7 @@ def login():
                 'exp': datetime.utcnow() + timedelta(hours=24)
             }
             
-            token = jwt.encode(payload, JWT_SECRET_KEY, algorithm='HS256')
+            token = jwt.encode(payload, get_jwt_secret(), algorithm='HS256')
             
             log_security_event('login_exitoso', id_usuario, {'email': email, 'requiere_cambio_clave': requiere_cambio_clave})
             
@@ -7921,24 +7957,89 @@ def eliminar_residencia(id_residencia):
 def obtener_usuario_actual():
     """Obtiene la información del usuario actual."""
     try:
+        # Verificar que g.id_usuario existe (debería estar establecido por before_request)
+        if not hasattr(g, 'id_usuario') or not g.id_usuario:
+            app.logger.error("No se encontró id_usuario en g. Verificar autenticación.")
+            return jsonify({'error': 'Usuario no autenticado'}), 401
+        
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
             # Consulta que maneja tanto usuarios con id_residencia como super_admin sin id_residencia
+            # Verificar primero si las columnas nombre y apellido existen
             cursor.execute("""
-                SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.id_residencia,
-                       r.nombre as nombre_rol, res.nombre as nombre_residencia, u.activo, u.requiere_cambio_clave
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                AND table_name = 'usuario'
+                AND column_name IN ('nombre', 'apellido')
+            """)
+            columnas_existentes = [row[0] for row in cursor.fetchall()]
+            tiene_nombre = 'nombre' in columnas_existentes
+            tiene_apellido = 'apellido' in columnas_existentes
+            
+            # Construir SELECT dinámicamente según columnas disponibles
+            campos_select = ['u.id_usuario', 'u.email', 'u.id_rol', 'u.id_residencia', 'r.nombre as nombre_rol']
+            campos_index = {'id_usuario': 0, 'email': 1, 'id_rol': 2, 'id_residencia': 3, 'nombre_rol': 4}
+            indice_actual = 5
+            
+            if tiene_nombre:
+                campos_select.append('u.nombre')
+                campos_index['nombre'] = indice_actual
+                indice_actual += 1
+            else:
+                campos_index['nombre'] = None
+            
+            if tiene_apellido:
+                campos_select.append('u.apellido')
+                campos_index['apellido'] = indice_actual
+                indice_actual += 1
+            else:
+                campos_index['apellido'] = None
+            
+            campos_select.extend(['res.nombre as nombre_residencia', 'u.activo'])
+            campos_index['nombre_residencia'] = indice_actual
+            campos_index['activo'] = indice_actual + 1
+            indice_actual += 2
+            
+            # Verificar si existe requiere_cambio_clave
+            cursor.execute("""
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                AND table_name = 'usuario'
+                AND column_name = 'requiere_cambio_clave'
+            """)
+            tiene_requiere_cambio = cursor.fetchone() is not None
+            
+            if tiene_requiere_cambio:
+                campos_select.append('u.requiere_cambio_clave')
+                campos_index['requiere_cambio_clave'] = indice_actual
+            else:
+                campos_index['requiere_cambio_clave'] = None
+            
+            query = f"""
+                SELECT {', '.join(campos_select)}
                 FROM usuario u
                 JOIN rol r ON u.id_rol = r.id_rol
                 LEFT JOIN residencia res ON u.id_residencia = res.id_residencia
                 WHERE u.id_usuario = %s
-            """, (g.id_usuario,))
+            """
             
+            cursor.execute(query, (g.id_usuario,))
             usuario = cursor.fetchone()
             
             if not usuario:
+                app.logger.warning(f"Usuario con id {g.id_usuario} no encontrado en la base de datos")
                 return jsonify({'error': 'Usuario no encontrado'}), 404
+            
+            # Extraer valores de forma segura
+            nombre = usuario[campos_index['nombre']] if campos_index['nombre'] is not None and len(usuario) > campos_index['nombre'] else None
+            apellido = usuario[campos_index['apellido']] if campos_index['apellido'] is not None and len(usuario) > campos_index['apellido'] else None
+            id_residencia = usuario[campos_index['id_residencia']] if len(usuario) > campos_index['id_residencia'] else None
+            nombre_residencia = usuario[campos_index['nombre_residencia']] if len(usuario) > campos_index['nombre_residencia'] else None
+            requiere_cambio_clave = usuario[campos_index['requiere_cambio_clave']] if campos_index['requiere_cambio_clave'] is not None and len(usuario) > campos_index['requiere_cambio_clave'] else False
             
             # Obtener residencias asignadas
             residencias = []
@@ -7974,30 +8075,34 @@ def obtener_usuario_actual():
                         residencias = [{'id_residencia': r[0], 'nombre': r[1]} for r in residencias_data]
                 else:
                     # Modo legacy: usar id_residencia de usuario
-                    if usuario[5]:  # id_residencia
-                        cursor.execute("SELECT id_residencia, nombre FROM residencia WHERE id_residencia = %s AND activa = TRUE", (usuario[5],))
+                    if id_residencia:
+                        cursor.execute("SELECT id_residencia, nombre FROM residencia WHERE id_residencia = %s AND activa = TRUE", (id_residencia,))
                         res_data = cursor.fetchone()
                         if res_data:
                             residencias = [{'id_residencia': res_data[0], 'nombre': res_data[1]}]
             except Exception as e:
                 app.logger.error(f"Error al obtener residencias del usuario: {str(e)}")
+                import traceback
+                app.logger.error(traceback.format_exc())
                 # Si falla, usar id_residencia del usuario si existe
-                if usuario[5]:
-                    residencias = [{'id_residencia': usuario[5], 'nombre': usuario[7] if usuario[7] else 'N/A'}]
+                if id_residencia:
+                    residencias = [{'id_residencia': id_residencia, 'nombre': nombre_residencia if nombre_residencia else 'N/A'}]
             
-            return jsonify({
-                'id_usuario': usuario[0],
-                'email': usuario[1],
-                'nombre': usuario[2],
-                'apellido': usuario[3],
-                'id_rol': usuario[4],
-                'id_residencia': usuario[5],  # Puede ser NULL para super_admin
-                'nombre_rol': usuario[6],
-                'nombre_residencia': usuario[7] if usuario[7] else None,  # NULL para super_admin
-                'activo': usuario[8],
-                'requiere_cambio_clave': usuario[9] if len(usuario) > 9 else False,
-                'residencias': residencias  # Lista de residencias asignadas
-            }), 200
+            respuesta = {
+                'id_usuario': usuario[campos_index['id_usuario']],
+                'email': usuario[campos_index['email']],
+                'nombre': nombre,
+                'apellido': apellido,
+                'id_rol': usuario[campos_index['id_rol']],
+                'id_residencia': id_residencia,
+                'nombre_rol': usuario[campos_index['nombre_rol']],
+                'nombre_residencia': nombre_residencia,
+                'activo': usuario[campos_index['activo']] if len(usuario) > campos_index['activo'] else True,
+                'requiere_cambio_clave': requiere_cambio_clave,
+                'residencias': residencias
+            }
+            
+            return jsonify(respuesta), 200
             
         finally:
             cursor.close()
@@ -8007,7 +8112,7 @@ def obtener_usuario_actual():
         app.logger.error(f"Error al obtener usuario actual: {str(e)}")
         import traceback
         app.logger.error(traceback.format_exc())
-        return jsonify({'error': 'Error al obtener información del usuario'}), 500
+        return jsonify({'error': f'Error al obtener información del usuario: {str(e)}'}), 500
 
 
 @app.route('/api/v1/usuarios', methods=['GET'])
@@ -8752,20 +8857,20 @@ def listar_documentacion():
                     # Obtener nombre de la entidad
                     try:
                         if tipo_ent == 'residente':
-                        cursor.execute("SELECT nombre, apellido FROM residente WHERE id_residente = %s", (id_ent,))
-                        ent = cursor.fetchone()
-                        if ent:
-                            nombre_entidad = f"{ent[0]} {ent[1]}"
-                    elif tipo_ent == 'proveedor':
-                        cursor.execute("SELECT nombre FROM proveedor WHERE id_proveedor = %s", (id_ent,))
-                        ent = cursor.fetchone()
-                        if ent:
-                            nombre_entidad = ent[0]
-                    elif tipo_ent == 'personal':
-                        cursor.execute("SELECT nombre, apellido FROM personal WHERE id_personal = %s", (id_ent,))
-                        ent = cursor.fetchone()
-                        if ent:
-                            nombre_entidad = f"{ent[0]} {ent[1]}"
+                            cursor.execute("SELECT nombre, apellido FROM residente WHERE id_residente = %s", (id_ent,))
+                            ent = cursor.fetchone()
+                            if ent:
+                                nombre_entidad = f"{ent[0]} {ent[1]}"
+                        elif tipo_ent == 'proveedor':
+                            cursor.execute("SELECT nombre FROM proveedor WHERE id_proveedor = %s", (id_ent,))
+                            ent = cursor.fetchone()
+                            if ent:
+                                nombre_entidad = ent[0]
+                        elif tipo_ent == 'personal':
+                            cursor.execute("SELECT nombre, apellido FROM personal WHERE id_personal = %s", (id_ent,))
+                            ent = cursor.fetchone()
+                            if ent:
+                                nombre_entidad = f"{ent[0]} {ent[1]}"
                         elif tipo_ent == 'pago_proveedor':
                             # Para facturas de pagos, obtener el nombre del proveedor del pago
                             cursor.execute("SELECT proveedor FROM pago_proveedor WHERE id_pago = %s", (doc[0],))
@@ -8774,32 +8879,32 @@ def listar_documentacion():
                                 nombre_entidad = ent[0]
                     except Exception as e:
                         app.logger.warning(f"Error al obtener nombre de entidad {tipo_ent} {id_ent}: {str(e)}")
-                
-                url_descarga = None
-                if doc[9]:  # Si hay url_archivo
+                    
+                    url_descarga = None
+                    if doc[9]:  # Si hay url_archivo
                         try:
-                    url_descarga = get_document_url(doc[9], expiration_minutes=60)
+                            url_descarga = get_document_url(doc[9], expiration_minutes=60)
                         except Exception as e:
                             app.logger.warning(f"Error al generar URL de descarga: {str(e)}")
-                
-                resultado.append({
-                    'id_documento': doc[0],
-                    'tipo_entidad': doc[1],
-                    'id_entidad': doc[2],
-                    'nombre_entidad': nombre_entidad,
-                    'id_residencia': doc[3],
+                    
+                    resultado.append({
+                        'id_documento': doc[0],
+                        'tipo_entidad': doc[1],
+                        'id_entidad': doc[2],
+                        'nombre_entidad': nombre_entidad,
+                        'id_residencia': doc[3],
                         'nombre_residencia': doc[14] if len(doc) > 14 else None,
-                    'categoria_documento': doc[4],
-                    'tipo_documento': doc[5],
-                    'nombre_archivo': doc[6],
-                    'descripcion': doc[7],
-                    'fecha_subida': doc[8].isoformat() if doc[8] else None,
-                    'url_archivo': doc[9],
-                    'url_descarga': url_descarga,
-                    'tamaño_bytes': doc[10],
-                    'tipo_mime': doc[11],
-                    'id_usuario_subida': doc[12]
-                })
+                        'categoria_documento': doc[4],
+                        'tipo_documento': doc[5],
+                        'nombre_archivo': doc[6],
+                        'descripcion': doc[7],
+                        'fecha_subida': doc[8].isoformat() if doc[8] else None,
+                        'url_archivo': doc[9],
+                        'url_descarga': url_descarga,
+                        'tamaño_bytes': doc[10],
+                        'tipo_mime': doc[11],
+                        'id_usuario_subida': doc[12]
+                    })
                 except Exception as e:
                     app.logger.error(f"Error al procesar documento: {str(e)}")
                     app.logger.error(f"Documento: {doc}")
@@ -9066,12 +9171,12 @@ def descargar_documento_unificado(id_documento):
             
             # Si no se encuentra en facturas, buscar en la tabla unificada 'documento'
             if not doc:
-            cursor.execute("""
-                SELECT url_archivo, id_residencia FROM documento
-                WHERE id_documento = %s AND activo = TRUE
-            """, (id_documento,))
-            
-            doc = cursor.fetchone()
+                cursor.execute("""
+                    SELECT url_archivo, id_residencia FROM documento
+                    WHERE id_documento = %s AND activo = TRUE
+                """, (id_documento,))
+                
+                doc = cursor.fetchone()
             
             # Si no se encuentra, buscar en documento_residente (legacy)
             if not doc:

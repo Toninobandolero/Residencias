@@ -41,14 +41,19 @@ def get_db_connection():
     db_user = os.getenv('DB_USER')
     db_password = os.getenv('DB_PASSWORD')
     
+    # Detectar si estamos en Cloud Run (Unix sockets solo funcionan ahí)
+    # Cloud Run tiene el directorio /cloudsql montado
+    is_cloud_run = os.path.exists('/cloudsql')
+    
     # Determinar método de conexión
-    if cloud_sql_connection:
+    # Solo usar Unix socket si estamos en Cloud Run Y no se está usando proxy
+    if cloud_sql_connection and is_cloud_run and not use_proxy:
         # Modo Cloud Run: usar Unix socket
         # La ruta del socket es: /cloudsql/PROYECTO:REGION:INSTANCIA
         db_host = f'/cloudsql/{cloud_sql_connection}'
         db_port = None  # No se usa puerto con Unix socket
     elif use_proxy:
-        # Modo Cloud SQL Proxy: conectar a localhost
+        # Modo Cloud SQL Proxy: conectar a localhost (desarrollo local)
         db_host = '127.0.0.1'
         db_port = os.getenv('DB_PORT', '5432')
     else:

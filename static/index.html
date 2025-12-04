@@ -9964,81 +9964,17 @@
         }
         
         function nuevaEntidadFiscal() {
-            // Crear modal dinámico para nueva entidad fiscal
-            const modalHTML = `
-                <div id="modalNuevaEntidadFiscal" class="modal" style="display: block;">
-                    <div class="modal-content" style="max-width: 600px;">
-                        <div class="modal-header">
-                            <h2>Nueva Entidad Fiscal</h2>
-                            <button class="close-modal" onclick="cerrarModalNuevaEntidadFiscal()">&times;</button>
-                        </div>
-                        <form id="formNuevaEntidadFiscal" onsubmit="guardarNuevaEntidadFiscal(event)">
-                            <div class="form-section">
-                                <div class="form-group">
-                                    <label for="nueva_entidad_nombre">Nombre *</label>
-                                    <input type="text" id="nueva_entidad_nombre" name="nombre" required placeholder="Ej: Sociedad Gestora SL" maxlength="255">
-                                </div>
-                                <div class="form-group">
-                                    <label for="nueva_entidad_nif">NIF/CIF</label>
-                                    <input type="text" id="nueva_entidad_nif" name="nif" placeholder="A12345678 o B12345678" maxlength="50">
-                                </div>
-                                <div class="form-group">
-                                    <label for="nueva_entidad_direccion">Dirección</label>
-                                    <input type="text" id="nueva_entidad_direccion" name="direccion" placeholder="Calle y número" maxlength="500">
-                                </div>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                    <div class="form-group">
-                                        <label for="nueva_entidad_telefono">Teléfono</label>
-                                        <input type="text" id="nueva_entidad_telefono" name="telefono" placeholder="612345678" maxlength="50">
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="nueva_entidad_email">Email</label>
-                                        <input type="email" id="nueva_entidad_email" name="email" placeholder="contacto@sociedad.es" maxlength="255">
-                                    </div>
-                                </div>
-                            </div>
-                            <div style="display: flex; gap: 10px; margin-top: 20px;">
-                                <button type="submit" style="flex: 1; background: #667eea;">Crear y Asociar</button>
-                                <button type="button" onclick="cerrarModalNuevaEntidadFiscal()" style="flex: 1; background: #6c757d;">Cancelar</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            `;
+            // Abrir modal para crear nueva entidad fiscal (similar a proveedor)
+            // Por ahora, mostrar un prompt simple
+            const nombre = prompt('Nombre de la nueva entidad fiscal:');
+            if (!nombre || nombre.trim() === '') return;
             
-            // Insertar modal en el body si no existe
-            let modal = document.getElementById('modalNuevaEntidadFiscal');
-            if (!modal) {
-                document.body.insertAdjacentHTML('beforeend', modalHTML);
-            } else {
-                modal.style.display = 'block';
-            }
-        }
-        
-        function cerrarModalNuevaEntidadFiscal() {
-            const modal = document.getElementById('modalNuevaEntidadFiscal');
-            if (modal) {
-                modal.style.display = 'none';
-                document.getElementById('formNuevaEntidadFiscal').reset();
-            }
-        }
-        
-        async function guardarNuevaEntidadFiscal(event) {
-            event.preventDefault();
+            const nif = prompt('NIF/CIF (opcional):');
+            const direccion = prompt('Dirección (opcional):');
+            const telefono = prompt('Teléfono (opcional):');
+            const email = prompt('Email (opcional):');
             
-            const nombre = document.getElementById('nueva_entidad_nombre').value.trim();
-            if (!nombre) {
-                alert('El nombre es obligatorio');
-                return;
-            }
-            
-            const nif = document.getElementById('nueva_entidad_nif').value.trim();
-            const direccion = document.getElementById('nueva_entidad_direccion').value.trim();
-            const telefono = document.getElementById('nueva_entidad_telefono').value.trim();
-            const email = document.getElementById('nueva_entidad_email').value.trim();
-            
-            await crearReceiverYAsociar(nombre, nif || null, direccion || null, telefono || null, email || null);
-            cerrarModalNuevaEntidadFiscal();
+            crearReceiverYAsociar(nombre.trim(), nif?.trim(), direccion?.trim(), telefono?.trim(), email?.trim());
         }
         
         async function crearReceiverYAsociar(nombre, nif, direccion, telefono, email) {

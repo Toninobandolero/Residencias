@@ -1,0 +1,52 @@
+================================================================================
+  DESPLIEGUE A PRODUCCION - GOOGLE CLOUD RUN
+================================================================================
+
+PASO 1: INSTALAR GOOGLE CLOUD SDK
+----------------------------------
+1. Descarga desde: https://cloud.google.com/sdk/docs/install
+2. Ejecuta el instalador
+3. REINICIA PowerShell
+
+PASO 2: EJECUTAR DESPLIEGUE
+----------------------------
+Ejecuta este comando (reemplaza TU_CONTRASEÑA_BD con tu contraseña real):
+
+.\DESPLEGAR_AHORA.ps1 -DB_PASSWORD "TU_CONTRASEÑA_BD"
+
+O si quieres especificar tambien el JWT secret:
+
+.\DESPLEGAR_AHORA.ps1 -JWT_SECRET "TU_CLAVE_JWT" -DB_PASSWORD "TU_CONTRASEÑA_BD"
+
+El script hara TODO automaticamente:
+- Autenticacion
+- Configuracion del proyecto
+- Habilitacion de APIs
+- Creacion de repositorio Docker
+- Creacion de secretos (si no existen)
+- Despliegue de la aplicacion
+
+PASO 3: OBTENER URL
+--------------------
+Despues del despliegue, el script te mostrara la URL de tu aplicacion.
+
+================================================================================
+  ALTERNATIVA: DESPLIEGUE MANUAL DESDE CONSOLA WEB
+================================================================================
+
+Si prefieres usar la consola web de Google Cloud:
+
+1. Ve a: https://console.cloud.google.com/run
+2. Click en "CREATE SERVICE"
+3. Selecciona "Deploy one revision from a source repository"
+4. Conecta tu repositorio o sube el codigo
+5. Configura:
+   - Service name: violetas-app
+   - Region: europe-west9
+   - Authentication: Allow unauthenticated invocations
+   - Cloud SQL connections: residencias-479706:europe-west9:residencias
+   - Environment variables: (ver GUIA_DESPLIEGUE_PRODUCCION.md)
+   - Secrets: jwt-secret-key, db-password
+
+================================================================================
+
