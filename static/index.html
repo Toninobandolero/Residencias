@@ -103,6 +103,23 @@
 
         .user-menu-container {
             position: relative;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-left: auto;
+        }
+        
+        #userNameDisplay {
+            font-size: 14px;
+            font-weight: 500;
+            color: #333333;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+        }
+        
+        #userNameText {
+            font-size: 14px;
         }
 
         .user-icon-btn {
@@ -645,6 +662,9 @@
                 </div>
             </div>
             <div class="user-menu-container">
+                <div id="userNameDisplay">
+                    <span id="userNameText">-</span>
+                </div>
                 <button class="user-icon-btn" onclick="toggleUserMenu()" title="Menú de usuario">
                     <img src="/static/icons/medical/user-medical.svg" alt="Usuario" style="width: 24px; height: 24px;">
                 </button>
@@ -1529,7 +1549,7 @@
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
                         <button type="button" onclick="procesarFacturaCompleta()" id="btnProcesarFacturaCompleta" style="flex: 1; padding: 12px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" fill="currentColor"/>
+                                <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="currentColor"/>
                             </svg>
                             Procesar Factura
                         </button>
@@ -1781,6 +1801,27 @@
                     </div>
                 </div>
                 
+                <div class="form-section" id="residenciaEntidadesFiscalesSection" style="display: none;">
+                    <h3>Entidades Fiscales (Sociedades)</h3>
+                    <p style="color: #666; font-size: 14px; margin-bottom: 15px;">
+                        Las entidades fiscales son las sociedades que gestionan esta residencia. Puede haber más de una.
+                    </p>
+                    <div id="residenciaReceiversList" style="margin-bottom: 15px;">
+                        <!-- Lista de receivers asociados se cargará aquí -->
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center; margin-top: 15px;">
+                        <select id="residenciaReceiverSelect" style="flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <option value="">Seleccione una entidad fiscal existente</option>
+                        </select>
+                        <button type="button" onclick="agregarReceiverAResidencia()" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap;">
+                            + Añadir Existente
+                        </button>
+                        <button type="button" onclick="nuevaEntidadFiscal()" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap;">
+                            + Nueva Entidad
+                        </button>
+                    </div>
+                </div>
+                
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
                     <button type="submit" id="saveResidenciaBtn" style="flex: 1;">Guardar</button>
                     <button type="button" onclick="closeModal('modalResidencia')" style="flex: 1; background: #6c757d;">Cancelar</button>
@@ -1919,7 +1960,7 @@
                 const payload = JSON.parse(atob(token.split('.')[1]));
                 
                 // Mostrar dashboard
-                showDashboard(token);
+                await showDashboard(token);
                 
                 // Actualizar información del usuario en el menú
                 const userMenuInfo = document.getElementById('userMenuInfo');
@@ -1927,7 +1968,7 @@
                     userMenuInfo.innerHTML = `
                         <div class="user-menu-info-item"><strong>ID Usuario:</strong> ${payload.id_usuario}</div>
                         <div class="user-menu-info-item"><strong>Rol ID:</strong> ${payload.id_rol}</div>
-                        <div class="user-menu-info-item"><strong>Residencia ID:</strong> ${payload.id_residencia}</div>
+                        <div class="user-menu-info-item"><strong>Residencia ID:</strong> ${payload.id_residencia || 'N/A'}</div>
                         <div class="user-menu-info-item"><strong>Expira:</strong> ${new Date(payload.exp * 1000).toLocaleString('es-ES')}</div>
                     `;
                 }
@@ -1939,8 +1980,42 @@
                 logout();
             }
         }
+        
+        async function cargarNombreUsuario(token) {
+            try {
+                const response = await fetch(`${API_URL}/api/v1/usuarios/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const usuario = await response.json();
+                    const userNameText = document.getElementById('userNameText');
+                    if (userNameText) {
+                        // Mostrar nombre completo o solo nombre si no hay apellido
+                        const nombreCompleto = usuario.nombre || '';
+                        const apellido = usuario.apellido || '';
+                        const nombreMostrar = nombreCompleto + (apellido ? ` ${apellido}` : '');
+                        userNameText.textContent = nombreMostrar || usuario.email || 'Usuario';
+                    }
+                } else {
+                    console.error('Error al cargar información del usuario');
+                    const userNameText = document.getElementById('userNameText');
+                    if (userNameText) {
+                        userNameText.textContent = 'Usuario';
+                    }
+                }
+            } catch (error) {
+                console.error('Error al cargar nombre del usuario:', error);
+                const userNameText = document.getElementById('userNameText');
+                if (userNameText) {
+                    userNameText.textContent = 'Usuario';
+                }
+            }
+        }
 
-        function showDashboard(token) {
+        async function showDashboard(token) {
             document.getElementById('loginForm').style.display = 'none';
             document.getElementById('loginHeader').style.display = 'none';
             document.getElementById('dashboard').style.display = 'block';
@@ -1952,6 +2027,9 @@
             }
             // tokenDisplay no existe en el HTML inicial, solo se crea dinámicamente
             // No intentamos acceder a él aquí para evitar errores
+            
+            // Cargar información del usuario para mostrar su nombre
+            await cargarNombreUsuario(token);
         }
 
         function logout() {
@@ -4181,31 +4259,82 @@
         }
 
         async function abrirModalProcesarFactura() {
+            // Limpiar variables de cámara al abrir el modal
+            detenerCamara();
+            imagenCapturada = null;
+            
             // Resetear el modal
             document.getElementById('procesarFacturaContent').innerHTML = `
                 <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
-                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">Paso 1: Subir Factura PDF</h3>
-                    <div class="form-group" style="margin-top: 15px;">
-                        <label for="procesar_factura_archivo" style="display: block; margin-bottom: 10px; font-weight: 600; color: #333;">Seleccionar Factura (PDF)</label>
-                        <label for="procesar_factura_archivo" style="display: flex; align-items: center; padding: 15px; border: 2px dashed #667eea; border-radius: 8px; background: #f8f9ff; cursor: pointer; transition: all 0.3s ease;">
-                            <input type="file" id="procesar_factura_archivo" accept=".pdf" style="position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none;" onchange="actualizarNombreArchivoProcesar()">
-                            <div style="display: flex; align-items: center; gap: 15px; width: 100%;">
-                                <img src="/static/icons/medical/file-medical.svg" alt="Archivo" style="width: 32px; height: 32px; filter: brightness(0) saturate(100%) invert(27%) sepia(95%) saturate(1352%) hue-rotate(230deg) brightness(99%) contrast(96%);">
-                                <div style="flex: 1;">
-                                    <div id="procesar_factura_texto" style="color: #667eea; font-weight: 500; font-size: 16px;">
-                                        Seleccionar archivo PDF...
-                                    </div>
-                                    <div style="color: #999; font-size: 12px; margin-top: 4px;">
-                                        Máximo 10MB
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">Paso 1: Subir o Capturar Factura</h3>
+                    
+                    <!-- Opciones: Archivo o Cámara -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <button type="button" onclick="mostrarOpcionArchivo()" id="btnOpcionArchivo" style="padding: 15px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);">
+                                <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="currentColor"/>
+                            </svg>
+                            Seleccionar Archivo
+                        </button>
+                        <button type="button" onclick="mostrarOpcionCamara()" id="btnOpcionCamara" style="padding: 15px; background: #48bb78; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);">
+                                <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0 -6 0" fill="currentColor"/>
+                                <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z" fill="currentColor"/>
+                            </svg>
+                            Capturar con Cámara
+                        </button>
+                    </div>
+                    
+                    <!-- Contenedor para opción de archivo -->
+                    <div id="opcionArchivoContainer" style="display: block;">
+                        <div class="form-group" style="margin-top: 15px;">
+                            <label for="procesar_factura_archivo" style="display: block; margin-bottom: 10px; font-weight: 600; color: #333;">Seleccionar Factura (PDF o Imagen)</label>
+                            <label for="procesar_factura_archivo" style="display: flex; align-items: center; padding: 15px; border: 2px dashed #667eea; border-radius: 8px; background: #f8f9ff; cursor: pointer; transition: all 0.3s ease;">
+                                <input type="file" id="procesar_factura_archivo" accept=".pdf,.jpg,.jpeg,.png" style="position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none;" onchange="actualizarNombreArchivoProcesar()">
+                                <div style="display: flex; align-items: center; gap: 15px; width: 100%;">
+                                    <img src="/static/icons/medical/file-medical.svg" alt="Archivo" style="width: 32px; height: 32px; filter: brightness(0) saturate(100%) invert(27%) sepia(95%) saturate(1352%) hue-rotate(230deg) brightness(99%) contrast(96%);">
+                                    <div style="flex: 1;">
+                                        <div id="procesar_factura_texto" style="color: #667eea; font-weight: 500; font-size: 16px;">
+                                            Seleccionar archivo PDF o imagen...
+                                        </div>
+                                        <div style="color: #999; font-size: 12px; margin-top: 4px;">
+                                            Máximo 10MB (PDF, JPG, PNG)
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </label>
+                            </label>
+                        </div>
                     </div>
+                    
+                    <!-- Contenedor para opción de cámara -->
+                    <div id="opcionCamaraContainer" style="display: none;">
+                        <div style="margin-top: 15px;">
+                            <div id="camaraPreviewContainer" style="display: none; margin-bottom: 15px;">
+                                <video id="camaraVideo" autoplay playsinline style="width: 100%; max-width: 100%; border-radius: 8px; background: #000;"></video>
+                                <canvas id="camaraCanvas" style="display: none;"></canvas>
+                                <img id="camaraPreview" style="display: none; width: 100%; max-width: 100%; border-radius: 8px; margin-top: 10px;">
+                            </div>
+                            <div id="camaraControls" style="display: flex; gap: 10px; justify-content: center;">
+                                <button type="button" onclick="iniciarCamara()" id="btnIniciarCamara" style="padding: 12px 20px; background: #48bb78; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                                    Iniciar Cámara
+                                </button>
+                                <button type="button" onclick="capturarFoto()" id="btnCapturarFoto" style="display: none; padding: 12px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                                    Capturar Foto
+                                </button>
+                                <button type="button" onclick="reiniciarCamara()" id="btnReiniciarCamara" style="display: none; padding: 12px 20px; background: #ed8936; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                                    Volver a Capturar
+                                </button>
+                                <button type="button" onclick="detenerCamara()" id="btnDetenerCamara" style="display: none; padding: 12px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                                    Detener Cámara
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
                         <button type="button" onclick="procesarFacturaCompleta()" id="btnProcesarFacturaCompleta" style="flex: 1; padding: 12px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);">
-                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" fill="currentColor"/>
+                                <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="currentColor"/>
                             </svg>
                             Procesar Factura
                         </button>
@@ -4216,6 +4345,122 @@
             
             // Abrir modal
             openModal('modalProcesarFactura');
+        }
+        
+        let streamCamara = null;
+        let imagenCapturada = null;
+        
+        function mostrarOpcionArchivo() {
+            document.getElementById('opcionArchivoContainer').style.display = 'block';
+            document.getElementById('opcionCamaraContainer').style.display = 'none';
+            document.getElementById('btnOpcionArchivo').style.background = '#667eea';
+            document.getElementById('btnOpcionCamara').style.background = '#6c757d';
+            detenerCamara();
+        }
+        
+        function mostrarOpcionCamara() {
+            document.getElementById('opcionArchivoContainer').style.display = 'none';
+            document.getElementById('opcionCamaraContainer').style.display = 'block';
+            document.getElementById('btnOpcionArchivo').style.background = '#6c757d';
+            document.getElementById('btnOpcionCamara').style.background = '#48bb78';
+        }
+        
+        async function iniciarCamara() {
+            try {
+                // Verificar si el navegador soporta getUserMedia
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    mostrarAlertaProcesarFactura('Tu navegador no soporta el acceso a la cámara', 'error');
+                    return;
+                }
+                
+                // Solicitar acceso a la cámara trasera (ideal) o frontal
+                streamCamara = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment', // Cámara trasera en móviles
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                });
+                
+                const video = document.getElementById('camaraVideo');
+                video.srcObject = streamCamara;
+                
+                document.getElementById('camaraPreviewContainer').style.display = 'block';
+                document.getElementById('btnIniciarCamara').style.display = 'none';
+                document.getElementById('btnCapturarFoto').style.display = 'inline-block';
+                document.getElementById('btnDetenerCamara').style.display = 'inline-block';
+                
+            } catch (error) {
+                console.error('Error al acceder a la cámara:', error);
+                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    mostrarAlertaProcesarFactura('Se necesita permiso para acceder a la cámara', 'error');
+                } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                    mostrarAlertaProcesarFactura('No se encontró ninguna cámara disponible', 'error');
+                } else {
+                    mostrarAlertaProcesarFactura('Error al acceder a la cámara: ' + error.message, 'error');
+                }
+            }
+        }
+        
+        function capturarFoto() {
+            const video = document.getElementById('camaraVideo');
+            const canvas = document.getElementById('camaraCanvas');
+            const preview = document.getElementById('camaraPreview');
+            
+            if (!video || !streamCamara) {
+                mostrarAlertaProcesarFactura('La cámara no está iniciada', 'error');
+                return;
+            }
+            
+            // Configurar canvas con las dimensiones del video
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // Capturar frame del video
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Convertir a blob y mostrar preview
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    mostrarAlertaProcesarFactura('Error al capturar la imagen', 'error');
+                    return;
+                }
+                
+                // Crear un nuevo File desde el blob para tener mejor control
+                const file = new File([blob], `factura_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                imagenCapturada = file;
+                
+                // Mostrar preview
+                const imageUrl = URL.createObjectURL(blob);
+                preview.src = imageUrl;
+                preview.style.display = 'block';
+                video.style.display = 'none';
+                
+                // Ocultar botones de captura y mostrar opción de reiniciar
+                document.getElementById('btnCapturarFoto').style.display = 'none';
+                document.getElementById('btnDetenerCamara').style.display = 'none';
+                document.getElementById('btnReiniciarCamara').style.display = 'inline-block';
+                
+                // Detener la cámara
+                detenerCamara();
+            }, 'image/jpeg', 0.95);
+        }
+        
+        function reiniciarCamara() {
+            imagenCapturada = null;
+            document.getElementById('camaraPreview').style.display = 'none';
+            document.getElementById('camaraPreview').src = '';
+            document.getElementById('camaraVideo').style.display = 'block';
+            document.getElementById('btnReiniciarCamara').style.display = 'none';
+            iniciarCamara();
+        }
+        
+        function detenerCamara() {
+            if (streamCamara) {
+                streamCamara.getTracks().forEach(track => track.stop());
+                streamCamara = null;
+            }
         }
         
         function actualizarNombreArchivoProcesar() {
@@ -4238,16 +4483,33 @@
             const btnProcesar = document.getElementById('btnProcesarFacturaCompleta');
             const alertDiv = document.getElementById('procesarFacturaAlert');
             
-            if (!archivoInput || !archivoInput.files || !archivoInput.files[0]) {
-                mostrarAlertaProcesarFactura('Por favor seleccione un archivo PDF', 'error');
+            let archivo = null;
+            let nombreArchivo = 'factura.jpg';
+            
+            // Verificar si hay imagen capturada o archivo seleccionado
+            if (imagenCapturada) {
+                // Usar imagen capturada de la cámara
+                archivo = imagenCapturada;
+                nombreArchivo = archivo.name || `factura_${Date.now()}.jpg`;
+            } else if (archivoInput && archivoInput.files && archivoInput.files[0]) {
+                // Usar archivo seleccionado
+                archivo = archivoInput.files[0];
+                nombreArchivo = archivo.name;
+            } else {
+                mostrarAlertaProcesarFactura('Por favor seleccione un archivo o capture una foto', 'error');
                 return;
             }
             
-            const archivo = archivoInput.files[0];
+            // Validar tipo de archivo (PDF o imagen)
+            const tiposPermitidos = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+            const extensionesPermitidas = ['.pdf', '.jpg', '.jpeg', '.png'];
+            const nombreLower = nombreArchivo.toLowerCase();
             
-            // Validar que sea PDF
-            if (archivo.type !== 'application/pdf' && !archivo.name.toLowerCase().endsWith('.pdf')) {
-                mostrarAlertaProcesarFactura('Por favor seleccione un archivo PDF válido', 'error');
+            const tipoValido = tiposPermitidos.includes(archivo.type) || 
+                              extensionesPermitidas.some(ext => nombreLower.endsWith(ext));
+            
+            if (!tipoValido) {
+                mostrarAlertaProcesarFactura('Por favor seleccione un archivo PDF o imagen válida (JPG, PNG)', 'error');
                 return;
             }
             
@@ -4264,7 +4526,7 @@
             
             try {
                 const formData = new FormData();
-                formData.append('factura', archivo);
+                formData.append('factura', archivo, nombreArchivo);
                 
                 const response = await fetch(`${API_URL}/api/v1/facturacion/procesar-factura`, {
                     method: 'POST',
@@ -4277,8 +4539,17 @@
                 const result = await response.json();
                 
                 if (response.ok) {
+                    // Guardar entidades disponibles en localStorage para el mapeo
+                    if (result.entidades_disponibles) {
+                        localStorage.setItem('ultima_factura_procesada', JSON.stringify({
+                            entidades_disponibles: result.entidades_disponibles,
+                            timestamp: Date.now()
+                        }));
+                    }
                     // Mostrar resultados en el modal
-                    mostrarResultadosProcesamiento(result, archivo.name);
+                    mostrarResultadosProcesamiento(result, nombreArchivo);
+                    // Limpiar imagen capturada después de procesar
+                    imagenCapturada = null;
                 } else {
                     mostrarAlertaProcesarFactura(result.error || 'Error al procesar la factura', 'error');
                 }
@@ -4310,6 +4581,10 @@
             const blobPath = resultado.blob_path || '';
             const pdfUrl = resultado.pdf_url || '';
             const idResidenciaDetectada = resultado.id_residencia_detectada || null;
+            const entidadesDisponibles = resultado.entidades_disponibles || {};
+            
+            // Guardar entidades disponibles para el mapeo
+            window.entidadesDisponiblesFactura = entidadesDisponibles;
             
             // Buscar proveedores existentes que coincidan con el nombre extraído
             let proveedoresCoincidentes = [];
@@ -4369,7 +4644,7 @@
                 </div>
                 
                 <form id="formFacturaProcesada" onsubmit="guardarFacturaProcesada(event)" style="background: #f8f9ff; padding: 20px; border-radius: 10px; border: 2px solid #667eea;">
-                    <h4 style="color: #667eea; margin-bottom: 20px; font-size: 16px;">📋 Editar Datos de la Factura</h4>
+                    <h4 style="color: #667eea; margin-bottom: 20px; font-size: 16px; display: flex; align-items: center;"><img src="/static/icons/medical/file-medical.svg" alt="Procesar Factura" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Datos de la Factura</h4>
                     
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                         <div class="form-group">
@@ -4384,15 +4659,31 @@
                     
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                         <div class="form-group">
-                            <label for="factura_total">Total (€) *</label>
-                            <input type="number" id="factura_total" name="total" step="0.01" value="${datosExtraidos.total || datosExtraidos.monto || ''}" required style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <label for="factura_total">Base Imponible (€) *</label>
+                            <input type="number" id="factura_total" name="total" step="0.01" value="${datosExtraidos.total || ''}" required style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                         </div>
                         <div class="form-group">
-                            <label for="factura_impuestos">Impuestos (€)</label>
-                            <input type="number" id="factura_impuestos" name="impuestos" step="0.01" value="${datosExtraidos.impuestos || ''}" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <label for="factura_iva_porcentaje">IVA (%)</label>
+                            <input type="number" id="factura_iva_porcentaje" name="iva_porcentaje" step="0.01" value="${datosExtraidos.iva_porcentaje || datosExtraidos.iva_porcentaje_efectivo || ''}" placeholder="4, 10 o 21" min="0" max="100" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            ${datosExtraidos.iva_porcentajes_detectados && datosExtraidos.iva_porcentajes_detectados.length > 1 ? `
+                                <div style="margin-top: 5px; font-size: 11px; color: #667eea; font-style: italic;">
+                                    ℹ️ Múltiples tipos de IVA detectados: ${datosExtraidos.iva_porcentajes_detectados.join('%, ')}%
+                                    ${datosExtraidos.iva_porcentaje_efectivo ? ` (Efectivo: ${datosExtraidos.iva_porcentaje_efectivo.toFixed(2)}%)` : ''}
+                                </div>
+                            ` : datosExtraidos.iva_porcentaje_efectivo && datosExtraidos.iva_porcentaje_efectivo !== datosExtraidos.iva_porcentaje ? `
+                                <div style="margin-top: 5px; font-size: 11px; color: #667eea; font-style: italic;">
+                                    ℹ️ Porcentaje efectivo calculado: ${datosExtraidos.iva_porcentaje_efectivo.toFixed(2)}%
+                                </div>
+                            ` : ''}
                         </div>
                         <div class="form-group">
-                            <label for="factura_total_impuestos">Total con Impuestos (€) *</label>
+                            <label for="factura_impuestos">IVA (€)</label>
+                            <input type="number" id="factura_impuestos" name="impuestos" step="0.01" value="${datosExtraidos.impuestos || datosExtraidos.iva || ''}" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div class="form-group">
+                            <label for="factura_total_impuestos">TOTAL (€) *</label>
                             <input type="number" id="factura_total_impuestos" name="monto" step="0.01" value="${datosExtraidos.total_con_impuestos || datosExtraidos.monto || ''}" required style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                         </div>
                     </div>
@@ -4416,14 +4707,15 @@
                                 <div style="text-align: center; margin: 8px 0; color: #666; font-size: 12px;">O</div>
                             </div>
                         ` : ''}
-                        <div style="display: flex; gap: 10px;">
-                            <input type="text" id="factura_proveedor_nuevo" name="proveedor_nuevo" value="${proveedoresCoincidentes.length === 0 ? (datosExtraidos.proveedor || '') : ''}" placeholder="Nombre del proveedor (si no existe)" style="flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
-                            <button type="button" id="btnCrearProveedor" onclick="crearProveedorDesdeFactura()" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap;">+ Crear Proveedor</button>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <input type="text" id="factura_proveedor_nuevo" name="proveedor_nuevo" value="${proveedoresCoincidentes.length === 0 ? (datosExtraidos.proveedor || '') : ''}" placeholder="Nombre del proveedor (si no existe)" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <button type="button" id="btnCrearProveedor" onclick="crearProveedorDesdeFactura()" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap; align-self: flex-start;">+ Crear Proveedor</button>
                         </div>
                         <input type="hidden" id="factura_id_proveedor" name="id_proveedor" value="">
-                        ${datosExtraidos.proveedor_nif || datosExtraidos.proveedor_telefono || datosExtraidos.proveedor_email || datosExtraidos.proveedor_direccion ? `
+                        ${datosExtraidos.proveedor || datosExtraidos.proveedor_nif || datosExtraidos.proveedor_telefono || datosExtraidos.proveedor_email || datosExtraidos.proveedor_direccion ? `
                         <div style="margin-top: 10px; padding: 10px; background: #f0f7ff; border-radius: 6px; border-left: 3px solid #667eea;">
                             <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">📋 Datos adicionales del proveedor extraídos:</div>
+                            ${datosExtraidos.proveedor ? `<div style="font-size: 12px; color: #333; margin-bottom: 3px;"><strong>Nombre:</strong> ${datosExtraidos.proveedor}</div>` : ''}
                             ${datosExtraidos.proveedor_nif ? `<div style="font-size: 12px; color: #333; margin-bottom: 3px;"><strong>NIF:</strong> ${datosExtraidos.proveedor_nif}</div>` : ''}
                             ${datosExtraidos.proveedor_telefono ? `<div style="font-size: 12px; color: #333; margin-bottom: 3px;"><strong>Teléfono:</strong> ${datosExtraidos.proveedor_telefono}</div>` : ''}
                             ${datosExtraidos.proveedor_email ? `<div style="font-size: 12px; color: #333; margin-bottom: 3px;"><strong>Email:</strong> ${datosExtraidos.proveedor_email}</div>` : ''}
@@ -4449,17 +4741,92 @@
                         <textarea id="factura_observaciones" name="observaciones" rows="3" placeholder="Observaciones adicionales sobre el pago" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;"></textarea>
                     </div>
                     
-                    ${textoCompleto ? `
-                    <div style="margin-bottom: 15px;">
-                        <button type="button" onclick="toggleTextoCompleto()" style="width: 100%; padding: 10px; background: #e0e7ff; color: #667eea; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: space-between; font-size: 14px;">
-                            <span>📄 Ver Texto Completo Extraído (${textoCompleto.length} caracteres)</span>
-                            <span id="toggleTextoIcon">▼</span>
-                        </button>
-                        <div id="textoCompletoContainer" style="display: none; margin-top: 10px; padding: 15px; background: #f8f9fa; border-radius: 8px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; white-space: pre-wrap; word-wrap: break-word; border: 1px solid #e0e0e0; color: #000;">
-                            ${textoCompleto.substring(0, 5000)}${textoCompleto.length > 5000 ? '\n\n... (texto truncado, primeros 5000 caracteres)' : ''}
+                    <div style="margin-bottom: 20px; background: #fff5f5; padding: 20px; border-radius: 10px; border-left: 4px solid #f56565;">
+                        <h4 style="color: #667eea; margin-bottom: 15px; font-size: 16px;">🔧 Configurar Mapeo de Campos de la IA</h4>
+                        <p style="color: #666; margin-bottom: 15px; font-size: 14px;">
+                            Selecciona qué campo de la IA corresponde a cada campo del sistema. Los valores se aplicarán automáticamente al formulario.
+                        </p>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 15px;">
+                            <div class="form-group">
+                                <label for="mapeo_numero_factura" style="font-weight: 600; color: #333; margin-bottom: 5px; display: block;">Número de Factura</label>
+                                <select id="mapeo_numero_factura" onchange="aplicarMapeoCampo('numero_factura', 'factura_numero')" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px;">
+                                    <option value="">-- Seleccionar campo de la IA --</option>
+                                    ${Object.keys(entidadesDisponibles).map(key => `
+                                        <option value="${key}" ${datosExtraidos.numero_factura && entidadesDisponibles[key]?.ejemplo_valor?.includes(datosExtraidos.numero_factura) ? 'selected' : ''}>
+                                            ${key}${entidadesDisponibles[key]?.ejemplo_valor ? ` (${entidadesDisponibles[key].ejemplo_valor.substring(0, 40)}...)` : ''}
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="mapeo_fecha_pago" style="font-weight: 600; color: #333; margin-bottom: 5px; display: block;">Fecha de Pago</label>
+                                <select id="mapeo_fecha_pago" onchange="aplicarMapeoCampo('fecha_pago', 'factura_fecha')" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px;">
+                                    <option value="">-- Seleccionar campo de la IA --</option>
+                                    ${Object.keys(entidadesDisponibles).map(key => `
+                                        <option value="${key}" ${datosExtraidos.fecha_pago && entidadesDisponibles[key]?.ejemplo_valor?.includes(datosExtraidos.fecha_pago.substring(0, 10)) ? 'selected' : ''}>
+                                            ${key}${entidadesDisponibles[key]?.ejemplo_valor ? ` (${entidadesDisponibles[key].ejemplo_valor.substring(0, 40)}...)` : ''}
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="mapeo_base_imponible" style="font-weight: 600; color: #333; margin-bottom: 5px; display: block;">Base Imponible (sin IVA)</label>
+                                <select id="mapeo_base_imponible" onchange="aplicarMapeoCampo('base_imponible', 'factura_total')" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px;">
+                                    <option value="">-- Seleccionar campo de la IA --</option>
+                                    ${Object.keys(entidadesDisponibles).map(key => `
+                                        <option value="${key}" ${datosExtraidos.total && entidadesDisponibles[key]?.ejemplo_valor ? 'selected' : ''}>
+                                            ${key}${entidadesDisponibles[key]?.ejemplo_valor ? ` (${entidadesDisponibles[key].ejemplo_valor.substring(0, 40)}...)` : ''}
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="mapeo_iva" style="font-weight: 600; color: #333; margin-bottom: 5px; display: block;">IVA (€)</label>
+                                <select id="mapeo_iva" onchange="aplicarMapeoCampo('impuestos', 'factura_impuestos')" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px;">
+                                    <option value="">-- Seleccionar campo de la IA --</option>
+                                    ${Object.keys(entidadesDisponibles).map(key => `
+                                        <option value="${key}" ${datosExtraidos.impuestos && entidadesDisponibles[key]?.ejemplo_valor ? 'selected' : ''}>
+                                            ${key}${entidadesDisponibles[key]?.ejemplo_valor ? ` (${entidadesDisponibles[key].ejemplo_valor.substring(0, 40)}...)` : ''}
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="mapeo_total" style="font-weight: 600; color: #333; margin-bottom: 5px; display: block;">Total de Factura (con IVA)</label>
+                                <select id="mapeo_total" onchange="aplicarMapeoCampo('monto', 'factura_total_impuestos')" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px;">
+                                    <option value="">-- Seleccionar campo de la IA --</option>
+                                    ${Object.keys(entidadesDisponibles).map(key => `
+                                        <option value="${key}" ${datosExtraidos.monto && entidadesDisponibles[key]?.ejemplo_valor ? 'selected' : ''}>
+                                            ${key}${entidadesDisponibles[key]?.ejemplo_valor ? ` (${entidadesDisponibles[key].ejemplo_valor.substring(0, 40)}...)` : ''}
+                                        </option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #e0e0e0;">
+                            <div style="font-weight: 600; color: #333; margin-bottom: 10px; font-size: 14px;">📋 Todos los campos detectados por la IA:</div>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; max-height: 200px; overflow-y: auto;">
+                                ${Object.keys(entidadesDisponibles).map(key => {
+                                    const entidad = entidadesDisponibles[key];
+                                    const ejemplo = entidad?.ejemplo_valor || 'Sin ejemplo';
+                                    const confidence = entidad?.confidence || 0;
+                                    return `
+                                        <div style="padding: 8px; background: white; border-radius: 6px; border: 1px solid #e0e0e0;">
+                                            <div style="font-weight: 600; color: #667eea; font-size: 12px; margin-bottom: 4px;">${key}</div>
+                                            <div style="font-size: 11px; color: #666; margin-bottom: 2px;">${ejemplo.substring(0, 50)}${ejemplo.length > 50 ? '...' : ''}</div>
+                                            <div style="font-size: 10px; color: #999;">Confianza: ${(confidence * 100).toFixed(1)}%</div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
                         </div>
                     </div>
-                    ` : ''}
                     
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
                         <button type="submit" style="flex: 1; padding: 12px 20px; background: #48bb78; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;">
@@ -4477,39 +4844,102 @@
             // Cargar residencias en el select
             await loadResidenciasIntoSelect('factura_residencia', idResidenciaDetectada);
             
-            // Calcular automáticamente el total con impuestos
+            // Calcular automáticamente el total con impuestos y el IVA desde el porcentaje
             const facturaTotal = document.getElementById('factura_total');
+            const facturaIvaPorcentaje = document.getElementById('factura_iva_porcentaje');
             const facturaImpuestos = document.getElementById('factura_impuestos');
             const facturaTotalImpuestos = document.getElementById('factura_total_impuestos');
             
-            function calcularTotalConImpuestos() {
-                if (facturaTotal && facturaImpuestos && facturaTotalImpuestos) {
+            function calcularIVAyTotal() {
+                if (facturaTotal && facturaTotalImpuestos) {
                     const total = parseFloat(facturaTotal.value) || 0;
-                    const impuestos = parseFloat(facturaImpuestos.value) || 0;
+                    let impuestos = parseFloat(facturaImpuestos.value) || 0;
+                    
+                    // Si hay porcentaje de IVA, calcular el IVA desde ahí
+                    if (facturaIvaPorcentaje && facturaIvaPorcentaje.value) {
+                        const porcentajeIVA = parseFloat(facturaIvaPorcentaje.value) || 0;
+                        if (porcentajeIVA > 0 && total > 0) {
+                            impuestos = (total * porcentajeIVA / 100);
+                            if (facturaImpuestos) {
+                                facturaImpuestos.value = impuestos.toFixed(2);
+                            }
+                        }
+                    } else if (total > 0 && impuestos > 0 && facturaIvaPorcentaje) {
+                        // Si no hay porcentaje pero sí hay IVA y Base Imponible, calcular el porcentaje
+                        const porcentajeCalculado = (impuestos / total) * 100;
+                        // Redondear al porcentaje más cercano válido en España (4%, 10%, 21%)
+                        const porcentajesValidos = [4, 10, 21];
+                        const porcentajeMasCercano = porcentajesValidos.reduce((prev, curr) => 
+                            Math.abs(curr - porcentajeCalculado) < Math.abs(prev - porcentajeCalculado) ? curr : prev
+                        );
+                        // Solo actualizar si la diferencia es razonable (menos de 2 puntos porcentuales)
+                        if (Math.abs(porcentajeMasCercano - porcentajeCalculado) < 2) {
+                            facturaIvaPorcentaje.value = porcentajeMasCercano.toFixed(2);
+                        }
+                    }
+                    
                     facturaTotalImpuestos.value = (total + impuestos).toFixed(2);
                 }
             }
             
             if (facturaTotal) {
-                facturaTotal.addEventListener('input', calcularTotalConImpuestos);
+                facturaTotal.addEventListener('input', calcularIVAyTotal);
+            }
+            if (facturaIvaPorcentaje) {
+                facturaIvaPorcentaje.addEventListener('input', calcularIVAyTotal);
             }
             if (facturaImpuestos) {
-                facturaImpuestos.addEventListener('input', calcularTotalConImpuestos);
+                facturaImpuestos.addEventListener('input', calcularIVAyTotal);
             }
             
-            // Manejar selección de proveedor existente
+            // Manejar selección de proveedor existente y actualizar sus datos
             const selectProveedorExistente = document.getElementById('factura_proveedor_existente');
             if (selectProveedorExistente) {
-                selectProveedorExistente.addEventListener('change', function() {
+                selectProveedorExistente.addEventListener('change', async function() {
                     if (this.value) {
-                        document.getElementById('factura_id_proveedor').value = this.value;
+                        const idProveedor = this.value;
+                        document.getElementById('factura_id_proveedor').value = idProveedor;
                         document.getElementById('factura_proveedor_nuevo').value = '';
                         document.getElementById('factura_proveedor_nuevo').disabled = true;
+                        
                         // Seleccionar la residencia del proveedor si es diferente
                         const option = this.options[this.selectedIndex];
                         const idResidenciaProveedor = option.getAttribute('data-residencia');
                         if (idResidenciaProveedor && document.getElementById('factura_residencia').value !== idResidenciaProveedor) {
                             document.getElementById('factura_residencia').value = idResidenciaProveedor;
+                        }
+                        
+                        // Actualizar datos del proveedor con los extraídos de la factura
+                        const datosExtraidos = window.facturaProcesadaDatos?.datosExtraidos || {};
+                        if (datosExtraidos.proveedor_nif || datosExtraidos.proveedor_telefono || datosExtraidos.proveedor_email || datosExtraidos.proveedor_direccion) {
+                            try {
+                                const token = localStorage.getItem('violetas_token');
+                                const proveedorData = {};
+                                
+                                if (datosExtraidos.proveedor_nif) proveedorData.nif_cif = datosExtraidos.proveedor_nif;
+                                if (datosExtraidos.proveedor_telefono) proveedorData.telefono = datosExtraidos.proveedor_telefono;
+                                if (datosExtraidos.proveedor_email) proveedorData.email = datosExtraidos.proveedor_email;
+                                if (datosExtraidos.proveedor_direccion) proveedorData.direccion = datosExtraidos.proveedor_direccion;
+                                
+                                if (Object.keys(proveedorData).length > 0) {
+                                    const response = await fetch(`${API_URL}/api/v1/proveedores/${idProveedor}`, {
+                                        method: 'PUT',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${token}`
+                                        },
+                                        body: JSON.stringify(proveedorData)
+                                    });
+                                    
+                                    if (response.ok) {
+                                        console.log('Datos del proveedor actualizados exitosamente');
+                                    } else {
+                                        console.warn('No se pudieron actualizar algunos datos del proveedor');
+                                    }
+                                }
+                            } catch (error) {
+                                console.error('Error al actualizar datos del proveedor:', error);
+                            }
                         }
                     } else {
                         document.getElementById('factura_id_proveedor').value = '';
@@ -4522,6 +4952,131 @@
             if (proveedoresCoincidentes.length === 1 && selectProveedorExistente) {
                 selectProveedorExistente.value = proveedoresCoincidentes[0].id_proveedor;
                 selectProveedorExistente.dispatchEvent(new Event('change'));
+            }
+            
+            // Aplicar valores iniciales basados en los datos extraídos
+            aplicarValoresIniciales(datosExtraidos, entidadesDisponibles);
+        }
+        
+        function aplicarMapeoCampo(campoSistema, idInput) {
+            const select = document.getElementById(`mapeo_${campoSistema}`);
+            const input = document.getElementById(idInput);
+            const campoIA = select.value;
+            
+            if (!campoIA || !input) return;
+            
+            // Obtener el valor del campo de la IA desde las entidades disponibles
+            const entidadesDisponibles = window.entidadesDisponiblesFactura || {};
+            const entidad = entidadesDisponibles[campoIA];
+            
+            if (entidad && entidad.ejemplo_valor) {
+                let valor = entidad.ejemplo_valor;
+                
+                // Procesar según el tipo de campo
+                if (campoSistema === 'fecha_pago') {
+                    // Intentar convertir fecha a formato DD/MM/YYYY
+                    // La fecha puede venir en diferentes formatos
+                    const fechaMatch = valor.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+                    if (fechaMatch) {
+                        const [, dia, mes, anio] = fechaMatch;
+                        const anioCompleto = anio.length === 2 ? '20' + anio : anio;
+                        valor = `${dia.padStart(2, '0')}/${mes.padStart(2, '0')}/${anioCompleto}`;
+                    } else {
+                        const fecha = new Date(valor);
+                        if (!isNaN(fecha.getTime())) {
+                            valor = fechaISOToEspanol(fecha.toISOString().split('T')[0]);
+                        }
+                    }
+                } else if (campoSistema === 'base_imponible' || campoSistema === 'iva' || campoSistema === 'monto') {
+                    // Limpiar y convertir montos
+                    valor = valor.toString().replace(/[^\d.,]/g, '').replace(/\./g, '').replace(',', '.');
+                    if (valor && !isNaN(parseFloat(valor))) {
+                        valor = parseFloat(valor).toFixed(2);
+                    } else {
+                        valor = '';
+                    }
+                }
+                
+                input.value = valor;
+                
+                // Si es un campo numérico, disparar evento para recalcular totales
+                if (campoSistema === 'base_imponible' || campoSistema === 'iva') {
+                    input.dispatchEvent(new Event('input'));
+                }
+            }
+        }
+        
+        function aplicarValoresIniciales(datosExtraidos, entidadesDisponibles) {
+            // Aplicar valores iniciales basados en los datos extraídos
+            if (datosExtraidos.numero_factura && Object.keys(entidadesDisponibles).length > 0) {
+                const select = document.getElementById('mapeo_numero_factura');
+                if (select) {
+                    // Buscar el campo que contiene el número de factura
+                    for (const [key, entidad] of Object.entries(entidadesDisponibles)) {
+                        if (entidad.ejemplo_valor && entidad.ejemplo_valor.includes(datosExtraidos.numero_factura)) {
+                            select.value = key;
+                            aplicarMapeoCampo('numero_factura', 'factura_numero');
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (datosExtraidos.fecha_pago && Object.keys(entidadesDisponibles).length > 0) {
+                const select = document.getElementById('mapeo_fecha_pago');
+                if (select) {
+                    // Buscar el campo que contiene la fecha (buscar por invoice_date o due_date)
+                    for (const [key, entidad] of Object.entries(entidadesDisponibles)) {
+                        if (key.toLowerCase().includes('date') && entidad.ejemplo_valor) {
+                            select.value = key;
+                            aplicarMapeoCampo('fecha_pago', 'factura_fecha');
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Aplicar valores numéricos si existen
+            if (datosExtraidos.total && Object.keys(entidadesDisponibles).length > 0) {
+                const select = document.getElementById('mapeo_base_imponible');
+                if (select) {
+                    // Buscar campo net_amount o subtotal
+                    for (const [key, entidad] of Object.entries(entidadesDisponibles)) {
+                        if ((key.toLowerCase().includes('net') || key.toLowerCase().includes('subtotal')) && entidad.ejemplo_valor) {
+                            select.value = key;
+                            aplicarMapeoCampo('base_imponible', 'factura_total');
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if ((datosExtraidos.impuestos || datosExtraidos.iva) && Object.keys(entidadesDisponibles).length > 0) {
+                const select = document.getElementById('mapeo_iva');
+                if (select) {
+                    // Buscar campo vat o tax
+                    for (const [key, entidad] of Object.entries(entidadesDisponibles)) {
+                        if ((key.toLowerCase().includes('vat') || key.toLowerCase().includes('tax')) && entidad.ejemplo_valor) {
+                            select.value = key;
+                            aplicarMapeoCampo('impuestos', 'factura_impuestos');
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if ((datosExtraidos.monto || datosExtraidos.total_con_impuestos) && Object.keys(entidadesDisponibles).length > 0) {
+                const select = document.getElementById('mapeo_total');
+                if (select) {
+                    // Buscar campo total_amount
+                    for (const [key, entidad] of Object.entries(entidadesDisponibles)) {
+                        if (key.toLowerCase().includes('total') && entidad.ejemplo_valor) {
+                            select.value = key;
+                            aplicarMapeoCampo('monto', 'factura_total_impuestos');
+                            break;
+                        }
+                    }
+                }
             }
         }
         
@@ -9245,6 +9800,15 @@
                 document.getElementById('residencia_observaciones').value = residencia.observaciones || '';
                 document.getElementById('residencia_activa').checked = residencia.activa !== false;
                 
+                // Mostrar sección de entidades fiscales solo al editar
+                document.getElementById('residenciaEntidadesFiscalesSection').style.display = 'block';
+                
+                // Cargar receivers asociados a esta residencia
+                await cargarReceiversResidencia(idResidencia);
+                
+                // Cargar lista de receivers disponibles para añadir
+                await cargarReceiversDisponibles();
+                
                 document.getElementById('modalResidenciaTitulo').innerHTML = `
                     <img src="/static/icons/medical/settings.svg" alt="Editar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Residencia
                 `;
@@ -9262,7 +9826,274 @@
             document.getElementById('formResidencia').reset();
             document.getElementById('residencia_id_residencia').value = '';
             document.getElementById('residencia_activa').checked = true;
+            document.getElementById('residenciaEntidadesFiscalesSection').style.display = 'none';
+            document.getElementById('residenciaReceiversList').innerHTML = '';
+            document.getElementById('residenciaReceiverSelect').innerHTML = '<option value="">Seleccione una entidad fiscal existente</option>';
             hideResidenciaAlert();
+        }
+        
+        async function cargarReceiversResidencia(idResidencia) {
+            const token = localStorage.getItem('violetas_token');
+            const container = document.getElementById('residenciaReceiversList');
+            
+            if (!idResidencia || !container) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residencias/${idResidencia}/receivers`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const receivers = data.receivers || [];
+                    
+                    if (receivers.length === 0) {
+                        container.innerHTML = '<p style="color: #666; font-size: 14px; padding: 10px; background: #f8f9fa; border-radius: 6px;">No hay entidades fiscales asociadas. Añada una usando los botones de abajo.</p>';
+                        return;
+                    }
+                    
+                    container.innerHTML = receivers.map(r => `
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #667eea;">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${r.nombre}</div>
+                                ${r.nif_cif ? `<div style="font-size: 12px; color: #666;">NIF/CIF: ${r.nif_cif}</div>` : ''}
+                                ${r.direccion ? `<div style="font-size: 12px; color: #666;">${r.direccion}</div>` : ''}
+                            </div>
+                            <button type="button" onclick="eliminarReceiverResidencia(${r.id_receiver}, '${r.nombre.replace(/'/g, "\\'")}')" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">
+                                Eliminar
+                            </button>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<p style="color: #dc3545; font-size: 14px;">Error al cargar entidades fiscales</p>';
+                }
+            } catch (error) {
+                console.error('Error al cargar receivers:', error);
+                container.innerHTML = '<p style="color: #dc3545; font-size: 14px;">Error de conexión</p>';
+            }
+        }
+        
+        async function cargarReceiversDisponibles() {
+            const token = localStorage.getItem('violetas_token');
+            const select = document.getElementById('residenciaReceiverSelect');
+            
+            if (!select) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/receivers`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const receivers = data.receivers || [];
+                    
+                    select.innerHTML = '<option value="">Seleccione una entidad fiscal existente</option>';
+                    receivers.filter(r => r.activo).forEach(r => {
+                        select.innerHTML += `<option value="${r.id_receiver}">${r.nombre}${r.nif_cif ? ' - ' + r.nif_cif : ''}</option>`;
+                    });
+                }
+            } catch (error) {
+                console.error('Error al cargar receivers disponibles:', error);
+            }
+        }
+        
+        async function agregarReceiverAResidencia() {
+            const token = localStorage.getItem('violetas_token');
+            const idResidencia = document.getElementById('residencia_id_residencia').value;
+            const idReceiver = document.getElementById('residenciaReceiverSelect').value;
+            
+            if (!idResidencia) {
+                alert('Debe guardar la residencia primero');
+                return;
+            }
+            
+            if (!idReceiver) {
+                alert('Seleccione una entidad fiscal');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residencias/${idResidencia}/receivers/${idReceiver}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    await cargarReceiversResidencia(idResidencia);
+                    document.getElementById('residenciaReceiverSelect').value = '';
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Error al añadir entidad fiscal');
+                }
+            } catch (error) {
+                console.error('Error al añadir receiver:', error);
+                alert('Error de conexión');
+            }
+        }
+        
+        async function eliminarReceiverResidencia(idReceiver, nombreReceiver) {
+            if (!confirm(`¿Está seguro de que desea eliminar la entidad fiscal "${nombreReceiver}" de esta residencia?`)) {
+                return;
+            }
+            
+            const token = localStorage.getItem('violetas_token');
+            const idResidencia = document.getElementById('residencia_id_residencia').value;
+            
+            if (!idResidencia) return;
+            
+            try {
+                const response = await fetch(`${API_URL}/api/v1/residencias/${idResidencia}/receivers/${idReceiver}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    await cargarReceiversResidencia(idResidencia);
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Error al eliminar entidad fiscal');
+                }
+            } catch (error) {
+                console.error('Error al eliminar receiver:', error);
+                alert('Error de conexión');
+            }
+        }
+        
+        function nuevaEntidadFiscal() {
+            // Crear modal dinámico para nueva entidad fiscal
+            const modalHTML = `
+                <div id="modalNuevaEntidadFiscal" class="modal" style="display: block;">
+                    <div class="modal-content" style="max-width: 600px;">
+                        <div class="modal-header">
+                            <h2>Nueva Entidad Fiscal</h2>
+                            <button class="close-modal" onclick="cerrarModalNuevaEntidadFiscal()">&times;</button>
+                        </div>
+                        <form id="formNuevaEntidadFiscal" onsubmit="guardarNuevaEntidadFiscal(event)">
+                            <div class="form-section">
+                                <div class="form-group">
+                                    <label for="nueva_entidad_nombre">Nombre *</label>
+                                    <input type="text" id="nueva_entidad_nombre" name="nombre" required placeholder="Ej: Sociedad Gestora SL" maxlength="255">
+                                </div>
+                                <div class="form-group">
+                                    <label for="nueva_entidad_nif">NIF/CIF</label>
+                                    <input type="text" id="nueva_entidad_nif" name="nif" placeholder="A12345678 o B12345678" maxlength="50">
+                                </div>
+                                <div class="form-group">
+                                    <label for="nueva_entidad_direccion">Dirección</label>
+                                    <input type="text" id="nueva_entidad_direccion" name="direccion" placeholder="Calle y número" maxlength="500">
+                                </div>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                    <div class="form-group">
+                                        <label for="nueva_entidad_telefono">Teléfono</label>
+                                        <input type="text" id="nueva_entidad_telefono" name="telefono" placeholder="612345678" maxlength="50">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="nueva_entidad_email">Email</label>
+                                        <input type="email" id="nueva_entidad_email" name="email" placeholder="contacto@sociedad.es" maxlength="255">
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                                <button type="submit" style="flex: 1; background: #667eea;">Crear y Asociar</button>
+                                <button type="button" onclick="cerrarModalNuevaEntidadFiscal()" style="flex: 1; background: #6c757d;">Cancelar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            
+            // Insertar modal en el body si no existe
+            let modal = document.getElementById('modalNuevaEntidadFiscal');
+            if (!modal) {
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+            } else {
+                modal.style.display = 'block';
+            }
+        }
+        
+        function cerrarModalNuevaEntidadFiscal() {
+            const modal = document.getElementById('modalNuevaEntidadFiscal');
+            if (modal) {
+                modal.style.display = 'none';
+                document.getElementById('formNuevaEntidadFiscal').reset();
+            }
+        }
+        
+        async function guardarNuevaEntidadFiscal(event) {
+            event.preventDefault();
+            
+            const nombre = document.getElementById('nueva_entidad_nombre').value.trim();
+            if (!nombre) {
+                alert('El nombre es obligatorio');
+                return;
+            }
+            
+            const nif = document.getElementById('nueva_entidad_nif').value.trim();
+            const direccion = document.getElementById('nueva_entidad_direccion').value.trim();
+            const telefono = document.getElementById('nueva_entidad_telefono').value.trim();
+            const email = document.getElementById('nueva_entidad_email').value.trim();
+            
+            await crearReceiverYAsociar(nombre, nif || null, direccion || null, telefono || null, email || null);
+            cerrarModalNuevaEntidadFiscal();
+        }
+        
+        async function crearReceiverYAsociar(nombre, nif, direccion, telefono, email) {
+            const token = localStorage.getItem('violetas_token');
+            const idResidencia = document.getElementById('residencia_id_residencia').value;
+            
+            if (!idResidencia) {
+                alert('Debe guardar la residencia primero');
+                return;
+            }
+            
+            try {
+                // Crear receiver
+                const createResponse = await fetch(`${API_URL}/api/v1/receivers`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        nombre,
+                        nif_cif: nif || null,
+                        direccion: direccion || null,
+                        telefono: telefono || null,
+                        email: email || null
+                    })
+                });
+                
+                if (createResponse.ok) {
+                    const data = await createResponse.json();
+                    const idReceiver = data.id_receiver;
+                    
+                    // Asociar a la residencia
+                    const associateResponse = await fetch(`${API_URL}/api/v1/residencias/${idResidencia}/receivers/${idReceiver}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    if (associateResponse.ok) {
+                        await cargarReceiversResidencia(idResidencia);
+                        await cargarReceiversDisponibles();
+                    } else {
+                        alert('Entidad creada pero error al asociarla a la residencia');
+                    }
+                } else {
+                    const errorData = await createResponse.json();
+                    alert(errorData.error || 'Error al crear entidad fiscal');
+                }
+            } catch (error) {
+                console.error('Error al crear receiver:', error);
+                alert('Error de conexión');
+            }
         }
         
         // Función helper para resetear botones de guardado

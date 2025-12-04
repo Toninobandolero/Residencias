@@ -3973,54 +3973,72 @@ def crear_pago_proveedor():
         cursor = conn.cursor()
         
         try:
-            # Verificar si existe la columna factura_blob_path
+            # Verificar si existen las columnas opcionales
             cursor.execute("""
                 SELECT column_name 
                 FROM information_schema.columns 
                 WHERE table_name = 'pago_proveedor' 
-                  AND column_name = 'factura_blob_path'
+                  AND column_name IN ('factura_blob_path', 'id_receiver')
             """)
-            tiene_columna_factura = cursor.fetchone() is not None
+            columnas_existentes = {row[0] for row in cursor.fetchall()}
+            tiene_columna_factura = 'factura_blob_path' in columnas_existentes
+            tiene_columna_receiver = 'id_receiver' in columnas_existentes
+            
+            # Obtener id_receiver si se proporciona
+            id_receiver = data.get('id_receiver')
+            
+            # Si se proporciona un nombre de receiver pero no id_receiver, buscar o crear
+            receiver_nombre = data.get('receiver')
+            if receiver_nombre and not id_receiver:
+                # Buscar receiver existente por nombre
+                cursor.execute("""
+                    SELECT id_receiver FROM receiver 
+                    WHERE UPPER(TRIM(nombre)) = UPPER(TRIM(%s)) AND activo = TRUE
+                    LIMIT 1
+                """, (receiver_nombre,))
+                receiver_existente = cursor.fetchone()
+                
+                if receiver_existente:
+                    id_receiver = receiver_existente[0]
+                else:
+                    # Crear nuevo receiver
+                    cursor.execute("""
+                        INSERT INTO receiver (nombre, activo)
+                        VALUES (%s, TRUE)
+                        RETURNING id_receiver
+                    """, (receiver_nombre,))
+                    id_receiver = cursor.fetchone()[0]
+                    
+                    # Asociar receiver a la residencia si no existe la relación
+                    cursor.execute("""
+                        INSERT INTO residencia_receiver (id_residencia, id_receiver, activo)
+                        VALUES (%s, %s, TRUE)
+                        ON CONFLICT (id_residencia, id_receiver) DO UPDATE SET activo = TRUE
+                    """, (id_residencia, id_receiver))
+            
+            # Construir query dinámicamente según columnas existentes
+            columnas_insert = ['id_residencia', 'proveedor', 'concepto', 'monto', 'fecha_pago',
+                             'fecha_prevista', 'metodo_pago', 'estado', 'numero_factura', 'observaciones']
+            valores_insert = [id_residencia, proveedor, concepto, monto, fecha_pago,
+                            fecha_prevista, data.get('metodo_pago'), estado,
+                            data.get('numero_factura'), data.get('observaciones')]
             
             if tiene_columna_factura:
-                cursor.execute("""
-                    INSERT INTO pago_proveedor (id_residencia, proveedor, concepto, monto, fecha_pago,
-                                              fecha_prevista, metodo_pago, estado, numero_factura,
-                                              observaciones, factura_blob_path)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    RETURNING id_pago
-                """, (
-                    id_residencia,
-                    proveedor,
-                    concepto,
-                    monto,
-                    fecha_pago,
-                    fecha_prevista,
-                    data.get('metodo_pago'),
-                    estado,  # Calculado automáticamente
-                    data.get('numero_factura'),
-                    data.get('observaciones'),
-                    data.get('factura_blob_path')
-                ))
-            else:
-                cursor.execute("""
-                    INSERT INTO pago_proveedor (id_residencia, proveedor, concepto, monto, fecha_pago,
-                                              fecha_prevista, metodo_pago, estado, numero_factura,
-                                              observaciones)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    RETURNING id_pago
-                """, (
-                    id_residencia,
-                    proveedor,
-                    concepto,
-                    monto,
-                    fecha_pago,
-                    fecha_prevista,
-                    data.get('metodo_pago'),
-                    estado,  # Calculado automáticamente
-                    data.get('numero_factura'),
-                    data.get('observaciones')
-                ))
+                columnas_insert.append('factura_blob_path')
+                valores_insert.append(data.get('factura_blob_path'))
+            
+            if tiene_columna_receiver and id_receiver:
+                columnas_insert.append('id_receiver')
+                valores_insert.append(id_receiver)
+            
+            placeholders = ','.join(['%s'] * len(valores_insert))
+            columnas_str = ','.join(columnas_insert)
+            
+            cursor.execute(f"""
+                INSERT INTO pago_proveedor ({columnas_str})
+                VALUES ({placeholders})
+                RETURNING id_pago
+            """, tuple(valores_insert))
             
             id_pago = cursor.fetchone()[0]
             
@@ -4072,10 +4090,10 @@ def crear_pago_proveedor():
                                                   tamaño_bytes, tipo_mime, id_usuario_subida, activo)
                             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
                             RETURNING id_documento
-                        """, (
+            """, (
                             'proveedor',
                             id_proveedor,
-                            id_residencia,
+                id_residencia,
                             'Pagos',  # Nueva categoría para pagos a proveedores
                             'Pago a proveedor',  # Tipo de documento específico
                             nombre_archivo,
@@ -4144,7 +4162,7 @@ def obtener_pago_proveedor(id_pago):
                            metodo_pago, estado, numero_factura, observaciones, fecha_creacion
                     FROM pago_proveedor
                     WHERE id_pago = %s
-                """, (id_pago,))
+            """, (id_pago,))
             
             pago = cursor.fetchone()
             if not pago:
@@ -4312,9 +4330,20 @@ def procesar_factura():
         if archivo.filename == '':
             return jsonify({'error': 'Nombre de archivo vacío'}), 400
         
-        # Validar que sea PDF
-        if not archivo.filename.lower().endswith('.pdf') and archivo.content_type != 'application/pdf':
-            return jsonify({'error': 'El archivo debe ser un PDF'}), 400
+        # Validar que sea PDF o imagen
+        nombre_lower = archivo.filename.lower()
+        extensiones_permitidas = ['.pdf', '.jpg', '.jpeg', '.png']
+        tipos_mime_permitidos = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
+        
+        extension_valida = any(nombre_lower.endswith(ext) for ext in extensiones_permitidas)
+        tipo_mime_valido = archivo.content_type in tipos_mime_permitidos
+        
+        if not extension_valida and not tipo_mime_valido:
+            return jsonify({'error': 'El archivo debe ser un PDF o una imagen (JPG, PNG)'}), 400
+        
+        # Determinar tipo de archivo
+        es_imagen = nombre_lower.endswith(('.jpg', '.jpeg', '.png')) or archivo.content_type.startswith('image/')
+        es_pdf = nombre_lower.endswith('.pdf') or archivo.content_type == 'application/pdf'
         
         # Obtener id_residencia si se proporciona
         id_residencia = request.form.get('id_residencia', type=int)
@@ -4369,10 +4398,22 @@ def procesar_factura():
                 client = documentai.DocumentProcessorServiceClient(client_options=client_options)
                 name = f"projects/{project_id}/locations/{location}/processors/{processor_id}"
                 
+                # Determinar MIME type según el tipo de archivo
+                if es_imagen:
+                    # Determinar tipo MIME específico de la imagen
+                    if nombre_lower.endswith('.png') or archivo.content_type == 'image/png':
+                        mime_type = 'image/png'
+                    elif nombre_lower.endswith(('.jpg', '.jpeg')) or archivo.content_type in ['image/jpeg', 'image/jpg']:
+                        mime_type = 'image/jpeg'
+                    else:
+                        mime_type = 'image/jpeg'  # Por defecto JPEG
+                else:
+                    mime_type = 'application/pdf'
+                
                 # Configurar la solicitud
                 raw_document = documentai.RawDocument(
                     content=file_content,
-                    mime_type='application/pdf'
+                    mime_type=mime_type
                 )
                 
                 request_doc = documentai.ProcessRequest(
@@ -4396,11 +4437,89 @@ def procesar_factura():
                 if hasattr(document, 'entities') and document.entities:
                     app.logger.info(f"Invoice Parser detectado. Extrayendo {len(document.entities)} entidades estructuradas...")
                     
-                    # Log de todas las entidades disponibles para debugging
+                    # Log DETALLADO de todas las entidades disponibles para debugging
                     tipos_entidades = set()
+                    entidades_detalladas = {}
+                    entidades_con_montos = []
+                    
                     for entity in document.entities:
                         tipos_entidades.add(entity.type_)
-                    app.logger.debug(f"Tipos de entidades encontradas: {sorted(tipos_entidades)}")
+                        if entity.type_ not in entidades_detalladas:
+                            entidades_detalladas[entity.type_] = []
+                        
+                        # Guardar información completa de la entidad para debugging
+                        entidad_info = {
+                            'type': entity.type_,
+                            'confidence': getattr(entity, 'confidence', None),
+                            'mention_text': getattr(entity, 'mention_text', None)
+                        }
+                        
+                        # Si tiene normalized_value con money_value, guardar el valor
+                        if hasattr(entity, 'normalized_value') and entity.normalized_value:
+                            norm_val = entity.normalized_value
+                            if hasattr(norm_val, 'money_value') and norm_val.money_value:
+                                money = norm_val.money_value
+                                unidades = float(money.units) if hasattr(money, 'units') else 0
+                                nanos = float(money.nanos) / 1e9 if hasattr(money, 'nanos') else 0
+                                valor_money = unidades + nanos
+                                entidad_info['money_value'] = valor_money
+                                entidad_info['money_currency'] = getattr(money, 'currency_code', None)
+                                
+                                # Guardar entidades con montos para debugging
+                                entidades_con_montos.append({
+                                    'type': entity.type_,
+                                    'value': valor_money,
+                                    'currency': getattr(money, 'currency_code', None),
+                                    'mention_text': getattr(entity, 'mention_text', None)
+                                })
+                        
+                        entidades_detalladas[entity.type_].append(entidad_info)
+                    
+                    app.logger.info(f"📋 Tipos de entidades encontradas por Invoice Parser ({len(tipos_entidades)} tipos): {sorted(tipos_entidades)}")
+                    app.logger.info(f"💰 Entidades con montos encontradas: {entidades_con_montos}")
+                    app.logger.debug(f"📋 Detalles completos de entidades: {entidades_detalladas}")
+                    
+                    # CARGAR MAPEO DE CAMPOS DESDE LA BASE DE DATOS
+                    mapeo_campos = {}
+                    try:
+                        conn_mapeo = get_db_connection()
+                        cursor_mapeo = conn_mapeo.cursor()
+                        try:
+                            # Verificar si existe la tabla de mapeo
+                            cursor_mapeo.execute("""
+                                SELECT EXISTS (
+                                    SELECT FROM information_schema.tables 
+                                    WHERE table_schema = 'public'
+                                    AND table_name = 'mapeo_campos_ia'
+                                )
+                            """)
+                            tabla_existe = cursor_mapeo.fetchone()[0]
+                            
+                            if tabla_existe:
+                                cursor_mapeo.execute("""
+                                    SELECT campo_sistema, campo_ia, tipos_alternativos
+                                    FROM mapeo_campos_ia
+                                    WHERE activo = TRUE
+                                """)
+                                for row in cursor_mapeo.fetchall():
+                                    campo_sistema = row[0]
+                                    campo_ia = row[1]
+                                    tipos_alt_str = row[2] if row[2] else '[]'
+                                    try:
+                                        tipos_alternativos = json.loads(tipos_alt_str) if tipos_alt_str else []
+                                    except:
+                                        tipos_alternativos = []
+                                    mapeo_campos[campo_sistema] = {
+                                        'campo_ia': campo_ia,
+                                        'tipos_alternativos': tipos_alternativos
+                                    }
+                                app.logger.info(f"✅ Mapeo de campos cargado: {len(mapeo_campos)} campos configurados")
+                        finally:
+                            cursor_mapeo.close()
+                            conn_mapeo.close()
+                    except Exception as e:
+                        app.logger.warning(f"Error al cargar mapeo de campos (usando valores por defecto): {str(e)}")
+                        mapeo_campos = {}  # Si falla, usar valores por defecto hardcodeados
                     
                     # Función auxiliar para obtener valor de entidad
                     def get_entity_value(entity_type, alternative_types=None):
@@ -4415,12 +4534,15 @@ def procesar_factura():
                                     if hasattr(entity, 'normalized_value') and entity.normalized_value:
                                         norm_val = entity.normalized_value
                                         
-                                        # Money value (montos)
+                                        # Money value (montos) - pero solo si es mayor que 0
                                         if hasattr(norm_val, 'money_value') and norm_val.money_value:
                                             money = norm_val.money_value
                                             unidades = float(money.units) if hasattr(money, 'units') else 0
                                             nanos = float(money.nanos) / 1e9 if hasattr(money, 'nanos') else 0
-                                            return unidades + nanos
+                                            valor_money = unidades + nanos
+                                            # Solo usar money_value si es mayor que 0, sino usar mention_text
+                                            if valor_money > 0:
+                                                return valor_money
                                         
                                         # Date value (fechas)
                                         if hasattr(norm_val, 'date_value') and norm_val.date_value:
@@ -4435,7 +4557,7 @@ def procesar_factura():
                                         if hasattr(norm_val, 'text') and norm_val.text:
                                             return norm_val.text
                                     
-                                    # Prioridad 2: mention_text (texto mencionado)
+                                    # Prioridad 2: mention_text (texto mencionado) - IMPORTANTE cuando money_value es 0.0
                                     if hasattr(entity, 'mention_text') and entity.mention_text:
                                         return entity.mention_text
                                     
@@ -4448,83 +4570,396 @@ def procesar_factura():
                                                 return texto_completo[start_index:end_index]
                         return None
                     
-                    # Extraer campos del Invoice Parser
-                    # Mapeo de tipos de entidades del Invoice Parser de Google
+                    # Extraer campos del Invoice Parser usando el mapeo configurado
+                    # Si no hay mapeo configurado, usar valores por defecto hardcodeados
+                    
+                    def extraer_campo_con_mapeo(campo_sistema, valores_por_defecto=None):
+                        """Extrae un campo usando el mapeo configurado o valores por defecto."""
+                        if campo_sistema in mapeo_campos and mapeo_campos[campo_sistema].get('activo', True):
+                            config = mapeo_campos[campo_sistema]
+                            campo_ia = config['campo_ia']
+                            tipos_alt = config.get('tipos_alternativos', [])
+                            valor = get_entity_value(campo_ia, tipos_alt)
+                        elif valores_por_defecto:
+                            # Usar valores por defecto si no hay mapeo configurado
+                            campo_ia = valores_por_defecto[0] if valores_por_defecto else None
+                            tipos_alt = valores_por_defecto[1:] if len(valores_por_defecto) > 1 else []
+                            valor = get_entity_value(campo_ia, tipos_alt) if campo_ia else None
+                        else:
+                            valor = None
+                        return valor
                     
                     # 1. Número de factura
-                    invoice_id = get_entity_value('invoice_id', ['invoice_number', 'invoice_id_number'])
+                    invoice_id = extraer_campo_con_mapeo('numero_factura', ['invoice_id', 'invoice_number', 'invoice_id_number'])
                     if invoice_id:
                         datos_extraidos['numero_factura'] = str(invoice_id).strip()
                         app.logger.info(f"✅ Número de factura (Invoice Parser): {datos_extraidos['numero_factura']}")
                     
                     # 2. Fecha de factura
-                    invoice_date = get_entity_value('invoice_date', ['invoice_date_invoice'])
+                    invoice_date = extraer_campo_con_mapeo('fecha_pago', ['invoice_date', 'invoice_date_invoice'])
                     if invoice_date:
                         datos_extraidos['fecha_pago'] = str(invoice_date).strip()
                         app.logger.info(f"✅ Fecha de factura (Invoice Parser): {datos_extraidos['fecha_pago']}")
                     
                     # 3. Fecha de vencimiento
-                    due_date = get_entity_value('due_date', ['invoice_date_due'])
+                    due_date = extraer_campo_con_mapeo('fecha_vencimiento', ['due_date', 'invoice_date_due'])
                     if due_date:
                         datos_extraidos['fecha_vencimiento'] = str(due_date).strip()
                         app.logger.info(f"✅ Fecha de vencimiento (Invoice Parser): {datos_extraidos['fecha_vencimiento']}")
                     
                     # 4. Nombre del proveedor
-                    supplier_name = get_entity_value('supplier_name', ['supplier', 'supplier_name_supplier_name'])
+                    supplier_name = extraer_campo_con_mapeo('proveedor', ['supplier_name', 'supplier', 'supplier_name_supplier_name'])
                     if supplier_name:
                         datos_extraidos['proveedor'] = str(supplier_name).strip()
                         app.logger.info(f"✅ Proveedor (Invoice Parser): {datos_extraidos['proveedor']}")
                     
                     # 5. Dirección del proveedor
-                    supplier_address = get_entity_value('supplier_address', ['supplier_address_supplier_address'])
+                    supplier_address = extraer_campo_con_mapeo('proveedor_direccion', ['supplier_address', 'supplier_address_supplier_address'])
                     if supplier_address:
                         datos_extraidos['proveedor_direccion'] = str(supplier_address).strip()[:500]
                         app.logger.info(f"✅ Dirección proveedor (Invoice Parser): {datos_extraidos['proveedor_direccion']}")
                     
                     # 6. Email del proveedor
-                    supplier_email = get_entity_value('supplier_email', ['supplier_email_supplier_email'])
+                    supplier_email = extraer_campo_con_mapeo('proveedor_email', ['supplier_email', 'supplier_email_supplier_email'])
                     if supplier_email:
                         datos_extraidos['proveedor_email'] = str(supplier_email).strip().lower()
                         app.logger.info(f"✅ Email proveedor (Invoice Parser): {datos_extraidos['proveedor_email']}")
                     
                     # 7. Teléfono del proveedor
-                    supplier_phone = get_entity_value('supplier_phone', ['supplier_phone_supplier_phone'])
+                    supplier_phone = extraer_campo_con_mapeo('proveedor_telefono', ['supplier_phone', 'supplier_phone_supplier_phone'])
                     if supplier_phone:
                         datos_extraidos['proveedor_telefono'] = str(supplier_phone).strip().replace(' ', '').replace('-', '')
                         app.logger.info(f"✅ Teléfono proveedor (Invoice Parser): {datos_extraidos['proveedor_telefono']}")
                     
-                    # 8. Monto total
-                    total_amount = get_entity_value('total_amount', ['invoice_amount', 'total_amount_total_amount', 'invoice_amount_invoice_amount'])
+                    # 8. NIF/CIF del proveedor
+                    supplier_tax_id = extraer_campo_con_mapeo('proveedor_nif', ['supplier_tax_id'])
+                    if supplier_tax_id:
+                        datos_extraidos['proveedor_nif'] = str(supplier_tax_id).strip()
+                        app.logger.info(f"✅ NIF/CIF proveedor (Invoice Parser): {datos_extraidos['proveedor_nif']}")
+                    
+                    # 8.1. RECEIVER (Sociedad/Pagador): Extraer receiver_name
+                    receiver_name = get_entity_value('receiver_name', ['receiver_name', 'receiver', 'customer_name', 'bill_to'])
+                    if receiver_name:
+                        datos_extraidos['receiver'] = str(receiver_name).strip()
+                        app.logger.info(f"✅ Receiver/Sociedad (Invoice Parser): {datos_extraidos['receiver']}")
+                    
+                    # 8. TOTAL CON IMPUESTOS: Usar mapeo configurado o buscar con lógica especial
+                    total_amount = extraer_campo_con_mapeo('monto', ['total_amount', 'invoice_amount', 'total_amount_due', 'amount_due', 'invoice_total'])
+                    
+                    # Si no encontramos con el mapeo, buscar cualquier entidad con "total" en el nombre
+                    # Usar mention_text si money_value es 0.0 o no existe
+                    if not total_amount:
+                        for entity in document.entities:
+                            if 'total' in entity.type_.lower():
+                                # Intentar money_value primero
+                                if hasattr(entity, 'normalized_value') and entity.normalized_value:
+                                    norm_val = entity.normalized_value
+                                    if hasattr(norm_val, 'money_value') and norm_val.money_value:
+                                        money = norm_val.money_value
+                                        unidades = float(money.units) if hasattr(money, 'units') else 0
+                                        nanos = float(money.nanos) / 1e9 if hasattr(money, 'nanos') else 0
+                                        valor_money = unidades + nanos
+                                        if valor_money > 0:
+                                            total_amount = valor_money
+                                            app.logger.info(f"🔍 Encontrado total usando money_value de '{entity.type_}': {total_amount}")
+                                            break
+                                
+                                # Si money_value es 0.0 o no existe, usar mention_text
+                                if not total_amount and hasattr(entity, 'mention_text') and entity.mention_text:
+                                    total_amount = entity.mention_text
+                                    app.logger.info(f"🔍 Encontrado total usando mention_text de '{entity.type_}': {total_amount}")
+                                    break
+                    
                     if total_amount:
                         try:
-                            # Si es un número (money_value normalizado)
-                            if isinstance(total_amount, (int, float)):
-                                monto = float(total_amount)
+                            # Si viene como texto (mention_text), convertir de formato español (38,22) a float
+                            if isinstance(total_amount, str):
+                                # Limpiar y convertir formato español (coma como decimal)
+                                monto_str = str(total_amount).replace('.', '').replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
+                                total_con_impuestos = float(monto_str)
+                            elif isinstance(total_amount, (int, float)):
+                                total_con_impuestos = float(total_amount)
                             else:
-                                # Si es texto, convertir
                                 monto_str = str(total_amount).replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
-                                monto = float(monto_str)
+                                total_con_impuestos = float(monto_str)
                             
-                            if monto > 0:
-                                datos_extraidos['monto'] = round(monto, 2)
-                                app.logger.info(f"✅ Monto (Invoice Parser): {datos_extraidos['monto']}")
+                            if total_con_impuestos > 0:
+                                datos_extraidos['total_con_impuestos'] = round(total_con_impuestos, 2)
+                                datos_extraidos['monto'] = round(total_con_impuestos, 2)
+                                app.logger.info(f"✅ Total con Impuestos extraído: {datos_extraidos['total_con_impuestos']}")
                         except (ValueError, AttributeError, TypeError) as e:
-                            app.logger.warning(f"No se pudo convertir monto '{total_amount}': {str(e)}")
+                            app.logger.warning(f"No se pudo convertir total_amount '{total_amount}': {str(e)}")
+                    else:
+                        app.logger.warning("⚠️ NO se encontró total_amount en las entidades de Document AI")
+                        # RESPALDO: Buscar "Total" cerca de números en el texto
+                        # Esto es lo que el usuario sugiere: buscar cerca del texto "Total"
+                        import re
+                        texto_lower = texto_completo.lower()
+                        # Buscar patrones como "Total: 38,22" o "Total 38,22" o "TOTAL 38,22 €"
+                        patrones_total = [
+                            r'total[:\s]+([\d.,]+)',
+                            r'total\s+factura[:\s]+([\d.,]+)',
+                            r'importe\s+total[:\s]+([\d.,]+)',
+                        ]
+                        for patron in patrones_total:
+                            match = re.search(patron, texto_lower, re.IGNORECASE)
+                            if match:
+                                try:
+                                    valor_str = match.group(1).replace('.', '').replace(',', '.').strip()
+                                    total_encontrado = float(valor_str)
+                                    if total_encontrado > 0:
+                                        datos_extraidos['total_con_impuestos'] = round(total_encontrado, 2)
+                                        datos_extraidos['monto'] = round(total_encontrado, 2)
+                                        app.logger.info(f"✅ Total encontrado por búsqueda de texto cerca de 'Total': {datos_extraidos['total_con_impuestos']}")
+                                        break
+                                except (ValueError, AttributeError):
+                                    continue
                     
-                    # 9. IVA/Tax
-                    tax_amount = get_entity_value('tax_amount', ['total_tax_amount', 'tax_amount_tax_amount'])
+                    # 9. IVA/IMPUESTOS: Usar mapeo configurado o buscar con lógica especial
+                    tax_amount = extraer_campo_con_mapeo('impuestos', ['vat', 'tax_amount', 'total_tax_amount', 'vat_amount', 'tax'])
+                    
+                    # Si no encontramos con el mapeo, buscar cualquier entidad con "tax", "vat" o "iva" en el nombre
+                    # Usar mention_text si money_value es 0.0 o no existe
+                    if not tax_amount:
+                        for entity in document.entities:
+                            tipo_lower = entity.type_.lower()
+                            if 'tax' in tipo_lower or 'vat' in tipo_lower or 'iva' in tipo_lower:
+                                # Intentar money_value primero (si es > 0)
+                                if hasattr(entity, 'normalized_value') and entity.normalized_value:
+                                    norm_val = entity.normalized_value
+                                    if hasattr(norm_val, 'money_value') and norm_val.money_value:
+                                        money = norm_val.money_value
+                                        unidades = float(money.units) if hasattr(money, 'units') else 0
+                                        nanos = float(money.nanos) / 1e9 if hasattr(money, 'nanos') else 0
+                                        valor_money = unidades + nanos
+                                        if valor_money > 0:
+                                            tax_amount = valor_money
+                                            app.logger.info(f"🔍 Encontrado IVA usando money_value de '{entity.type_}': {tax_amount}")
+                                            break
+                                
+                                # Si money_value es 0.0 o no existe, usar mention_text (más confiable en este caso)
+                                if not tax_amount and hasattr(entity, 'mention_text') and entity.mention_text:
+                                    tax_amount = entity.mention_text
+                                    app.logger.info(f"🔍 Encontrado IVA usando mention_text de '{entity.type_}': {tax_amount}")
+                                    break
+                    
                     if tax_amount:
                         try:
-                            if isinstance(tax_amount, (int, float)):
-                                iva = float(tax_amount)
+                            # Si viene como texto (mention_text), convertir de formato español (1,47) a float
+                            if isinstance(tax_amount, str):
+                                # Limpiar y convertir formato español (coma como decimal)
+                                iva_str = str(tax_amount).replace('.', '').replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
+                                impuestos = float(iva_str)
+                            elif isinstance(tax_amount, (int, float)):
+                                impuestos = float(tax_amount)
                             else:
                                 iva_str = str(tax_amount).replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
-                                iva = float(iva_str)
-                            if iva > 0:
-                                datos_extraidos['iva'] = round(iva, 2)
-                                app.logger.info(f"✅ IVA (Invoice Parser): {datos_extraidos['iva']}")
+                                impuestos = float(iva_str)
+                            if impuestos > 0:
+                                datos_extraidos['impuestos'] = round(impuestos, 2)
+                                datos_extraidos['iva'] = round(impuestos, 2)
+                                app.logger.info(f"✅ Impuestos/IVA extraído: {datos_extraidos['impuestos']}")
                         except (ValueError, AttributeError, TypeError) as e:
-                            app.logger.warning(f"No se pudo convertir IVA '{tax_amount}': {str(e)}")
+                            app.logger.warning(f"No se pudo convertir tax_amount '{tax_amount}': {str(e)}")
+                    else:
+                        app.logger.warning("⚠️ NO se encontró tax_amount en las entidades de Document AI")
+                    
+                    # 9.1. PORCENTAJES DE IVA: Detectar todos los tipos de IVA presentes en la factura
+                    import re
+                    porcentajes_iva_detectados = []
+                    iva_porcentaje = None
+                    
+                    # Buscar en entidades de Document AI (puede haber múltiples)
+                    for entity in document.entities:
+                        tipo_lower = entity.type_.lower()
+                        if 'vat_rate' in tipo_lower or 'tax_rate' in tipo_lower:
+                            try:
+                                valor = None
+                                if hasattr(entity, 'normalized_value') and entity.normalized_value:
+                                    if hasattr(entity.normalized_value, 'float_value'):
+                                        valor = entity.normalized_value.float_value
+                                    elif hasattr(entity, 'mention_text') and entity.mention_text:
+                                        valor = entity.mention_text
+                                elif hasattr(entity, 'mention_text') and entity.mention_text:
+                                    valor = entity.mention_text
+                                
+                                if valor:
+                                    if isinstance(valor, str):
+                                        vat_str = str(valor).replace('%', '').replace(',', '.').strip()
+                                        porcentaje = float(vat_str)
+                                        if porcentaje < 1:
+                                            porcentaje = porcentaje * 100
+                                    else:
+                                        porcentaje = float(valor)
+                                        if porcentaje < 1:
+                                            porcentaje = porcentaje * 100
+                                    
+                                    if porcentaje > 0 and porcentaje <= 100:
+                                        porcentajes_iva_detectados.append(round(porcentaje, 2))
+                            except (ValueError, AttributeError, TypeError):
+                                continue
+                    
+                    # Buscar todos los porcentajes de IVA en el texto (puede haber múltiples)
+                    texto_lower = texto_completo.lower()
+                    patrones_iva_porcentaje = [
+                        r'iva\s+(?:al\s+)?(\d+(?:[.,]\d+)?)\s*%',
+                        r'(\d+(?:[.,]\d+)?)\s*%\s+iva',
+                        r'iva\s*\((\d+(?:[.,]\d+)?)\s*%\)',
+                        r'tipo\s+iva[:\s]+(\d+(?:[.,]\d+)?)\s*%',
+                        r'(\d+(?:[.,]\d+)?)\s*%',  # Buscar cualquier porcentaje cerca de "IVA"
+                    ]
+                    
+                    for patron in patrones_iva_porcentaje:
+                        matches = re.finditer(patron, texto_lower, re.IGNORECASE)
+                        for match in matches:
+                            try:
+                                porcentaje_str = match.group(1).replace(',', '.').strip()
+                                porcentaje = float(porcentaje_str)
+                                # Solo incluir porcentajes válidos en España (4%, 10%, 21%, y valores cercanos)
+                                if porcentaje > 0 and porcentaje <= 100:
+                                    porcentajes_iva_detectados.append(round(porcentaje, 2))
+                            except (ValueError, AttributeError):
+                                continue
+                    
+                    # Eliminar duplicados y ordenar
+                    porcentajes_iva_detectados = sorted(list(set(porcentajes_iva_detectados)))
+                    
+                    # Filtrar solo porcentajes válidos en España (4%, 10%, 21% y valores cercanos)
+                    porcentajes_validos_espana = [4, 10, 21]
+                    porcentajes_iva_validos = []
+                    for p in porcentajes_iva_detectados:
+                        # Verificar si es un porcentaje válido o está cerca de uno válido
+                        for pv in porcentajes_validos_espana:
+                            if abs(p - pv) < 0.5:  # Tolerancia de 0.5 puntos porcentuales
+                                porcentajes_iva_validos.append(pv)
+                                break
+                    
+                    # Eliminar duplicados y ordenar
+                    porcentajes_iva_validos = sorted(list(set(porcentajes_iva_validos)))
+                    
+                    if porcentajes_iva_validos:
+                        datos_extraidos['iva_porcentajes_detectados'] = porcentajes_iva_validos
+                        # Usar el porcentaje más común o el más alto como principal
+                        iva_porcentaje = porcentajes_iva_validos[-1]  # El más alto por defecto
+                        app.logger.info(f"✅ Porcentajes de IVA detectados: {porcentajes_iva_validos}%")
+                    
+                    # Calcular porcentaje efectivo si tenemos IVA total y Base Imponible total
+                    porcentaje_efectivo = None
+                    if 'impuestos' in datos_extraidos and 'total' in datos_extraidos:
+                        try:
+                            if datos_extraidos['total'] > 0:
+                                porcentaje_efectivo = (datos_extraidos['impuestos'] / datos_extraidos['total']) * 100
+                                porcentaje_efectivo = round(porcentaje_efectivo, 2)
+                                datos_extraidos['iva_porcentaje_efectivo'] = porcentaje_efectivo
+                                app.logger.info(f"✅ Porcentaje de IVA efectivo calculado: {porcentaje_efectivo}%")
+                                
+                                # Si no hay porcentajes detectados, usar el efectivo redondeado al más cercano
+                                if not iva_porcentaje:
+                                    porcentajes_validos = [4, 10, 21]
+                                    porcentaje_mas_cercano = min(porcentajes_validos, key=lambda x: abs(x - porcentaje_efectivo))
+                                    if abs(porcentaje_mas_cercano - porcentaje_efectivo) < 2:
+                                        iva_porcentaje = porcentaje_mas_cercano
+                                        datos_extraidos['iva_porcentaje'] = iva_porcentaje
+                                        app.logger.info(f"✅ Porcentaje de IVA principal (calculado): {iva_porcentaje}%")
+                        except (ValueError, TypeError, ZeroDivisionError) as e:
+                            app.logger.warning(f"No se pudo calcular porcentaje efectivo de IVA: {str(e)}")
+                    
+                    # Si tenemos porcentajes detectados, usar el principal
+                    if iva_porcentaje and 'iva_porcentaje' not in datos_extraidos:
+                        datos_extraidos['iva_porcentaje'] = iva_porcentaje
+                        app.logger.info(f"✅ Porcentaje de IVA principal: {iva_porcentaje}%")
+                    
+                    # Si tenemos TOTAL y Base Imponible pero no IVA ni porcentaje, calcular ambos
+                    if 'iva_porcentaje' not in datos_extraidos and 'impuestos' not in datos_extraidos:
+                        if 'total_con_impuestos' in datos_extraidos and 'total' in datos_extraidos:
+                            try:
+                                if datos_extraidos['total'] > 0:
+                                    iva_calculado = datos_extraidos['total_con_impuestos'] - datos_extraidos['total']
+                                    if iva_calculado > 0:
+                                        datos_extraidos['impuestos'] = round(iva_calculado, 2)
+                                        datos_extraidos['iva'] = round(iva_calculado, 2)
+                                        # Calcular también el porcentaje efectivo
+                                        porcentaje_efectivo = (iva_calculado / datos_extraidos['total']) * 100
+                                        datos_extraidos['iva_porcentaje_efectivo'] = round(porcentaje_efectivo, 2)
+                                        porcentajes_validos = [4, 10, 21]
+                                        porcentaje_mas_cercano = min(porcentajes_validos, key=lambda x: abs(x - porcentaje_efectivo))
+                                        if abs(porcentaje_mas_cercano - porcentaje_efectivo) < 2:
+                                            datos_extraidos['iva_porcentaje'] = porcentaje_mas_cercano
+                                        app.logger.info(f"✅ IVA calculado (TOTAL - Base Imponible): {datos_extraidos['impuestos']}, Porcentaje efectivo: {datos_extraidos.get('iva_porcentaje_efectivo', 'N/A')}%, Principal: {datos_extraidos.get('iva_porcentaje', 'N/A')}%")
+                            except (ValueError, TypeError) as e:
+                                app.logger.warning(f"No se pudo calcular IVA desde TOTAL y Base Imponible: {str(e)}")
+                    
+                    # 10. BASE IMPONIBLE: Usar mapeo configurado o buscar con lógica especial
+                    subtotal_amount = extraer_campo_con_mapeo('base_imponible', ['net_amount', 'subtotal_amount', 'subtotal', 'line_item_amount', 'amount'])
+                    
+                    # Si no encontramos con el mapeo, buscar cualquier entidad con "subtotal" o "net" en el nombre
+                    if not subtotal_amount:
+                        for entity in document.entities:
+                            tipo_lower = entity.type_.lower()
+                            if ('subtotal' in tipo_lower or 'net' in tipo_lower) and hasattr(entity, 'normalized_value') and entity.normalized_value:
+                                norm_val = entity.normalized_value
+                                if hasattr(norm_val, 'money_value') and norm_val.money_value:
+                                    money = norm_val.money_value
+                                    unidades = float(money.units) if hasattr(money, 'units') else 0
+                                    nanos = float(money.nanos) / 1e9 if hasattr(money, 'nanos') else 0
+                                    valor_money = unidades + nanos
+                                    if valor_money > 0:
+                                        subtotal_amount = valor_money
+                                        app.logger.info(f"🔍 Encontrado subtotal usando entidad '{entity.type_}': {subtotal_amount}")
+                                        break
+                                # Si no tiene money_value, usar mention_text
+                                if not subtotal_amount and hasattr(entity, 'mention_text') and entity.mention_text:
+                                    subtotal_amount = entity.mention_text
+                                    app.logger.info(f"🔍 Encontrado subtotal usando mention_text de '{entity.type_}': {subtotal_amount}")
+                                    break
+                    
+                    if subtotal_amount:
+                        try:
+                            if isinstance(subtotal_amount, (int, float)):
+                                base_imponible = float(subtotal_amount)
+                            else:
+                                base_str = str(subtotal_amount).replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
+                                base_imponible = float(base_str)
+                            if base_imponible > 0:
+                                datos_extraidos['total'] = round(base_imponible, 2)
+                                app.logger.info(f"✅ Base Imponible extraída: {datos_extraidos['total']}")
+                        except (ValueError, AttributeError, TypeError) as e:
+                            app.logger.warning(f"No se pudo convertir base imponible '{subtotal_amount}': {str(e)}")
+                    else:
+                        app.logger.warning("⚠️ NO se encontró subtotal_amount en las entidades de Document AI")
+                        # RESPALDO: Buscar "Base Imponible" o "Base" cerca de números en el texto
+                        # Esto es lo que el usuario sugiere: buscar cerca del texto "Base Imponible"
+                        import re
+                        texto_lower = texto_completo.lower()
+                        # Buscar patrones como "Base Imponible: 36,75" o "Base Imponible 36,75"
+                        patrones_base = [
+                            r'base\s+imponible[:\s]+([\d.,]+)',
+                            r'base[:\s]+([\d.,]+)',
+                            r'importe\s+bruto[:\s]+([\d.,]+)',
+                        ]
+                        for patron in patrones_base:
+                            match = re.search(patron, texto_lower, re.IGNORECASE)
+                            if match:
+                                try:
+                                    valor_str = match.group(1).replace('.', '').replace(',', '.').strip()
+                                    base_imponible = float(valor_str)
+                                    if base_imponible > 0:
+                                        datos_extraidos['total'] = round(base_imponible, 2)
+                                        app.logger.info(f"✅ Base Imponible encontrada por búsqueda de texto cerca de 'Base Imponible': {datos_extraidos['total']}")
+                                        break
+                                except (ValueError, AttributeError):
+                                    continue
+                    
+                    # Si no tenemos base imponible pero sí tenemos total e IVA, calcularla
+                    # Esto es válido porque: Base Imponible = Total con Impuestos - IVA
+                    if 'total' not in datos_extraidos and 'total_con_impuestos' in datos_extraidos and 'impuestos' in datos_extraidos:
+                        try:
+                            base_calculada = datos_extraidos['total_con_impuestos'] - datos_extraidos['impuestos']
+                            if base_calculada > 0:
+                                datos_extraidos['total'] = round(base_calculada, 2)
+                                app.logger.info(f"✅ Base Imponible calculada (Total - IVA): {datos_extraidos['total']}")
+                        except (ValueError, TypeError) as e:
+                            app.logger.warning(f"No se pudo calcular base imponible: {str(e)}")
                     
                     # 10. Términos de pago / Método de pago
                     payment_terms = get_entity_value('payment_terms', ['payment_terms_payment_terms'])
@@ -4541,42 +4976,42 @@ def procesar_factura():
                             datos_extraidos['metodo_pago'] = 'cheque'
                         app.logger.info(f"✅ Términos de pago (Invoice Parser): {payment_terms}")
                     
-                    # 11. Concepto / Descripción de líneas de factura
-                    line_items = []
-                    line_descriptions = []
-                    for entity in document.entities:
-                        if entity.type_ in ['line_item', 'line_item_description', 'line_item_description_line_item_description']:
-                            valor = None
-                            if hasattr(entity, 'mention_text') and entity.mention_text:
-                                valor = entity.mention_text
-                            elif hasattr(entity, 'text_anchor') and entity.text_anchor and entity.text_anchor.text_segments:
-                                for segment in entity.text_anchor.text_segments:
-                                    start_index = segment.start_index if hasattr(segment, 'start_index') else 0
-                                    end_index = segment.end_index if hasattr(segment, 'end_index') else len(texto_completo)
-                                    if end_index > start_index:
-                                        valor = texto_completo[start_index:end_index]
-                                        break
-                            if valor:
-                                line_descriptions.append(str(valor).strip())
+                    # 11. Concepto / Descripción de líneas de factura: Usar mapeo configurado
+                    concepto_mapeado = extraer_campo_con_mapeo('concepto', ['line_item', 'line_item_description', 'line_item_description_line_item_description'])
                     
-                    if line_descriptions and 'concepto' not in datos_extraidos:
-                        # Usar la primera descripción o concatenar las primeras (máximo 3)
-                        concepto = line_descriptions[0] if len(line_descriptions) == 1 else ', '.join(line_descriptions[:3])
-                        datos_extraidos['concepto'] = concepto[:500]
+                    if concepto_mapeado:
+                        datos_extraidos['concepto'] = str(concepto_mapeado).strip()[:500]
                         app.logger.info(f"✅ Concepto (Invoice Parser): {datos_extraidos['concepto']}")
+                    else:
+                        # Si no encontramos con el mapeo, buscar manualmente
+                        line_items = []
+                        line_descriptions = []
+                        for entity in document.entities:
+                            if entity.type_ in ['line_item', 'line_item_description', 'line_item_description_line_item_description']:
+                                valor = None
+                                if hasattr(entity, 'mention_text') and entity.mention_text:
+                                    valor = entity.mention_text
+                                elif hasattr(entity, 'text_anchor') and entity.text_anchor and entity.text_anchor.text_segments:
+                                    for segment in entity.text_anchor.text_segments:
+                                        start_index = segment.start_index if hasattr(segment, 'start_index') else 0
+                                        end_index = segment.end_index if hasattr(segment, 'end_index') else len(texto_completo)
+                                        if end_index > start_index:
+                                            valor = texto_completo[start_index:end_index]
+                                            break
+                                if valor:
+                                    line_descriptions.append(str(valor).strip())
+                        
+                        if line_descriptions and 'concepto' not in datos_extraidos:
+                            # Usar la primera descripción o concatenar las primeras (máximo 3)
+                            concepto = line_descriptions[0] if len(line_descriptions) == 1 else ', '.join(line_descriptions[:3])
+                            datos_extraidos['concepto'] = concepto[:500]
+                            app.logger.info(f"✅ Concepto (Invoice Parser): {datos_extraidos['concepto']}")
                     
                     app.logger.info(f"📊 Resumen datos extraídos con Invoice Parser: {len([k for k in datos_extraidos.keys() if k != 'texto_completo'])} campos")
                 
-                # Si no se extrajeron datos con Invoice Parser o faltan campos, usar regex como respaldo
-                usar_regex_respaldo = (
-                    'numero_factura' not in datos_extraidos or
-                    'monto' not in datos_extraidos or
-                    'fecha_pago' not in datos_extraidos or
-                    'proveedor' not in datos_extraidos
-                )
-                
-                if usar_regex_respaldo:
-                    app.logger.info("Usando extracción con regex como respaldo o complemento...")
+                # NO USAR REGEX - Confiar completamente en Invoice Parser
+                # Si Invoice Parser no extrae algo, simplemente no lo tenemos
+                # No hacer procesamiento manual adicional
                 
                 # DETECTAR RESIDENCIA AUTOMÁTICAMENTE desde el texto de la factura
                 # Obtener residencias del usuario si aún no se han obtenido
@@ -4706,272 +5141,173 @@ def procesar_factura():
                 # Guardar texto_completo para incluirlo en la respuesta (solo para debugging/pruebas)
                 datos_extraidos['texto_completo'] = texto_completo
                 
-                # EXTRACCIÓN CON REGEX (respaldo o complemento)
-                # Solo extraer campos que no se hayan extraído con Invoice Parser
+                # MEJORA: Si faltan campos importantes, intentar extraerlos del texto completo como respaldo
+                # Esto es especialmente útil cuando Document AI no detecta todos los campos
+                import re
+                texto_lower = texto_completo.lower()
                 
-                # 1. Extraer NÚMERO DE FACTURA (campo: numero_factura) - solo si no se extrajo antes
-                if 'numero_factura' not in datos_extraidos:
-                    # Buscar patrones como "SP/1472", "FAC-2025-001", etc.
-                    patrones_factura = [
-                        r'(?:factura|invoice|n[úu]mero|n[úu]m\.|n[úu]m|ref|referencia)[\s:]*([A-Z0-9\-/]+)',
-                        r'([A-Z]{1,3}[/\-]\d{1,6})',  # Patrón como SP/1472, FAC-001
-                        r'([A-Z]{2,}\s*\d{4,}[\-/\d]*)',
-                        r'(?:factura|invoice)\s*[#:]?\s*([A-Z0-9\-/]+)',
-                        r'\b([A-Z]{1,3}[-/]\d{1,6})\b'  # Patrón más específico para códigos como SP/1472
+                # Si no tenemos TOTAL, buscar en el texto
+                if 'total_con_impuestos' not in datos_extraidos and 'monto' not in datos_extraidos:
+                    patrones_total = [
+                        r'total[:\s]+([\d.,]+)\s*€?',
+                        r'total\s+factura[:\s]+([\d.,]+)\s*€?',
+                        r'importe\s+total[:\s]+([\d.,]+)\s*€?',
+                        r'total\s+a\s+pagar[:\s]+([\d.,]+)\s*€?',
+                        r'total\s+incluido[:\s]+([\d.,]+)\s*€?',
                     ]
-                    for patron in patrones_factura:
+                    for patron in patrones_total:
                         match = re.search(patron, texto_completo, re.IGNORECASE)
                         if match:
-                            numero = match.group(1).strip()
-                            # Validar que no sea solo un número o código postal
-                            if len(numero) <= 100 and not re.match(r'^\d{5}$', numero):  # Excluir códigos postales
-                                datos_extraidos['numero_factura'] = numero
-                                app.logger.info(f"Número de factura extraído (regex): {datos_extraidos['numero_factura']}")
-                                break
-                
-                # 2. Extraer MONTO (campo: monto) - solo si no se extrajo antes
-                if 'monto' not in datos_extraidos:
-                    patrones_monto = [
-                        r'(?:total|importe|amount|precio|price|suma)[\s:]*([\d.,]+)\s*(?:€|EUR|euros)?',
-                        r'([\d.,]+)\s*(?:€|EUR|euros)',
-                        r'€\s*([\d.,]+)',
-                        r'(?:total|importe)[\s:]*([\d.,]+)'
-                    ]
-                    for patron in patrones_monto:
-                        match = re.search(patron, texto_completo, re.IGNORECASE)
-                        if match:
-                            monto_str = match.group(1).replace(',', '.').replace(' ', '')
                             try:
-                                monto = float(monto_str)
-                                if monto > 0 and monto <= 99999999.99:  # Validar rango razonable
-                                    datos_extraidos['monto'] = round(monto, 2)
-                                    app.logger.info(f"Monto extraído: {datos_extraidos['monto']}")
+                                valor_str = match.group(1).replace('.', '').replace(',', '.').strip()
+                                total_encontrado = float(valor_str)
+                                if total_encontrado > 0:
+                                    datos_extraidos['total_con_impuestos'] = round(total_encontrado, 2)
+                                    datos_extraidos['monto'] = round(total_encontrado, 2)
+                                    app.logger.info(f"✅ Total encontrado por búsqueda en texto: {datos_extraidos['total_con_impuestos']}")
                                     break
-                            except ValueError:
+                            except (ValueError, AttributeError):
                                 continue
                 
-                # 3. Extraer FECHA DE PAGO/FACTURA (campo: fecha_pago) - solo si no se extrajo antes
-                if 'fecha_pago' not in datos_extraidos:
-                    # Buscar fechas en formato DD/MM/YYYY o DD-MM-YYYY
-                    patrones_fecha = [
-                        r'(?:fecha|date|vencimiento)[\s:]*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})',
-                        r'(\d{2}[/\-]\d{2}[/\-]\d{4})',  # Formato específico DD/MM/YYYY (prioridad)
-                        r'(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})',
+                # Si no tenemos BASE IMPONIBLE, buscar en el texto
+                if 'total' not in datos_extraidos:
+                    patrones_base = [
+                        r'base\s+imponible[:\s]+([\d.,]+)\s*€?',
+                        r'base[:\s]+([\d.,]+)\s*€?',
+                        r'importe\s+bruto[:\s]+([\d.,]+)\s*€?',
+                        r'subtotal[:\s]+([\d.,]+)\s*€?',
+                        r'importe\s+base[:\s]+([\d.,]+)\s*€?',
                     ]
-                    for patron in patrones_fecha:
+                    for patron in patrones_base:
+                        match = re.search(patron, texto_completo, re.IGNORECASE)
+                        if match:
+                            try:
+                                valor_str = match.group(1).replace('.', '').replace(',', '.').strip()
+                                base_encontrada = float(valor_str)
+                                if base_encontrada > 0:
+                                    datos_extraidos['total'] = round(base_encontrada, 2)
+                                    app.logger.info(f"✅ Base Imponible encontrada por búsqueda en texto: {datos_extraidos['total']}")
+                                    break
+                            except (ValueError, AttributeError):
+                                continue
+                
+                # Si no tenemos IVA, buscar en el texto
+                if 'impuestos' not in datos_extraidos and 'iva' not in datos_extraidos:
+                    patrones_iva = [
+                        r'iva[:\s]+([\d.,]+)\s*€?',
+                        r'impuestos[:\s]+([\d.,]+)\s*€?',
+                        r'importe\s+iva[:\s]+([\d.,]+)\s*€?',
+                        r'cuota\s+iva[:\s]+([\d.,]+)\s*€?',
+                    ]
+                    for patron in patrones_iva:
+                        match = re.search(patron, texto_completo, re.IGNORECASE)
+                        if match:
+                            try:
+                                valor_str = match.group(1).replace('.', '').replace(',', '.').strip()
+                                iva_encontrado = float(valor_str)
+                                if iva_encontrado > 0:
+                                    datos_extraidos['impuestos'] = round(iva_encontrado, 2)
+                                    datos_extraidos['iva'] = round(iva_encontrado, 2)
+                                    app.logger.info(f"✅ IVA encontrado por búsqueda en texto: {datos_extraidos['impuestos']}")
+                                    break
+                            except (ValueError, AttributeError):
+                                continue
+                
+                # Si no tenemos PROVEEDOR, buscar en el texto (buscar después de "proveedor", "emisor", etc.)
+                if 'proveedor' not in datos_extraidos:
+                    patrones_proveedor = [
+                        r'(?:proveedor|emisor|facturador|vendedor)[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s,\.]+?)(?:\n|€|NIF|CIF|IVA|Total|$)',
+                        r'factura\s+a[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s,\.]+?)(?:\n|€|NIF|CIF|IVA|Total|$)',
+                    ]
+                    for patron in patrones_proveedor:
+                        match = re.search(patron, texto_completo, re.IGNORECASE | re.MULTILINE)
+                        if match:
+                            proveedor_encontrado = match.group(1).strip()
+                            # Limpiar el nombre (quitar espacios extra, líneas nuevas, etc.)
+                            proveedor_encontrado = ' '.join(proveedor_encontrado.split())
+                            if len(proveedor_encontrado) > 3 and len(proveedor_encontrado) < 200:
+                                datos_extraidos['proveedor'] = proveedor_encontrado
+                                app.logger.info(f"✅ Proveedor encontrado por búsqueda en texto: {datos_extraidos['proveedor']}")
+                                break
+                
+                # Si no tenemos NIF del proveedor, buscar en el texto
+                if 'proveedor_nif' not in datos_extraidos:
+                    patrones_nif = [
+                        r'(?:nif|cif|n\.?i\.?f\.?|c\.?i\.?f\.?)[:\s]*([A-Z0-9]{8,10})',
+                        r'([A-Z][0-9]{8})',  # Formato básico: A12345678
+                        r'([A-Z]{2}[0-9]{7}[A-Z0-9])',  # Formato CIF: A1234567X
+                    ]
+                    for patron in patrones_nif:
                         matches = re.finditer(patron, texto_completo, re.IGNORECASE)
                         for match in matches:
-                            fecha_str = match.group(1)
-                            try:
-                                from datetime import datetime
-                                # Intentar diferentes formatos, priorizando DD/MM/YYYY
-                                for fmt in ['%d/%m/%Y', '%d-%m-%Y', '%d/%m/%y', '%d-%m-%y', '%Y-%m-%d']:
-                                    try:
-                                        fecha = datetime.strptime(fecha_str, fmt)
-                                        # Validar que la fecha sea razonable (no futura más de 1 año, no anterior a 2000)
-                                        if fecha.year >= 2000 and fecha.year <= datetime.now().year + 1:
-                                            datos_extraidos['fecha_pago'] = fecha.strftime('%Y-%m-%d')
-                                            app.logger.info(f"Fecha extraída: {datos_extraidos['fecha_pago']} (de: {fecha_str})")
-                                            break
-                                    except ValueError:
-                                        continue
-                                if 'fecha_pago' in datos_extraidos:
-                                    break
-                            except:
-                                pass
-                        if 'fecha_pago' in datos_extraidos:
+                            nif_encontrado = match.group(1).upper().strip()
+                            # Validar que parece un NIF/CIF válido
+                            if len(nif_encontrado) >= 8 and len(nif_encontrado) <= 10:
+                                datos_extraidos['proveedor_nif'] = nif_encontrado
+                                app.logger.info(f"✅ NIF/CIF encontrado por búsqueda en texto: {datos_extraidos['proveedor_nif']}")
+                                break
+                        if 'proveedor_nif' in datos_extraidos:
                             break
                 
-                # 4. Extraer PROVEEDOR (campo: proveedor) - buscar nombre del emisor - solo si no se extrajo antes
-                if 'proveedor' not in datos_extraidos:
-                    # Buscar en las primeras líneas del documento (donde suele estar el emisor)
-                    lineas = texto_completo.split('\n')
-                    proveedor_encontrado = None
-                    
-                    # Buscar patrones comunes de emisor/proveedor en las primeras líneas
-                    # Evitar líneas que contengan teléfono, email, dirección completa, etc.
-                    patrones_excluir = [
-                        r'^Telf:', r'^Tel:', r'^Teléfono:', r'^Phone:',
-                        r'^E-mail:', r'^Email:', r'^@',
-                        r'^\d{5,}',  # Códigos postales o números largos
-                        r'^\d{2,3}[-/]\d{2,3}[-/]\d{4}',  # Fechas
-                        r'^NIF:', r'^CIF:', r'^N[úu]m\.', r'^RGSEAA',
-                        r'^PARTIDO', r'^APTDO', r'^CORREOS',
+                # Si no tenemos TELÉFONO del proveedor, buscar en el texto
+                if 'proveedor_telefono' not in datos_extraidos:
+                    patrones_telefono = [
+                        r'(?:tel|teléfono|tlf|tfn|phone)[:\s]*([0-9]{9,12})',
+                        r'([0-9]{3}[\s\-]?[0-9]{3}[\s\-]?[0-9]{3})',  # Formato: 666 555 444
+                        r'([0-9]{9})',  # Formato: 666555444
                     ]
-                    
-                    for i, linea in enumerate(lineas[:15]):  # Primeras 15 líneas (donde suele estar el emisor)
-                        linea_limpia = linea.strip()
-                        
-                        # Saltar líneas vacías o muy cortas
-                        if len(linea_limpia) < 3 or len(linea_limpia) > 255:
-                            continue
-                        
-                        # Saltar líneas que coinciden con patrones a excluir
-                        debe_excluir = False
-                        for patron in patrones_excluir:
-                            if re.match(patron, linea_limpia, re.IGNORECASE):
-                                debe_excluir = True
+                    for patron in patrones_telefono:
+                        matches = re.finditer(patron, texto_completo, re.IGNORECASE)
+                        for match in matches:
+                            telefono_encontrado = match.group(1).replace(' ', '').replace('-', '').strip()
+                            if len(telefono_encontrado) >= 9:
+                                datos_extraidos['proveedor_telefono'] = telefono_encontrado
+                                app.logger.info(f"✅ Teléfono encontrado por búsqueda en texto: {datos_extraidos['proveedor_telefono']}")
                                 break
-                        if debe_excluir:
-                            continue
-                        
-                        # Saltar líneas que son solo números, fechas, códigos o NIFs
-                        if (re.match(r'^[\d\s\-\/]+$', linea_limpia) or 
-                            re.match(r'^[A-Z0-9\-/]+$', linea_limpia) or
-                            re.match(r'^[A-Z]\d{8}', linea_limpia)):  # Evitar NIFs como B13944905
-                            continue
-                        
-                        # Buscar líneas que parezcan nombres de empresa
-                        # Debe empezar con mayúscula y tener al menos una palabra con minúsculas
-                        if (re.match(r'^[A-ZÁÉÍÓÚÑ]', linea_limpia) and 
-                            re.search(r'[a-záéíóúñ]', linea_limpia)):  # Debe tener minúsculas
-                            
-                            # Preferir líneas que contengan indicadores de empresa
-                            tiene_indicador_empresa = (
-                                'S.L' in linea_limpia.upper() or 
-                                'S.A' in linea_limpia.upper() or 
-                                'S.L.U' in linea_limpia.upper() or
-                                len(linea_limpia.split()) >= 2
-                            )
-                            
-                            if tiene_indicador_empresa:
-                                # Verificar si la siguiente línea también es parte del nombre
-                                nombre_completo = linea_limpia
-                                if i < len(lineas) - 1:
-                                    siguiente_linea = lineas[i + 1].strip() if i + 1 < len(lineas) else ''
-                                    # Si la siguiente línea también parece nombre de empresa (no tiene números, teléfono, email)
-                                    if (len(siguiente_linea) > 3 and len(siguiente_linea) < 100 and
-                                        re.match(r'^[A-ZÁÉÍÓÚÑ]', siguiente_linea) and
-                                        not re.match(r'^[\d\s\-\/]+$', siguiente_linea) and
-                                        not any(re.match(p, siguiente_linea, re.IGNORECASE) for p in patrones_excluir)):
-                                        nombre_completo = f"{linea_limpia} {siguiente_linea}".strip()[:255]
-                                
-                                # Limpiar el proveedor (remover espacios extra, etc.)
-                                proveedor_encontrado = ' '.join(nombre_completo.split())
-                                datos_extraidos['proveedor'] = proveedor_encontrado
-                                app.logger.info(f"Proveedor extraído (regex): {datos_extraidos['proveedor']}")
+                        if 'proveedor_telefono' in datos_extraidos:
+                            break
+                
+                # Si no tenemos EMAIL del proveedor, buscar en el texto
+                if 'proveedor_email' not in datos_extraidos:
+                    patron_email = r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+                    match = re.search(patron_email, texto_completo, re.IGNORECASE)
+                    if match:
+                        email_encontrado = match.group(1).lower().strip()
+                        datos_extraidos['proveedor_email'] = email_encontrado
+                        app.logger.info(f"✅ Email encontrado por búsqueda en texto: {datos_extraidos['proveedor_email']}")
+                
+                # Si no tenemos RECEIVER (Sociedad/Pagador), buscar en el texto
+                if 'receiver' not in datos_extraidos:
+                    patrones_receiver = [
+                        r'(?:receptor|pagador|cliente|sociedad|facturado\s+a)[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s,\.S\.L\.]+?)(?:\n|€|NIF|CIF|IVA|Total|$)',
+                        r'factura\s+a[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s,\.S\.L\.]+?)(?:\n|€|NIF|CIF|IVA|Total|$)',
+                    ]
+                    for patron in patrones_receiver:
+                        match = re.search(patron, texto_completo, re.IGNORECASE | re.MULTILINE)
+                        if match:
+                            receiver_encontrado = match.group(1).strip()
+                            # Limpiar el nombre (quitar espacios extra, líneas nuevas, etc.)
+                            receiver_encontrado = ' '.join(receiver_encontrado.split())
+                            if len(receiver_encontrado) > 3 and len(receiver_encontrado) < 200:
+                                datos_extraidos['receiver'] = receiver_encontrado
+                                app.logger.info(f"✅ Receiver/Sociedad encontrado por búsqueda en texto: {datos_extraidos['receiver']}")
                                 break
-                    
-                    # Si no se encontró en las primeras líneas, buscar con regex
-                    if 'proveedor' not in datos_extraidos:
-                        patrones_proveedor = [
-                            r'(?:de|from|proveedor|supplier|emisor|emite)[\s:]*([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñ\s]+(?:S\.?L\.?|S\.?A\.?|S\.?L\.?U\.?)?)',
-                        ]
-                        for patron in patrones_proveedor:
-                            match = re.search(patron, texto_completo, re.IGNORECASE)
-                            if match:
-                                proveedor = match.group(1).strip()[:255]
-                                if len(proveedor) > 3:
-                                    datos_extraidos['proveedor'] = proveedor
-                                    app.logger.info(f"Proveedor extraído (regex): {datos_extraidos['proveedor']}")
-                                    break
                 
-                # 4.1. Extraer NIF del proveedor
-                patrones_nif = [
-                    r'NIF[:\s]*([A-Z]\d{8})',
-                    r'CIF[:\s]*([A-Z]\d{8})',
-                    r'([A-Z]\d{8})',  # Patrón genérico de NIF español
-                ]
-                for patron in patrones_nif:
-                    match = re.search(patron, texto_completo, re.IGNORECASE)
-                    if match:
-                        nif = match.group(1).strip().upper()
-                        # Verificar que no sea el NIF de la residencia (ya lo tenemos)
-                        if len(nif) == 9:
-                            datos_extraidos['proveedor_nif'] = nif
-                            app.logger.info(f"NIF del proveedor extraído: {datos_extraidos['proveedor_nif']}")
-                            break
+                # Recalcular porcentaje de IVA si ahora tenemos IVA y Base Imponible
+                if 'impuestos' in datos_extraidos and 'total' in datos_extraidos and 'iva_porcentaje' not in datos_extraidos:
+                    try:
+                        if datos_extraidos['total'] > 0:
+                            porcentaje_efectivo = (datos_extraidos['impuestos'] / datos_extraidos['total']) * 100
+                            porcentajes_validos = [4, 10, 21]
+                            porcentaje_mas_cercano = min(porcentajes_validos, key=lambda x: abs(x - porcentaje_efectivo))
+                            if abs(porcentaje_mas_cercano - porcentaje_efectivo) < 2:
+                                datos_extraidos['iva_porcentaje'] = porcentaje_mas_cercano
+                                datos_extraidos['iva_porcentaje_efectivo'] = round(porcentaje_efectivo, 2)
+                                app.logger.info(f"✅ Porcentaje de IVA calculado después de búsqueda en texto: {datos_extraidos['iva_porcentaje']}%")
+                    except (ValueError, TypeError, ZeroDivisionError):
+                        pass
                 
-                # 4.2. Extraer teléfono del proveedor
-                patrones_telefono = [
-                    r'Telf[:\s]*([\d\s\-]{9,15})',
-                    r'Tel[:\s]*([\d\s\-]{9,15})',
-                    r'Teléfono[:\s]*([\d\s\-]{9,15})',
-                    r'Phone[:\s]*([\d\s\-]{9,15})',
-                ]
-                for patron in patrones_telefono:
-                    match = re.search(patron, texto_completo, re.IGNORECASE)
-                    if match:
-                        telefono = match.group(1).strip().replace(' ', '').replace('-', '')
-                        if len(telefono) >= 9:
-                            datos_extraidos['proveedor_telefono'] = telefono
-                            app.logger.info(f"Teléfono del proveedor extraído: {datos_extraidos['proveedor_telefono']}")
-                            break
-                
-                # 4.3. Extraer email del proveedor
-                patron_email = r'[Ee]-?mail[:\s]*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
-                match = re.search(patron_email, texto_completo)
-                if match:
-                    email = match.group(1).strip().lower()
-                    datos_extraidos['proveedor_email'] = email
-                    app.logger.info(f"Email del proveedor extraído: {datos_extraidos['proveedor_email']}")
-                
-                # 4.4. Extraer dirección del proveedor (líneas después del nombre)
-                if 'proveedor' in datos_extraidos:
-                    # Buscar líneas después del nombre del proveedor que parezcan dirección
-                    for i, linea in enumerate(lineas[:20]):
-                        if datos_extraidos['proveedor'].lower() in linea.lower():
-                            # Las siguientes 2-3 líneas podrían ser la dirección
-                            direccion_partes = []
-                            for j in range(i+1, min(i+4, len(lineas))):
-                                siguiente = lineas[j].strip()
-                                if (len(siguiente) > 5 and len(siguiente) < 200 and
-                                    not re.match(r'^Telf', siguiente, re.IGNORECASE) and
-                                    not re.match(r'^E-mail', siguiente, re.IGNORECASE) and
-                                    not re.match(r'^@', siguiente) and
-                                    not re.match(r'^\d{5,}', siguiente)):
-                                    direccion_partes.append(siguiente)
-                                else:
-                                    break
-                            if direccion_partes:
-                                datos_extraidos['proveedor_direccion'] = ', '.join(direccion_partes)[:500]
-                                app.logger.info(f"Dirección del proveedor extraída: {datos_extraidos['proveedor_direccion']}")
-                            break
-                
-                # 5. Extraer CONCEPTO (campo: concepto) - descripción del servicio/producto
-                # Buscar palabras clave como "MENSUAL", "SERVICIO", etc. o líneas descriptivas
-                conceptos_encontrados = []
-                
-                # Buscar palabras clave comunes de conceptos
-                palabras_clave_concepto = ['mensual', 'servicio', 'suministro', 'alquiler', 'mantenimiento', 
-                                          'facturación', 'servicios', 'productos', 'suministros']
-                for palabra in palabras_clave_concepto:
-                    if palabra in texto_lower:
-                        # Buscar la línea que contiene la palabra clave
-                        for linea in lineas:
-                            if palabra in linea.lower():
-                                linea_limpia = linea.strip()
-                                if len(linea_limpia) > 3 and len(linea_limpia) < 500:
-                                    conceptos_encontrados.append(linea_limpia.upper())
-                                    break
-                
-                # Si no se encontró con palabras clave, buscar líneas descriptivas
-                if not conceptos_encontrados:
-                    for linea in lineas[5:40]:  # Líneas intermedias donde suele estar la descripción
-                        linea_limpia = linea.strip()
-                        if len(linea_limpia) > 3 and len(linea_limpia) < 500:
-                            # Evitar líneas que son solo números, fechas, códigos o montos
-                            if (not re.match(r'^[\d\s\-\/]+$', linea_limpia) and 
-                                not re.match(r'^[A-Z0-9\-/]+$', linea_limpia) and
-                                not re.search(r'[\d.,]+\s*€', linea_limpia) and
-                                'total' not in linea_limpia.lower() and
-                                'importe' not in linea_limpia.lower() and
-                                'factura' not in linea_limpia.lower() and
-                                'fecha' not in linea_limpia.lower() and
-                                'cliente' not in linea_limpia.lower()):
-                                # Preferir líneas en mayúsculas que parecen conceptos
-                                if linea_limpia.isupper() and len(linea_limpia.split()) <= 5:
-                                    conceptos_encontrados.insert(0, linea_limpia)  # Prioridad
-                                else:
-                                    conceptos_encontrados.append(linea_limpia)
-                
-                if conceptos_encontrados:
-                    # Tomar el primer concepto válido
-                    concepto = conceptos_encontrados[0]
-                    if len(concepto) > 500:
-                        concepto = concepto[:500]
-                    datos_extraidos['concepto'] = concepto
-                    app.logger.info(f"Concepto extraído: {datos_extraidos['concepto']}")
+                app.logger.info(f"📊 Datos extraídos después de búsqueda en texto: {[k for k in datos_extraidos.keys() if k != 'texto_completo']}")
                 
                 # Guardar texto_completo para la respuesta (fuera de datos_extraidos)
                 texto_completo_respuesta = texto_completo
@@ -5023,11 +5359,21 @@ def procesar_factura():
             else:
                 app.logger.warning(f"Usuario no tiene acceso a la residencia detectada {id_residencia_detectada}, usando residencia proporcionada")
         
-        # Guardar PDF en Cloud Storage (usar id_residencia detectada o proporcionada)
+        # Determinar content_type para guardar en Cloud Storage
+        nombre_archivo_lower = nombre_archivo.lower() if nombre_archivo else ''
+        if es_imagen:
+            if nombre_archivo_lower.endswith('.png') or (hasattr(archivo, 'content_type') and archivo.content_type == 'image/png'):
+                content_type = 'image/png'
+            else:
+                content_type = 'image/jpeg'
+        else:
+            content_type = 'application/pdf'
+        
+        # Guardar archivo (PDF o imagen) en Cloud Storage (usar id_residencia detectada o proporcionada)
         from storage_manager import upload_document_unificado
         blob_path = upload_document_unificado(
             file_content, id_residencia, 'pago_proveedor', 0,  # id_entidad será 0 hasta que se cree el pago
-            'Factura', nombre_archivo, 'application/pdf'
+            'Factura', nombre_archivo, content_type
         )
         
         if not blob_path:
@@ -5041,13 +5387,73 @@ def procesar_factura():
             from storage_manager import get_document_url
             pdf_url = get_document_url(blob_path, expiration_minutes=60)
         
+        # Preparar entidades disponibles para el frontend (formato simplificado)
+        entidades_disponibles_respuesta = {}
+        if 'entidades_detalladas' in locals() and entidades_detalladas:
+            for tipo_entidad, lista_entidades in entidades_detalladas.items():
+                if lista_entidades:
+                    # Tomar el primer ejemplo de cada tipo de entidad
+                    primera_entidad = lista_entidades[0]
+                    ejemplo_valor = None
+                    confidence = 0.0
+                    
+                    # Obtener el valor de ejemplo
+                    if 'money_value' in primera_entidad and primera_entidad['money_value']:
+                        ejemplo_valor = str(primera_entidad['money_value'])
+                    elif 'mention_text' in primera_entidad and primera_entidad['mention_text']:
+                        ejemplo_valor = primera_entidad['mention_text']
+                    
+                    # Obtener confianza
+                    if 'confidence' in primera_entidad and primera_entidad['confidence']:
+                        confidence = float(primera_entidad['confidence'])
+                    
+                    if ejemplo_valor:
+                        entidades_disponibles_respuesta[tipo_entidad] = {
+                            'ejemplo_valor': ejemplo_valor,
+                            'confidence': confidence
+                        }
+        
+        # MEJORA: Añadir campos extraídos del texto como entidades disponibles si no fueron detectados por Document AI
+        # Esto ayuda al usuario a ver qué campos se encontraron mediante búsqueda en texto
+        if 'datos_extraidos' in locals() and datos_extraidos:
+            campos_mapeo = {
+                'total_con_impuestos': 'Total con Impuestos',
+                'monto': 'Monto Total',
+                'total': 'Base Imponible',
+                'impuestos': 'IVA (€)',
+                'iva': 'IVA',
+                'iva_porcentaje': 'IVA (%)',
+                'proveedor': 'Proveedor',
+                'proveedor_nif': 'NIF/CIF Proveedor',
+                'proveedor_telefono': 'Teléfono Proveedor',
+                'proveedor_email': 'Email Proveedor',
+                'proveedor_direccion': 'Dirección Proveedor',
+                'numero_factura': 'Número de Factura',
+                'fecha_pago': 'Fecha de Factura',
+            }
+            
+            for campo_sistema, nombre_display in campos_mapeo.items():
+                if campo_sistema in datos_extraidos:
+                    valor = datos_extraidos[campo_sistema]
+                    if valor:
+                        # Crear una clave única para este campo
+                        clave_entidad = f"extraido_{campo_sistema}"
+                        # Solo añadir si no existe ya en las entidades detectadas por Document AI
+                        if clave_entidad not in entidades_disponibles_respuesta:
+                            entidades_disponibles_respuesta[clave_entidad] = {
+                                'ejemplo_valor': str(valor),
+                                'confidence': 85.0,  # Confianza media para campos extraídos del texto
+                                'origen': 'búsqueda_en_texto'  # Indicar que viene de búsqueda en texto
+                            }
+        
         # Preparar respuesta con texto completo si está disponible
         respuesta = {
             'mensaje': 'Factura procesada exitosamente',
             'blob_path': blob_path,  # Ruta del PDF guardado en Cloud Storage (para asociar al registro)
             'pdf_url': pdf_url,  # URL firmada para visualizar el PDF
             'id_residencia_detectada': id_residencia_detectada,  # ID de residencia detectada automáticamente
-            'datos_extraidos': datos_extraidos if datos_extraidos else {}
+            'datos_extraidos': datos_extraidos if datos_extraidos else {},
+            'entidades_disponibles': entidades_disponibles_respuesta  # Entidades detectadas por la IA para mapeo
         }
         
         # Incluir texto completo si se extrajo (útil para debugging y pruebas)
@@ -5163,8 +5569,8 @@ def actualizar_pago_proveedor(id_pago):
             nueva_residencia = data.get('id_residencia')
             if nueva_residencia and nueva_residencia != pago_existente[1]:
                 is_valid, error_response = validate_residencia_access(nueva_residencia)
-                if not is_valid:
-                    return error_response
+            if not is_valid:
+                return error_response
             
             # Preparar datos para actualizar
             updates = []
@@ -6793,6 +7199,14 @@ def listar_modulos():
             ]
         },
         {
+            'id_modulo': 'receiver',
+            'nombre': 'Entidades Fiscales',
+            'permisos': [
+                {'id': 'leer:receiver', 'nombre': 'Leer Entidades', 'descripcion': 'Ver entidades fiscales'},
+                {'id': 'escribir:receiver', 'nombre': 'Gestionar Entidades', 'descripcion': 'Crear y modificar entidades fiscales'}
+            ]
+        },
+        {
             'id_modulo': 'documentacion',
             'nombre': 'Documentación',
             'permisos': [
@@ -7192,6 +7606,242 @@ def actualizar_residencia(id_residencia):
         return jsonify({'error': 'Error al procesar la solicitud'}), 500
 
 
+# ==================== ENDPOINTS DE RECEIVERS (ENTIDADES FISCALES) ====================
+
+@app.route('/api/v1/receivers', methods=['GET'])
+@permiso_requerido('leer:receiver')
+def listar_receivers():
+    """Lista todas las entidades fiscales (receivers/sociedades)."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT id_receiver, nombre, nif_cif, direccion, telefono, email, activo, fecha_creacion
+                FROM receiver
+                ORDER BY nombre
+            """)
+            
+            receivers = cursor.fetchall()
+            
+            resultado = []
+            for r in receivers:
+                resultado.append({
+                    'id_receiver': r[0],
+                    'nombre': r[1],
+                    'nif_cif': r[2],
+                    'direccion': r[3],
+                    'telefono': r[4],
+                    'email': r[5],
+                    'activo': r[6],
+                    'fecha_creacion': r[7].isoformat() if r[7] else None
+                })
+            
+            return jsonify({'receivers': resultado, 'total': len(resultado)}), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al listar receivers: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': f'Error al obtener entidades fiscales: {str(e)}'}), 500
+
+
+@app.route('/api/v1/receivers', methods=['POST'])
+@permiso_requerido('escribir:receiver')
+def crear_receiver():
+    """Crea una nueva entidad fiscal (receiver/sociedad)."""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Datos JSON requeridos'}), 400
+        
+        nombre = data.get('nombre')
+        if not nombre:
+            return jsonify({'error': 'nombre es requerido'}), 400
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                INSERT INTO receiver (nombre, nif_cif, direccion, telefono, email, activo)
+                VALUES (%s, %s, %s, %s, %s, TRUE)
+                RETURNING id_receiver
+            """, (
+                nombre,
+                data.get('nif_cif'),
+                data.get('direccion'),
+                data.get('telefono'),
+                data.get('email')
+            ))
+            
+            id_receiver = cursor.fetchone()[0]
+            conn.commit()
+            
+            return jsonify({
+                'id_receiver': id_receiver,
+                'mensaje': 'Entidad fiscal creada exitosamente'
+            }), 201
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al crear receiver: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': f'Error al crear entidad fiscal: {str(e)}'}), 500
+
+
+@app.route('/api/v1/residencias/<int:id_residencia>/receivers', methods=['GET'])
+@permiso_requerido('leer:residencia')
+def listar_receivers_residencia(id_residencia):
+    """Lista las entidades fiscales asociadas a una residencia."""
+    try:
+        # Verificar acceso a la residencia
+        is_valid, error_response = validate_residencia_access(id_residencia)
+        if not is_valid:
+            return error_response
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT r.id_receiver, r.nombre, r.nif_cif, r.direccion, r.telefono, r.email, r.activo
+                FROM receiver r
+                INNER JOIN residencia_receiver rr ON r.id_receiver = rr.id_receiver
+                WHERE rr.id_residencia = %s AND rr.activo = TRUE AND r.activo = TRUE
+                ORDER BY r.nombre
+            """, (id_residencia,))
+            
+            receivers = cursor.fetchall()
+            
+            resultado = []
+            for r in receivers:
+                resultado.append({
+                    'id_receiver': r[0],
+                    'nombre': r[1],
+                    'nif_cif': r[2],
+                    'direccion': r[3],
+                    'telefono': r[4],
+                    'email': r[5],
+                    'activo': r[6]
+                })
+            
+            return jsonify({'receivers': resultado, 'total': len(resultado)}), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al listar receivers de residencia: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': f'Error al obtener entidades fiscales: {str(e)}'}), 500
+
+
+@app.route('/api/v1/residencias/<int:id_residencia>/receivers/<int:id_receiver>', methods=['POST'])
+@permiso_requerido('escribir:residencia')
+def asociar_receiver_residencia(id_residencia, id_receiver):
+    """Asocia una entidad fiscal a una residencia."""
+    try:
+        # Verificar acceso a la residencia
+        is_valid, error_response = validate_residencia_access(id_residencia)
+        if not is_valid:
+            return error_response
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verificar que el receiver existe y está activo
+            cursor.execute("SELECT activo FROM receiver WHERE id_receiver = %s", (id_receiver,))
+            receiver = cursor.fetchone()
+            
+            if not receiver:
+                return jsonify({'error': 'Entidad fiscal no encontrada'}), 404
+            
+            if not receiver[0]:
+                return jsonify({'error': 'La entidad fiscal está inactiva'}), 400
+            
+            # Verificar que la residencia existe
+            cursor.execute("SELECT activa FROM residencia WHERE id_residencia = %s", (id_residencia,))
+            residencia = cursor.fetchone()
+            
+            if not residencia:
+                return jsonify({'error': 'Residencia no encontrada'}), 404
+            
+            # Asociar (o reactivar si ya existe)
+            cursor.execute("""
+                INSERT INTO residencia_receiver (id_residencia, id_receiver, activo)
+                VALUES (%s, %s, TRUE)
+                ON CONFLICT (id_residencia, id_receiver) 
+                DO UPDATE SET activo = TRUE, fecha_asignacion = CURRENT_TIMESTAMP
+            """, (id_residencia, id_receiver))
+            
+            conn.commit()
+            
+            return jsonify({'mensaje': 'Entidad fiscal asociada exitosamente'}), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al asociar receiver a residencia: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': f'Error al asociar entidad fiscal: {str(e)}'}), 500
+
+
+@app.route('/api/v1/residencias/<int:id_residencia>/receivers/<int:id_receiver>', methods=['DELETE'])
+@permiso_requerido('escribir:residencia')
+def desasociar_receiver_residencia(id_residencia, id_receiver):
+    """Desasocia una entidad fiscal de una residencia."""
+    try:
+        # Verificar acceso a la residencia
+        is_valid, error_response = validate_residencia_access(id_residencia)
+        if not is_valid:
+            return error_response
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Desactivar la relación (no eliminar físicamente)
+            cursor.execute("""
+                UPDATE residencia_receiver 
+                SET activo = FALSE 
+                WHERE id_residencia = %s AND id_receiver = %s
+            """, (id_residencia, id_receiver))
+            
+            if cursor.rowcount == 0:
+                return jsonify({'error': 'La entidad fiscal no está asociada a esta residencia'}), 404
+            
+            conn.commit()
+            
+            return jsonify({'mensaje': 'Entidad fiscal desasociada exitosamente'}), 200
+            
+        finally:
+            cursor.close()
+            conn.close()
+            
+    except Exception as e:
+        app.logger.error(f"Error al desasociar receiver de residencia: {str(e)}")
+        import traceback
+        app.logger.error(traceback.format_exc())
+        return jsonify({'error': f'Error al desasociar entidad fiscal: {str(e)}'}), 500
+
+
 @app.route('/api/v1/residencias/<int:id_residencia>', methods=['DELETE'])
 @permiso_requerido('escribir:residencia')
 def eliminar_residencia(id_residencia):
@@ -7417,14 +8067,14 @@ def listar_usuarios():
                         cursor.execute(f"""
                             SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.activo, u.fecha_creacion,
                                    r.nombre as nombre_rol, u.id_residencia
-                            FROM usuario u
-                            JOIN rol r ON u.id_rol = r.id_rol
+                FROM usuario u
+                JOIN rol r ON u.id_rol = r.id_rol
                             {filtro_rol}
-                            ORDER BY u.fecha_creacion DESC
-                        """)
-                        
-                        usuarios = cursor.fetchall()
-                        
+                ORDER BY u.fecha_creacion DESC
+            """)
+            
+            usuarios = cursor.fetchall()
+            
                         usuarios_con_residencias = []
                         for u in usuarios:
                             id_residencia = u[8] if len(u) > 8 else None
@@ -7473,11 +8123,11 @@ def listar_usuarios():
                         usuarios_con_residencias = []
                         for u in usuarios:
                             usuarios_con_residencias.append({
-                                'id_usuario': u[0],
-                                'email': u[1],
-                                'nombre': u[2],
-                                'apellido': u[3],
-                                'id_rol': u[4],
+                        'id_usuario': u[0],
+                        'email': u[1],
+                        'nombre': u[2],
+                        'apellido': u[3],
+                        'id_rol': u[4],
                                 'activo': u[5],
                                 'fecha_creacion': u[6].isoformat() if u[6] else None,
                                 'nombre_rol': u[7],
@@ -7875,32 +8525,32 @@ def listar_documentacion():
             params_unificados = []
             
             if tabla_documento_existe:
-                query_unificados = f"""
-                    SELECT d.id_documento, d.tipo_entidad, d.id_entidad, d.id_residencia,
-                           d.categoria_documento, d.tipo_documento, d.nombre_archivo, d.descripcion,
-                           d.fecha_subida, d.url_archivo, d.tamaño_bytes, d.tipo_mime,
-                           d.id_usuario_subida, d.activo,
-                           res.nombre as nombre_residencia
-                    FROM documento d
-                    JOIN residencia res ON d.id_residencia = res.id_residencia
-                    WHERE d.activo = TRUE
-                    {residencias_filtro}
-                """
-                
-                params_unificados = params.copy()
-                
-                # Filtros opcionales para documentos unificados
-                if tipo_entidad:
-                    query_unificados += " AND d.tipo_entidad = %s"
-                    params_unificados.append(tipo_entidad)
-                
-                if categoria:
-                    query_unificados += " AND d.categoria_documento = %s"
-                    params_unificados.append(categoria)
-                
-                if id_entidad:
-                    query_unificados += " AND d.id_entidad = %s"
-                    params_unificados.append(id_entidad)
+            query_unificados = f"""
+                SELECT d.id_documento, d.tipo_entidad, d.id_entidad, d.id_residencia,
+                       d.categoria_documento, d.tipo_documento, d.nombre_archivo, d.descripcion,
+                       d.fecha_subida, d.url_archivo, d.tamaño_bytes, d.tipo_mime,
+                       d.id_usuario_subida, d.activo,
+                       res.nombre as nombre_residencia
+                FROM documento d
+                JOIN residencia res ON d.id_residencia = res.id_residencia
+                WHERE d.activo = TRUE
+                {residencias_filtro}
+            """
+            
+            params_unificados = params.copy()
+            
+            # Filtros opcionales para documentos unificados
+            if tipo_entidad:
+                query_unificados += " AND d.tipo_entidad = %s"
+                params_unificados.append(tipo_entidad)
+            
+            if categoria:
+                query_unificados += " AND d.categoria_documento = %s"
+                params_unificados.append(categoria)
+            
+            if id_entidad:
+                query_unificados += " AND d.id_entidad = %s"
+                params_unificados.append(id_entidad)
                 
                 # El filtro de residencia ya está aplicado en residencias_filtro
             
@@ -7938,19 +8588,19 @@ def listar_documentacion():
                 tiene_categoria = False
             
             if tiene_categoria:
-                query_legacy = f"""
-                    SELECT dr.id_documento, 'residente' as tipo_entidad, dr.id_residente as id_entidad, 
-                           dr.id_residencia,
-                           COALESCE(dr.categoria_documento, 'otra') as categoria_documento, 
-                           dr.tipo_documento, dr.nombre_archivo, dr.descripcion,
-                           dr.fecha_subida, dr.url_archivo, dr.tamaño_bytes, dr.tipo_mime,
-                           NULL as id_usuario_subida, TRUE as activo,
-                           res.nombre as nombre_residencia
-                    FROM documento_residente dr
-                    JOIN residencia res ON dr.id_residencia = res.id_residencia
-                    WHERE 1=1
-                    {residencias_filtro_legacy}
-                """
+            query_legacy = f"""
+                SELECT dr.id_documento, 'residente' as tipo_entidad, dr.id_residente as id_entidad, 
+                       dr.id_residencia,
+                       COALESCE(dr.categoria_documento, 'otra') as categoria_documento, 
+                       dr.tipo_documento, dr.nombre_archivo, dr.descripcion,
+                       dr.fecha_subida, dr.url_archivo, dr.tamaño_bytes, dr.tipo_mime,
+                       NULL as id_usuario_subida, TRUE as activo,
+                       res.nombre as nombre_residencia
+                FROM documento_residente dr
+                JOIN residencia res ON dr.id_residencia = res.id_residencia
+                WHERE 1=1
+                {residencias_filtro_legacy}
+            """
             else:
                 # Si no tiene columna categoria_documento, usar 'otra' por defecto
                 query_legacy = f"""
@@ -7985,12 +8635,12 @@ def listar_documentacion():
                 # Para documentos legacy, mapear categorías si es necesario
                 if tiene_categoria:
                     # Si tiene columna categoria_documento, filtrar por ella
-                    if categoria == 'otra':
-                        # Incluir documentos sin categoría o con categoría 'otra'
-                        query_legacy += " AND (dr.categoria_documento IS NULL OR dr.categoria_documento = 'otra')"
-                    else:
-                        query_legacy += " AND dr.categoria_documento = %s"
-                        params_legacy.append(categoria)
+                if categoria == 'otra':
+                    # Incluir documentos sin categoría o con categoría 'otra'
+                    query_legacy += " AND (dr.categoria_documento IS NULL OR dr.categoria_documento = 'otra')"
+                else:
+                    query_legacy += " AND dr.categoria_documento = %s"
+                    params_legacy.append(categoria)
                 else:
                     # Si no tiene columna categoria_documento, solo mostrar si el filtro es 'otra'
                     if categoria != 'otra':
@@ -8007,7 +8657,7 @@ def listar_documentacion():
             # Consultar documentos unificados (solo si la tabla existe y hay query)
             if query_unificados:
                 try:
-                    cursor.execute(query_unificados, params_unificados)
+            cursor.execute(query_unificados, params_unificados)
                     documentos_unificados = cursor.fetchall()
                     documentos.extend(documentos_unificados)
                 except Exception as e:
@@ -8019,7 +8669,7 @@ def listar_documentacion():
             # Consultar documentos legacy (solo si no hay filtro de tipo o si es 'residente')
             if query_legacy and (not tipo_entidad or tipo_entidad == 'residente'):
                 try:
-                    cursor.execute(query_legacy, params_legacy)
+                cursor.execute(query_legacy, params_legacy)
                     documentos_legacy = cursor.fetchall()
                     documentos.extend(documentos_legacy)
                 except Exception as e:
@@ -8081,7 +8731,7 @@ def listar_documentacion():
             
             # Ordenar por fecha_subida descendente
             try:
-                documentos.sort(key=lambda x: x[8] if x[8] else datetime.min, reverse=True)
+            documentos.sort(key=lambda x: x[8] if x[8] else datetime.min, reverse=True)
             except Exception as e:
                 app.logger.error(f"Error al ordenar documentos: {str(e)}")
                 # Si falla el ordenamiento, continuar sin ordenar
@@ -8095,27 +8745,27 @@ def listar_documentacion():
                         app.logger.warning(f"Documento con menos campos de los esperados: {len(doc)} campos")
                         continue
                     
-                    tipo_ent = doc[1]
-                    id_ent = doc[2]
-                    nombre_entidad = None
-                    
-                    # Obtener nombre de la entidad
-                    try:
-                        if tipo_ent == 'residente':
-                            cursor.execute("SELECT nombre, apellido FROM residente WHERE id_residente = %s", (id_ent,))
-                            ent = cursor.fetchone()
-                            if ent:
-                                nombre_entidad = f"{ent[0]} {ent[1]}"
-                        elif tipo_ent == 'proveedor':
-                            cursor.execute("SELECT nombre FROM proveedor WHERE id_proveedor = %s", (id_ent,))
-                            ent = cursor.fetchone()
-                            if ent:
-                                nombre_entidad = ent[0]
-                        elif tipo_ent == 'personal':
-                            cursor.execute("SELECT nombre, apellido FROM personal WHERE id_personal = %s", (id_ent,))
-                            ent = cursor.fetchone()
-                            if ent:
-                                nombre_entidad = f"{ent[0]} {ent[1]}"
+                tipo_ent = doc[1]
+                id_ent = doc[2]
+                nombre_entidad = None
+                
+                # Obtener nombre de la entidad
+                try:
+                    if tipo_ent == 'residente':
+                        cursor.execute("SELECT nombre, apellido FROM residente WHERE id_residente = %s", (id_ent,))
+                        ent = cursor.fetchone()
+                        if ent:
+                            nombre_entidad = f"{ent[0]} {ent[1]}"
+                    elif tipo_ent == 'proveedor':
+                        cursor.execute("SELECT nombre FROM proveedor WHERE id_proveedor = %s", (id_ent,))
+                        ent = cursor.fetchone()
+                        if ent:
+                            nombre_entidad = ent[0]
+                    elif tipo_ent == 'personal':
+                        cursor.execute("SELECT nombre, apellido FROM personal WHERE id_personal = %s", (id_ent,))
+                        ent = cursor.fetchone()
+                        if ent:
+                            nombre_entidad = f"{ent[0]} {ent[1]}"
                         elif tipo_ent == 'pago_proveedor':
                             # Para facturas de pagos, obtener el nombre del proveedor del pago
                             cursor.execute("SELECT proveedor FROM pago_proveedor WHERE id_pago = %s", (doc[0],))
@@ -8124,32 +8774,32 @@ def listar_documentacion():
                                 nombre_entidad = ent[0]
                     except Exception as e:
                         app.logger.warning(f"Error al obtener nombre de entidad {tipo_ent} {id_ent}: {str(e)}")
-                    
-                    url_descarga = None
-                    if doc[9]:  # Si hay url_archivo
+                
+                url_descarga = None
+                if doc[9]:  # Si hay url_archivo
                         try:
-                            url_descarga = get_document_url(doc[9], expiration_minutes=60)
+                    url_descarga = get_document_url(doc[9], expiration_minutes=60)
                         except Exception as e:
                             app.logger.warning(f"Error al generar URL de descarga: {str(e)}")
-                    
-                    resultado.append({
-                        'id_documento': doc[0],
-                        'tipo_entidad': doc[1],
-                        'id_entidad': doc[2],
-                        'nombre_entidad': nombre_entidad,
-                        'id_residencia': doc[3],
+                
+                resultado.append({
+                    'id_documento': doc[0],
+                    'tipo_entidad': doc[1],
+                    'id_entidad': doc[2],
+                    'nombre_entidad': nombre_entidad,
+                    'id_residencia': doc[3],
                         'nombre_residencia': doc[14] if len(doc) > 14 else None,
-                        'categoria_documento': doc[4],
-                        'tipo_documento': doc[5],
-                        'nombre_archivo': doc[6],
-                        'descripcion': doc[7],
-                        'fecha_subida': doc[8].isoformat() if doc[8] else None,
-                        'url_archivo': doc[9],
-                        'url_descarga': url_descarga,
-                        'tamaño_bytes': doc[10],
-                        'tipo_mime': doc[11],
-                        'id_usuario_subida': doc[12]
-                    })
+                    'categoria_documento': doc[4],
+                    'tipo_documento': doc[5],
+                    'nombre_archivo': doc[6],
+                    'descripcion': doc[7],
+                    'fecha_subida': doc[8].isoformat() if doc[8] else None,
+                    'url_archivo': doc[9],
+                    'url_descarga': url_descarga,
+                    'tamaño_bytes': doc[10],
+                    'tipo_mime': doc[11],
+                    'id_usuario_subida': doc[12]
+                })
                 except Exception as e:
                     app.logger.error(f"Error al procesar documento: {str(e)}")
                     app.logger.error(f"Documento: {doc}")
@@ -8416,12 +9066,12 @@ def descargar_documento_unificado(id_documento):
             
             # Si no se encuentra en facturas, buscar en la tabla unificada 'documento'
             if not doc:
-                cursor.execute("""
-                    SELECT url_archivo, id_residencia FROM documento
-                    WHERE id_documento = %s AND activo = TRUE
-                """, (id_documento,))
-                
-                doc = cursor.fetchone()
+            cursor.execute("""
+                SELECT url_archivo, id_residencia FROM documento
+                WHERE id_documento = %s AND activo = TRUE
+            """, (id_documento,))
+            
+            doc = cursor.fetchone()
             
             # Si no se encuentra, buscar en documento_residente (legacy)
             if not doc:

@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Archivos de entorno (no incluir credenciales en la imagen)
+.env
+.env.local
+.env.*.local
+
+# Cloud SQL Proxy (no necesario en producción)
+cloud-sql-proxy/
+
+# Scripts de desarrollo
+*.ps1
+*.bat
+*.sh
+start_server*.ps1
+setup_cloud_sql_proxy.ps1
+configurar_proxy_env.ps1
+restart_server.ps1
+stop_server.ps1
+
+# Archivos de credenciales (se usarán Secret Manager en producción)
+*.json
+residencias-*.json
+
+# Logs
+*.log
+logs/
+
+# Tests
+tests/
+test_*.py
+*_test.py
+
+# Documentación
+*.md
+!README.md
+
+# Git
+.git/
+.gitignore
+
+# Archivos temporales
+*.tmp
+*.bak
+*.swp
+
+# Base de datos local (si existe)
+*.db
+*.sqlite
+
+# Archivos SQL de migración (ya ejecutados)
+*.sql
+
+# Archivos de backup
+backup/
+*.backup
+
