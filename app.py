@@ -8067,14 +8067,14 @@ def listar_usuarios():
                         cursor.execute(f"""
                             SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.activo, u.fecha_creacion,
                                    r.nombre as nombre_rol, u.id_residencia
-                FROM usuario u
-                JOIN rol r ON u.id_rol = r.id_rol
+                            FROM usuario u
+                            JOIN rol r ON u.id_rol = r.id_rol
                             {filtro_rol}
-                ORDER BY u.fecha_creacion DESC
-            """)
-            
-            usuarios = cursor.fetchall()
-            
+                            ORDER BY u.fecha_creacion DESC
+                        """)
+                        
+                        usuarios = cursor.fetchall()
+                        
                         usuarios_con_residencias = []
                         for u in usuarios:
                             id_residencia = u[8] if len(u) > 8 else None
@@ -8525,7 +8525,7 @@ def listar_documentacion():
             params_unificados = []
             
             if tabla_documento_existe:
-            query_unificados = f"""
+                query_unificados = f"""
                 SELECT d.id_documento, d.tipo_entidad, d.id_entidad, d.id_residencia,
                        d.categoria_documento, d.tipo_documento, d.nombre_archivo, d.descripcion,
                        d.fecha_subida, d.url_archivo, d.tamaño_bytes, d.tipo_mime,
@@ -8588,7 +8588,7 @@ def listar_documentacion():
                 tiene_categoria = False
             
             if tiene_categoria:
-            query_legacy = f"""
+                query_legacy = f"""
                 SELECT dr.id_documento, 'residente' as tipo_entidad, dr.id_residente as id_entidad, 
                        dr.id_residencia,
                        COALESCE(dr.categoria_documento, 'otra') as categoria_documento, 
@@ -8635,11 +8635,11 @@ def listar_documentacion():
                 # Para documentos legacy, mapear categorías si es necesario
                 if tiene_categoria:
                     # Si tiene columna categoria_documento, filtrar por ella
-                if categoria == 'otra':
-                    # Incluir documentos sin categoría o con categoría 'otra'
-                    query_legacy += " AND (dr.categoria_documento IS NULL OR dr.categoria_documento = 'otra')"
-                else:
-                    query_legacy += " AND dr.categoria_documento = %s"
+                    if categoria == 'otra':
+                        # Incluir documentos sin categoría o con categoría 'otra'
+                        query_legacy += " AND (dr.categoria_documento IS NULL OR dr.categoria_documento = 'otra')"
+                    else:
+                        query_legacy += " AND dr.categoria_documento = %s"
                     params_legacy.append(categoria)
                 else:
                     # Si no tiene columna categoria_documento, solo mostrar si el filtro es 'otra'
@@ -8657,7 +8657,7 @@ def listar_documentacion():
             # Consultar documentos unificados (solo si la tabla existe y hay query)
             if query_unificados:
                 try:
-            cursor.execute(query_unificados, params_unificados)
+                    cursor.execute(query_unificados, params_unificados)
                     documentos_unificados = cursor.fetchall()
                     documentos.extend(documentos_unificados)
                 except Exception as e:
@@ -8669,7 +8669,7 @@ def listar_documentacion():
             # Consultar documentos legacy (solo si no hay filtro de tipo o si es 'residente')
             if query_legacy and (not tipo_entidad or tipo_entidad == 'residente'):
                 try:
-                cursor.execute(query_legacy, params_legacy)
+                    cursor.execute(query_legacy, params_legacy)
                     documentos_legacy = cursor.fetchall()
                     documentos.extend(documentos_legacy)
                 except Exception as e:
@@ -8731,7 +8731,7 @@ def listar_documentacion():
             
             # Ordenar por fecha_subida descendente
             try:
-            documentos.sort(key=lambda x: x[8] if x[8] else datetime.min, reverse=True)
+                documentos.sort(key=lambda x: x[8] if x[8] else datetime.min, reverse=True)
             except Exception as e:
                 app.logger.error(f"Error al ordenar documentos: {str(e)}")
                 # Si falla el ordenamiento, continuar sin ordenar
@@ -8745,13 +8745,13 @@ def listar_documentacion():
                         app.logger.warning(f"Documento con menos campos de los esperados: {len(doc)} campos")
                         continue
                     
-                tipo_ent = doc[1]
-                id_ent = doc[2]
-                nombre_entidad = None
-                
-                # Obtener nombre de la entidad
-                try:
-                    if tipo_ent == 'residente':
+                    tipo_ent = doc[1]
+                    id_ent = doc[2]
+                    nombre_entidad = None
+                    
+                    # Obtener nombre de la entidad
+                    try:
+                        if tipo_ent == 'residente':
                         cursor.execute("SELECT nombre, apellido FROM residente WHERE id_residente = %s", (id_ent,))
                         ent = cursor.fetchone()
                         if ent:
