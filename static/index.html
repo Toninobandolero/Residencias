@@ -460,6 +460,41 @@
             position: relative;
             top: 2px;
         }
+        
+        /* Responsive para pestañas en móviles */
+        @media (max-width: 768px) {
+            .tabs {
+                flex-direction: column;
+                gap: 0;
+                border-bottom: none;
+            }
+            
+            .tab {
+                width: 100%;
+                padding: 12px 16px;
+                text-align: left;
+                border-bottom: 1px solid #e0e0e0;
+                border-left: 3px solid transparent;
+                top: 0;
+                border-radius: 0;
+            }
+            
+            .tab.active {
+                border-left-color: #667eea;
+                border-bottom-color: #e0e0e0;
+            }
+            
+            .tab:first-child {
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+            }
+            
+            .tab:last-child {
+                border-bottom-left-radius: 8px;
+                border-bottom-right-radius: 8px;
+                border-bottom: 2px solid #e0e0e0;
+            }
+        }
 
         .tab:hover {
             color: #667eea;
@@ -544,6 +579,100 @@
         .data-table tr:hover td {
             background: #f0f0f0;
         }
+        
+        /* Responsive para tablas de residentes en móviles */
+        @media (max-width: 768px) {
+            .data-table {
+                min-width: 0;
+                display: block;
+            }
+            
+            .data-table thead {
+                display: none; /* Ocultar encabezados en móviles */
+            }
+            
+            .data-table tbody {
+                display: block;
+            }
+            
+            .data-table tbody tr {
+                display: block;
+                margin-bottom: 15px;
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+                padding: 12px;
+                border: 1px solid #e0e0e0;
+            }
+            
+            .data-table tbody tr:last-child {
+                margin-bottom: 0;
+            }
+            
+            .data-table tbody td {
+                display: block;
+                padding: 8px 0;
+                text-align: left;
+                border-bottom: none;
+                border-top: 1px solid #f0f0f0;
+            }
+            
+            .data-table tbody td:first-child {
+                border-top: none;
+                font-weight: 600;
+                color: #667eea;
+                font-size: 16px;
+                padding-bottom: 8px;
+                margin-bottom: 4px;
+            }
+            
+            .data-table tbody td:first-child:before {
+                content: attr(data-label) ": ";
+                font-weight: 600;
+                color: #667eea;
+                display: inline-block;
+                margin-right: 6px;
+            }
+            
+            .data-table tbody td:not(:first-child):before {
+                content: attr(data-label) ": ";
+                font-weight: 600;
+                color: #666;
+                display: inline-block;
+                margin-right: 6px;
+            }
+            
+            .residencia-residentes-container {
+                padding: 15px !important;
+                margin-top: 20px !important;
+            }
+            
+            .residencia-residentes-container h4 {
+                font-size: 16px !important;
+                margin-bottom: 12px !important;
+            }
+            
+            .data-table tfoot {
+                display: block;
+                margin-top: 15px;
+                padding: 12px;
+                background: white;
+                border-radius: 8px;
+                text-align: right;
+                font-weight: 600;
+            }
+            
+            .data-table tfoot tr {
+                display: block;
+            }
+            
+            .data-table tfoot td {
+                display: block;
+                padding: 0;
+                border: none;
+                text-align: right;
+            }
+        }
 
         .add-btn {
             padding: 10px 20px;
@@ -604,6 +733,75 @@
                 max-width: 1100px;
             }
         }
+        
+        /* Responsive para modales en móviles */
+        @media (max-width: 768px) {
+            .modal {
+                padding: 10px;
+            }
+            
+            .modal-content {
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: 20px 15px !important;
+                border-radius: 15px 15px 0 0 !important;
+                max-height: 95vh !important;
+                overflow-y: auto !important;
+            }
+            
+            .modal-header {
+                margin-bottom: 15px !important;
+                flex-wrap: wrap;
+            }
+            
+            .modal-header h2 {
+                font-size: 18px !important;
+                flex: 1;
+                min-width: 0;
+            }
+            
+            .close-modal {
+                font-size: 24px !important;
+                flex-shrink: 0;
+            }
+            
+            /* Ajustar formularios en modales */
+            .form-group {
+                margin-bottom: 15px !important;
+            }
+            
+            /* Grids de 2 columnas a 1 columna en móviles */
+            .modal-content [style*="grid-template-columns: 1fr 1fr"],
+            .modal-content [style*="grid-template-columns: repeat(2"] {
+                grid-template-columns: 1fr !important;
+            }
+            
+            /* Grids de 3 columnas a 1 columna en móviles */
+            .modal-content [style*="grid-template-columns: repeat(3"] {
+                grid-template-columns: 1fr !important;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .modal {
+                padding: 0;
+            }
+            
+            .modal-content {
+                padding: 15px 12px !important;
+                border-radius: 0 !important;
+                max-height: 100vh !important;
+            }
+            
+            .modal-header h2 {
+                font-size: 16px !important;
+            }
+            
+            .modal-header {
+                margin-bottom: 12px !important;
+            }
+        }
 
         .modal-header {
             display: flex;
@@ -641,6 +839,125 @@
         @media (max-width: 600px) {
             .form-row {
                 grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Responsive para menú de usuario */
+        @media (max-width: 768px) {
+            .header {
+                padding: 15px;
+                margin-bottom: 20px;
+            }
+            
+            .header-logo {
+                gap: 12px;
+            }
+            
+            .header-logo img {
+                max-height: 50px;
+            }
+            
+            .header-logo-text h1 {
+                display: none; /* Ocultar título en tablets y móviles */
+            }
+            
+            .user-menu-container {
+                gap: 10px;
+            }
+            
+            #userNameDisplay {
+                display: none; /* Ocultar nombre en tablets */
+            }
+            
+            .user-icon-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 18px;
+            }
+            
+            .user-menu {
+                min-width: 180px;
+                right: -10px; /* Ajustar posición en móviles */
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .header {
+                padding: 10px 15px;
+                flex-wrap: wrap;
+            }
+            
+            .header-logo {
+                gap: 8px;
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            
+            .header-logo img {
+                max-height: 45px;
+            }
+            
+            .header-logo-text {
+                min-width: 0;
+                overflow: hidden;
+            }
+            
+            .header-logo-text h1 {
+                display: none; /* Ocultar título en móviles */
+            }
+            
+            .user-menu-container {
+                gap: 8px;
+                flex-shrink: 0;
+            }
+            
+            .user-icon-btn {
+                width: 38px;
+                height: 38px;
+                font-size: 16px;
+            }
+            
+            .user-menu {
+                min-width: 160px;
+                right: -15px;
+                top: 50px;
+            }
+            
+            .user-menu-item {
+                padding: 10px 15px;
+                font-size: 13px;
+            }
+            
+            .user-menu-info {
+                padding: 10px 15px;
+            }
+            
+            .user-menu-info-item {
+                font-size: 10px;
+            }
+            
+            /* Botones de proveedores apilados en móviles */
+            .botones-proveedores-grid {
+                grid-template-columns: 1fr !important;
+            }
+            
+            /* Gráfico responsive en móviles */
+            .chart-container {
+                padding: 15px !important;
+                height: 300px !important;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            /* Botones de proveedores apilados en tablets */
+            .botones-proveedores-grid {
+                grid-template-columns: 1fr !important;
+            }
+            
+            /* Gráfico responsive en tablets */
+            .chart-container {
+                padding: 15px !important;
+                height: 350px !important;
             }
         }
     </style>
@@ -1745,14 +2062,6 @@
                         <input type="text" id="residencia_nombre" name="nombre" required placeholder="Ej: Violetas 3" maxlength="255">
                     </div>
                     <div class="form-group">
-                        <label for="residencia_nombre_fiscal">Nombre Fiscal / Razón Social</label>
-                        <input type="text" id="residencia_nombre_fiscal" name="nombre_fiscal" placeholder="Razón social completa" maxlength="255">
-                    </div>
-                    <div class="form-group">
-                        <label for="residencia_nif">NIF / CIF</label>
-                        <input type="text" id="residencia_nif" name="nif" placeholder="A12345678 o B12345678" maxlength="20">
-                    </div>
-                    <div class="form-group">
                         <label for="residencia_direccion">Dirección</label>
                         <input type="text" id="residencia_direccion" name="direccion" placeholder="Calle y número" maxlength="500">
                     </div>
@@ -1780,15 +2089,9 @@
                             <input type="email" id="residencia_email" name="email" placeholder="contacto@residencia.es" maxlength="255">
                         </div>
                     </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div class="form-group">
-                            <label for="residencia_web">Web</label>
-                            <input type="url" id="residencia_web" name="web" placeholder="https://www.residencia.es" maxlength="255">
-                        </div>
-                        <div class="form-group">
-                            <label for="residencia_cuenta_bancaria">Cuenta Bancaria (IBAN)</label>
-                            <input type="text" id="residencia_cuenta_bancaria" name="cuenta_bancaria" placeholder="ES91 2100 0418 4502 0005 1332" maxlength="34">
-                        </div>
+                    <div class="form-group">
+                        <label for="residencia_web">Web</label>
+                        <input type="url" id="residencia_web" name="web" placeholder="https://www.residencia.es" maxlength="255">
                     </div>
                     <div class="form-group">
                         <label for="residencia_observaciones">Observaciones</label>
@@ -1810,12 +2113,6 @@
                         <!-- Lista de receivers asociados se cargará aquí -->
                     </div>
                     <div style="display: flex; gap: 10px; align-items: center; margin-top: 15px;">
-                        <select id="residenciaReceiverSelect" style="flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
-                            <option value="">Seleccione una entidad fiscal existente</option>
-                        </select>
-                        <button type="button" onclick="agregarReceiverAResidencia()" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap;">
-                            + Añadir Existente
-                        </button>
                         <button type="button" onclick="nuevaEntidadFiscal()" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap;">
                             + Nueva Entidad
                         </button>
@@ -1825,6 +2122,63 @@
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
                     <button type="submit" id="saveResidenciaBtn" style="flex: 1;">Guardar</button>
                     <button type="button" onclick="closeModal('modalResidencia')" style="flex: 1; background: #6c757d;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para Nueva Entidad Fiscal -->
+    <div id="modalEntidadFiscal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Nueva Entidad Fiscal</h2>
+                <button class="close-modal" onclick="closeModal('modalEntidadFiscal')">&times;</button>
+            </div>
+            <form id="formEntidadFiscal" onsubmit="saveEntidadFiscal(event)">
+                <!-- SECCIÓN: Información Básica -->
+                <div style="background: #f0f7ff; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+                    <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Información" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información Básica</h3>
+                    <div class="form-group">
+                        <label for="entidad_nombre">Nombre / Razón Social *</label>
+                        <input type="text" id="entidad_nombre" name="nombre" required placeholder="Ej: Sociedad Gestora Violetas SL" maxlength="255">
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="entidad_nif_cif">NIF / CIF</label>
+                        <input type="text" id="entidad_nif_cif" name="nif_cif" placeholder="A12345678 o B12345678" maxlength="50">
+                    </div>
+                </div>
+                
+                <!-- SECCIÓN: Información de Contacto -->
+                <div style="background: #f0fff4; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #48bb78;">
+                    <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/phone.svg" alt="Contacto" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información de Contacto</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label for="entidad_telefono">Teléfono</label>
+                            <input type="tel" id="entidad_telefono" name="telefono" placeholder="666 555 444" maxlength="50">
+                        </div>
+                        <div class="form-group">
+                            <label for="entidad_email">Email</label>
+                            <input type="email" id="entidad_email" name="email" placeholder="contacto@entidad.com" maxlength="255">
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="entidad_direccion">Dirección</label>
+                            <input type="text" id="entidad_direccion" name="direccion" placeholder="Calle, número, ciudad">
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <div class="form-group">
+                            <label for="entidad_cuenta_bancaria">Cuenta Bancaria (IBAN)</label>
+                            <input type="text" id="entidad_cuenta_bancaria" name="cuenta_bancaria" placeholder="ES91 2100 0418 4502 0005 1332" maxlength="34">
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="modalEntidadFiscalAlert" class="alert" style="display: none;"></div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" id="saveEntidadFiscalBtn" style="flex: 1;">Guardar</button>
+                    <button type="button" onclick="closeModal('modalEntidadFiscal')" style="flex: 1; background: #6c757d;">Cancelar</button>
                 </div>
             </form>
         </div>
@@ -2288,7 +2642,12 @@
                     let html = `
                         <div class="module-content">
                             <h3 style="color: #667eea; margin-bottom: 15px;"><img src="/static/icons/medical/users.svg" alt="Residentes" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Residentes Activos (${residentesActivos.length})</h3>
-                            <button class="add-btn" onclick="openModal('modalResidente')" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Residente</button>
+                            <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center;">
+                                <div style="flex: 1; min-width: 200px;">
+                                    <input type="text" id="filtroBusquedaResidentes" placeholder="Buscar por nombre, habitación, contacto..." oninput="aplicarBusquedaResidentes()" style="padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; width: 100%;">
+                                </div>
+                                <button class="add-btn" onclick="openModal('modalResidente')" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Residente</button>
+                            </div>
                     `;
                     
                     // Colores para diferentes residencias
@@ -2304,7 +2663,7 @@
                         const color = coloresResidencias[residenciaId] || '#718096';
                         
                         html += `
-                            <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid ${color};">
+                            <div class="residencia-residentes-container" style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid ${color};">
                                 <h4 style="color: ${color}; margin-bottom: 15px; font-size: 18px; font-weight: 600;">${nombreResidencia} (${residentesResidencia.length})</h4>
                                 <table class="data-table">
                                     <thead>
@@ -2321,10 +2680,10 @@
                         residentesResidencia.forEach(res => {
                             html += `
                                 <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
-                                    <td>${res.habitacion || '-'}</td>
-                                    <td>${res.nombre} ${res.apellido}</td>
-                                    <td>${res.contacto_emergencia || '-'}</td>
-                                    <td>${res.telefono_emergencia || '-'}</td>
+                                    <td data-label="Habitación">${res.habitacion || '-'}</td>
+                                    <td data-label="Nombre">${res.nombre} ${res.apellido}</td>
+                                    <td data-label="Contacto de Emergencia">${res.contacto_emergencia || '-'}</td>
+                                    <td data-label="Teléfono de Emergencia">${res.telefono_emergencia || '-'}</td>
                                 </tr>
                             `;
                         });
@@ -2387,10 +2746,10 @@
                                 const motivoBaja = res.motivo_baja || '-';
                                 html += `
                                     <tr style="cursor: pointer;" onclick="viewResidente(${res.id_residente})">
-                                        <td>${res.habitacion || '-'}</td>
-                                        <td>${res.nombre} ${res.apellido}</td>
-                                        <td>${motivoBaja}</td>
-                                        <td>${fechaBaja}</td>
+                                        <td data-label="Habitación">${res.habitacion || '-'}</td>
+                                        <td data-label="Nombre">${res.nombre} ${res.apellido}</td>
+                                        <td data-label="Motivo de Baja">${motivoBaja}</td>
+                                        <td data-label="Fecha de Baja">${fechaBaja}</td>
                                     </tr>
                                 `;
                             });
@@ -2938,8 +3297,8 @@
                                     <!-- Gráfico de Estimación Mensual e Histórico -->
                                     <div style="margin-bottom: 30px; margin-top: 30px;">
                                         <h4 style="color: #667eea; margin-bottom: 15px;"><img src="/static/icons/medical/activity.svg" alt="Gráfico" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Histórico de Cobros</h4>
-                                        <div style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                                            <canvas id="cobrosChart" style="max-height: 400px;"></canvas>
+                                        <div class="chart-container" style="background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); position: relative; height: 400px;">
+                                            <canvas id="cobrosChart"></canvas>
                                         </div>
                                     </div>
                                 </div>
@@ -2948,7 +3307,7 @@
                                 <div id="tabPagos" class="tab-content">
                                     <div style="margin-bottom: 20px;">
                                         <h4 style="color: #667eea; margin: 0; margin-bottom: 15px;"><img src="/static/icons/medical/package.svg" alt="Proveedores" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Pagos a Proveedores (${proveedoresData.total || 0})</h4>
-                                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%;">
+                                        <div class="botones-proveedores-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%;">
                                             <button class="add-btn" onclick="openModalProveedor()" style="padding: 8px 16px; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;">
                                                 <img src="/static/icons/medical/file-medical.svg" alt="Factura" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Factura Manual
                                             </button>
@@ -4961,9 +5320,13 @@
         function aplicarMapeoCampo(campoSistema, idInput) {
             const select = document.getElementById(`mapeo_${campoSistema}`);
             const input = document.getElementById(idInput);
+            
+            // Verificar que ambos elementos existan antes de continuar
+            if (!select || !input) return;
+            
             const campoIA = select.value;
             
-            if (!campoIA || !input) return;
+            if (!campoIA) return;
             
             // Obtener el valor del campo de la IA desde las entidades disponibles
             const entidadesDisponibles = window.entidadesDisponiblesFactura || {};
@@ -6600,17 +6963,20 @@
                         },
                         options: {
                             responsive: true,
-                            maintainAspectRatio: true,
+                            maintainAspectRatio: false,
+                            aspectRatio: window.innerWidth < 768 ? 1.5 : 2,
                             plugins: {
                                 legend: {
                                     display: true,
-                                    position: 'top',
+                                    position: window.innerWidth < 768 ? 'bottom' : 'top',
                                     labels: {
                                         usePointStyle: true,
-                                        padding: 15,
+                                        padding: window.innerWidth < 768 ? 10 : 15,
                                         font: {
-                                            size: 12
-                                        }
+                                            size: window.innerWidth < 768 ? 10 : 12
+                                        },
+                                        boxWidth: window.innerWidth < 768 ? 10 : 12,
+                                        boxHeight: window.innerWidth < 768 ? 10 : 12
                                     }
                                 },
                                 tooltip: {
@@ -6636,8 +7002,9 @@
                                             return Math.round(value) + '€';
                                         },
                                         font: {
-                                            size: 11
-                                        }
+                                            size: window.innerWidth < 768 ? 9 : 11
+                                        },
+                                        maxTicksLimit: window.innerWidth < 768 ? 5 : 10
                                     },
                                     grid: {
                                         color: 'rgba(0, 0, 0, 0.05)'
@@ -6646,8 +7013,10 @@
                                 x: {
                                     ticks: {
                                         font: {
-                                            size: 11
-                                        }
+                                            size: window.innerWidth < 768 ? 9 : 11
+                                        },
+                                        maxRotation: window.innerWidth < 768 ? 45 : 0,
+                                        minRotation: window.innerWidth < 768 ? 45 : 0
                                     },
                                     grid: {
                                         display: false
@@ -6896,7 +7265,7 @@
             modal.style.display = 'block';
             
             // Asegurar que todos los botones de guardado estén habilitados al abrir cualquier modal
-            const saveButtonIds = ['saveResidenteBtn', 'savePersonalBtn', 'saveTurnoExtraBtn', 'saveCobroBtn', 'saveProveedorBtn', 'savePagoProveedorBtn', 'updateResidenteBtn', 'saveDocumentoBtn', 'saveResidenciaBtn', 'saveUsuarioBtn', 'saveMiCuentaBtn'];
+            const saveButtonIds = ['saveResidenteBtn', 'savePersonalBtn', 'saveTurnoExtraBtn', 'saveCobroBtn', 'saveProveedorBtn', 'savePagoProveedorBtn', 'updateResidenteBtn', 'saveDocumentoBtn', 'saveResidenciaBtn', 'saveUsuarioBtn', 'saveMiCuentaBtn', 'saveEntidadFiscalBtn'];
             const buttonTexts = {
                 'saveResidenteBtn': 'Guardar',
                 'savePersonalBtn': 'Guardar',
@@ -6908,7 +7277,8 @@
                 'saveDocumentoBtn': 'Guardar',
                 'saveResidenciaBtn': 'Guardar',
                 'saveUsuarioBtn': 'Guardar',
-                'saveMiCuentaBtn': 'Guardar Cambios'
+                'saveMiCuentaBtn': 'Guardar Cambios',
+                'saveEntidadFiscalBtn': 'Guardar'
             };
             
             saveButtonIds.forEach(btnId => {
@@ -7090,7 +7460,7 @@
                         
                         flatpickrContratacion = flatpickr(fechaContratacionInput, {
                             dateFormat: 'd/m/Y',
-                            locale: Spanish,
+                            locale: "es",
                             allowInput: false
                         });
                     }
@@ -7196,7 +7566,8 @@
                 'saveResidenciaBtn': 'Guardar',
                 'saveUsuarioBtn': 'Guardar',
                 'saveMiCuentaBtn': 'Guardar Cambios',
-                'saveDocumentoBtn': 'Guardar'
+                'saveDocumentoBtn': 'Guardar',
+                'saveEntidadFiscalBtn': 'Guardar'
             };
             
             saveButtonIds.forEach(btnId => {
@@ -8704,7 +9075,7 @@
                         }
                         flatpickrContratacion = flatpickr(fechaContratacionInput, {
                             dateFormat: 'd/m/Y',
-                            locale: Spanish,
+                            locale: "es",
                             allowInput: false
                         });
                     }
@@ -9787,8 +10158,6 @@
                 
                 document.getElementById('residencia_id_residencia').value = residencia.id_residencia;
                 document.getElementById('residencia_nombre').value = residencia.nombre || '';
-                document.getElementById('residencia_nombre_fiscal').value = residencia.nombre_fiscal || '';
-                document.getElementById('residencia_nif').value = residencia.nif || '';
                 document.getElementById('residencia_direccion').value = residencia.direccion || '';
                 document.getElementById('residencia_codigo_postal').value = residencia.codigo_postal || '';
                 document.getElementById('residencia_ciudad').value = residencia.ciudad || '';
@@ -9796,7 +10165,6 @@
                 document.getElementById('residencia_telefono').value = residencia.telefono || '';
                 document.getElementById('residencia_email').value = residencia.email || '';
                 document.getElementById('residencia_web').value = residencia.web || '';
-                document.getElementById('residencia_cuenta_bancaria').value = residencia.cuenta_bancaria || '';
                 document.getElementById('residencia_observaciones').value = residencia.observaciones || '';
                 document.getElementById('residencia_activa').checked = residencia.activa !== false;
                 
@@ -9805,9 +10173,6 @@
                 
                 // Cargar receivers asociados a esta residencia
                 await cargarReceiversResidencia(idResidencia);
-                
-                // Cargar lista de receivers disponibles para añadir
-                await cargarReceiversDisponibles();
                 
                 document.getElementById('modalResidenciaTitulo').innerHTML = `
                     <img src="/static/icons/medical/settings.svg" alt="Editar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Residencia
@@ -9828,7 +10193,6 @@
             document.getElementById('residencia_activa').checked = true;
             document.getElementById('residenciaEntidadesFiscalesSection').style.display = 'none';
             document.getElementById('residenciaReceiversList').innerHTML = '';
-            document.getElementById('residenciaReceiverSelect').innerHTML = '<option value="">Seleccione una entidad fiscal existente</option>';
             hideResidenciaAlert();
         }
         
@@ -9858,6 +10222,7 @@
                                 <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${r.nombre}</div>
                                 ${r.nif_cif ? `<div style="font-size: 12px; color: #666;">NIF/CIF: ${r.nif_cif}</div>` : ''}
                                 ${r.direccion ? `<div style="font-size: 12px; color: #666;">${r.direccion}</div>` : ''}
+                                ${r.cuenta_bancaria ? `<div style="font-size: 12px; color: #667eea; font-weight: 500; margin-top: 4px;">IBAN: ${r.cuenta_bancaria}</div>` : ''}
                             </div>
                             <button type="button" onclick="eliminarReceiverResidencia(${r.id_receiver}, '${r.nombre.replace(/'/g, "\\'")}')" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">
                                 Eliminar
@@ -9870,68 +10235,6 @@
             } catch (error) {
                 console.error('Error al cargar receivers:', error);
                 container.innerHTML = '<p style="color: #dc3545; font-size: 14px;">Error de conexión</p>';
-            }
-        }
-        
-        async function cargarReceiversDisponibles() {
-            const token = localStorage.getItem('violetas_token');
-            const select = document.getElementById('residenciaReceiverSelect');
-            
-            if (!select) return;
-            
-            try {
-                const response = await fetch(`${API_URL}/api/v1/receivers`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    const receivers = data.receivers || [];
-                    
-                    select.innerHTML = '<option value="">Seleccione una entidad fiscal existente</option>';
-                    receivers.filter(r => r.activo).forEach(r => {
-                        select.innerHTML += `<option value="${r.id_receiver}">${r.nombre}${r.nif_cif ? ' - ' + r.nif_cif : ''}</option>`;
-                    });
-                }
-            } catch (error) {
-                console.error('Error al cargar receivers disponibles:', error);
-            }
-        }
-        
-        async function agregarReceiverAResidencia() {
-            const token = localStorage.getItem('violetas_token');
-            const idResidencia = document.getElementById('residencia_id_residencia').value;
-            const idReceiver = document.getElementById('residenciaReceiverSelect').value;
-            
-            if (!idResidencia) {
-                alert('Debe guardar la residencia primero');
-                return;
-            }
-            
-            if (!idReceiver) {
-                alert('Seleccione una entidad fiscal');
-                return;
-            }
-            
-            try {
-                const response = await fetch(`${API_URL}/api/v1/residencias/${idResidencia}/receivers/${idReceiver}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                
-                if (response.ok) {
-                    await cargarReceiversResidencia(idResidencia);
-                    document.getElementById('residenciaReceiverSelect').value = '';
-                } else {
-                    const data = await response.json();
-                    alert(data.error || 'Error al añadir entidad fiscal');
-                }
-            } catch (error) {
-                console.error('Error al añadir receiver:', error);
-                alert('Error de conexión');
             }
         }
         
@@ -9964,17 +10267,147 @@
         }
         
         function nuevaEntidadFiscal() {
-            // Abrir modal para crear nueva entidad fiscal (similar a proveedor)
-            // Por ahora, mostrar un prompt simple
-            const nombre = prompt('Nombre de la nueva entidad fiscal:');
-            if (!nombre || nombre.trim() === '') return;
+            // Limpiar formulario
+            document.getElementById('formEntidadFiscal').reset();
+            document.getElementById('modalEntidadFiscalAlert').style.display = 'none';
             
-            const nif = prompt('NIF/CIF (opcional):');
-            const direccion = prompt('Dirección (opcional):');
-            const telefono = prompt('Teléfono (opcional):');
-            const email = prompt('Email (opcional):');
+            // Abrir modal
+            openModal('modalEntidadFiscal');
+        }
+        
+        async function saveEntidadFiscal(event) {
+            event.preventDefault();
+            const token = localStorage.getItem('violetas_token');
+            const saveBtn = document.getElementById('saveEntidadFiscalBtn');
+            const originalText = saveBtn ? saveBtn.textContent : 'Guardar';
             
-            crearReceiverYAsociar(nombre.trim(), nif?.trim(), direccion?.trim(), telefono?.trim(), email?.trim());
+            if (!token) {
+                showEntidadFiscalError('No hay sesión activa');
+                return;
+            }
+            
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Guardando...';
+            }
+            
+            hideEntidadFiscalAlert();
+            
+            try {
+                const formData = new FormData(event.target);
+                const data = {
+                    nombre: formData.get('nombre').trim(),
+                    nif_cif: formData.get('nif_cif')?.trim() || null,
+                    direccion: formData.get('direccion')?.trim() || null,
+                    telefono: formData.get('telefono')?.trim() || null,
+                    email: formData.get('email')?.trim() || null,
+                    cuenta_bancaria: formData.get('cuenta_bancaria')?.trim() || null
+                };
+                
+                if (!data.nombre) {
+                    showEntidadFiscalError('El nombre es requerido');
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = originalText;
+                    }
+                    return;
+                }
+                
+                // Crear receiver
+                const response = await fetch(`${API_URL}/api/v1/receivers`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                let result;
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        result = await response.json();
+                    } else {
+                        const text = await response.text();
+                        throw new Error(`Error del servidor (${response.status}): ${text.substring(0, 100)}`);
+                    }
+                } catch (parseError) {
+                    showEntidadFiscalError(`Error del servidor (${response.status}). Por favor, intenta de nuevo.`);
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = originalText;
+                    }
+                    return;
+                }
+                
+                if (response.ok) {
+                    const idReceiver = result.id_receiver;
+                    
+                    // Si estamos en el contexto de editar una residencia, asociar automáticamente
+                    const idResidencia = document.getElementById('residencia_id_residencia')?.value;
+                    if (idResidencia) {
+                        try {
+                            const associateResponse = await fetch(`${API_URL}/api/v1/residencias/${idResidencia}/receivers/${idReceiver}`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                }
+                            });
+                            
+                            if (associateResponse.ok) {
+                                // Recargar lista de receivers de la residencia
+                                await cargarReceiversResidencia(idResidencia);
+                            }
+                        } catch (error) {
+                            console.error('Error al asociar receiver a residencia:', error);
+                            // No mostrar error, la entidad ya se creó
+                        }
+                    }
+                    
+                    showEntidadFiscalSuccess('Entidad fiscal creada exitosamente');
+                    setTimeout(() => {
+                        closeModal('modalEntidadFiscal');
+                        if (saveBtn) {
+                            saveBtn.disabled = false;
+                            saveBtn.textContent = originalText;
+                        }
+                    }, 1500);
+                } else {
+                    showEntidadFiscalError(result.error || 'Error al crear entidad fiscal');
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = originalText;
+                    }
+                }
+            } catch (error) {
+                console.error('Error al guardar entidad fiscal:', error);
+                showEntidadFiscalError('Error de conexión: ' + error.message);
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = originalText;
+                }
+            }
+        }
+        
+        function showEntidadFiscalError(message) {
+            const alert = document.getElementById('modalEntidadFiscalAlert');
+            alert.className = 'alert alert-error';
+            alert.textContent = message;
+            alert.style.display = 'block';
+        }
+        
+        function showEntidadFiscalSuccess(message) {
+            const alert = document.getElementById('modalEntidadFiscalAlert');
+            alert.className = 'alert alert-success';
+            alert.textContent = message;
+            alert.style.display = 'block';
+        }
+        
+        function hideEntidadFiscalAlert() {
+            const alert = document.getElementById('modalEntidadFiscalAlert');
+            alert.style.display = 'none';
         }
         
         async function crearReceiverYAsociar(nombre, nif, direccion, telefono, email) {
@@ -10018,7 +10451,6 @@
                     
                     if (associateResponse.ok) {
                         await cargarReceiversResidencia(idResidencia);
-                        await cargarReceiversDisponibles();
                     } else {
                         alert('Entidad creada pero error al asociarla a la residencia');
                     }
@@ -10694,6 +11126,51 @@
                     row.style.display = '';
                 } else {
                     row.style.display = 'none';
+                }
+            });
+        }
+        
+        function aplicarBusquedaResidentes() {
+            const terminoBusqueda = document.getElementById('filtroBusquedaResidentes')?.value || '';
+            
+            if (!terminoBusqueda || terminoBusqueda.trim() === '') {
+                // Si no hay búsqueda, mostrar todas las filas y contenedores
+                document.querySelectorAll('.data-table tbody tr').forEach(row => {
+                    row.style.display = '';
+                });
+                document.querySelectorAll('.residencia-residentes-container').forEach(container => {
+                    container.style.display = '';
+                });
+                return;
+            }
+            
+            const busquedaLower = terminoBusqueda.toLowerCase().trim();
+            let totalVisible = 0;
+            
+            // Filtrar filas de la tabla y contenedores
+            document.querySelectorAll('.residencia-residentes-container').forEach(container => {
+                const tabla = container.querySelector('.data-table');
+                if (!tabla) return;
+                
+                const filas = tabla.querySelectorAll('tbody tr');
+                let filasVisiblesEnContenedor = 0;
+                
+                filas.forEach(row => {
+                    const textoCompleto = row.textContent.toLowerCase();
+                    if (textoCompleto.includes(busquedaLower)) {
+                        row.style.display = '';
+                        filasVisiblesEnContenedor++;
+                        totalVisible++;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+                
+                // Mostrar u ocultar el contenedor según si tiene filas visibles
+                if (filasVisiblesEnContenedor > 0) {
+                    container.style.display = '';
+                } else {
+                    container.style.display = 'none';
                 }
             });
         }

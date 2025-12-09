@@ -2,6 +2,8 @@
 Aplicación principal Flask para el sistema de gestión de residencias Violetas.
 Implementa autenticación JWT, permisos granulares y filtrado de datos por residencia.
 """
+import sys
+print("=== INICIANDO IMPORTACIÓN DE APP.PY ===", file=sys.stderr, flush=True)
 import os
 import jwt
 import re
@@ -26,10 +28,14 @@ from validators import (
 import mimetypes
 
 # Cargar variables de entorno desde .env (solo en desarrollo local)
-load_dotenv()
+# En Cloud Run, las variables vienen de --set-env-vars y --set-secrets
+if os.path.exists('.env'):
+    load_dotenv()
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
+print("=== APP FLASK CREADA ===", file=sys.stderr, flush=True)
 CORS(app)  # Habilitar CORS para el frontend
+print("=== CORS HABILITADO ===", file=sys.stderr, flush=True)
 
 # Configuración
 # En Cloud Run, --set-secrets crea variables de entorno automáticamente
@@ -465,7 +471,7 @@ def before_request():
     
     # Validar y decodificar token
     try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=['HS256'])
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=['HS256'])
         # Almacenar información del usuario en g para uso en las rutas
         g.id_usuario = payload.get('id_usuario')
         g.id_rol = payload.get('id_rol')
@@ -801,8 +807,8 @@ def cambiar_clave():
                 log_security_event('cambio_clave_fallido', id_usuario, {'razon': 'contraseña_actual_incorrecta'})
                 return jsonify({'error': 'Contraseña actual incorrecta'}), 401
             
-            # Hashear nueva contraseña
-            password_hash_nuevo = generate_password_hash(password_nuevo)
+            # Hashear nueva contraseña (usar pbkdf2:sha256 para compatibilidad con Python 3.9.6)
+            password_hash_nuevo = generate_password_hash(password_nuevo, method='pbkdf2:sha256')
             
             # Actualizar contraseña y marcar que ya no requiere cambio
             cursor.execute("""
@@ -925,8 +931,8 @@ def crear_usuario():
                     'residencias_invalidas': residencias_invalidas
                 }), 400
             
-            # Hashear contraseña
-            password_hash = generate_password_hash(password)
+            # Hashear contraseña (usar pbkdf2:sha256 para compatibilidad con Python 3.9.6)
+            password_hash = generate_password_hash(password, method='pbkdf2:sha256')
             
             # Crear usuario
             cursor.execute("""
@@ -2303,14 +2309,14 @@ def listar_cobros():
                 query = f"""
                     WITH cobros_pendientes AS (
                         -- Todos los cobros pendientes
-                        SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
-                               p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
-                               p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
+                    SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                           p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                           p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
                                res.id_residencia, res.nombre as nombre_residencia,
                                1 as orden_prioridad
-                        FROM pago_residente p
-                        JOIN residente r ON p.id_residente = r.id_residente
-                        JOIN residencia res ON p.id_residencia = res.id_residencia
+                    FROM pago_residente p
+                    JOIN residente r ON p.id_residente = r.id_residente
+                    JOIN residencia res ON p.id_residencia = res.id_residencia
                         {where_clause}
                           AND p.estado = 'pendiente'
                     ),
@@ -2380,14 +2386,14 @@ def listar_cobros():
                 query = """
                     WITH cobros_pendientes AS (
                         -- Todos los cobros pendientes
-                        SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
-                               p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
-                               p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
+                    SELECT p.id_pago, p.id_residente, r.nombre || ' ' || r.apellido as residente,
+                           p.monto, p.fecha_pago, p.fecha_prevista, p.mes_pagado, p.concepto,
+                           p.metodo_pago, p.estado, p.es_cobro_previsto, p.observaciones, p.fecha_creacion,
                                res.id_residencia, res.nombre as nombre_residencia,
                                1 as orden_prioridad
-                        FROM pago_residente p
-                        JOIN residente r ON p.id_residente = r.id_residente
-                        JOIN residencia res ON p.id_residencia = res.id_residencia
+                    FROM pago_residente p
+                    JOIN residente r ON p.id_residente = r.id_residente
+                    JOIN residencia res ON p.id_residencia = res.id_residencia
                         WHERE p.estado = 'pendiente'
                     ),
                     ultimos_cobros_completados AS (
@@ -3022,11 +3028,11 @@ def generar_cobros_previstos():
                 placeholders = ','.join(['%s'] * len(g.residencias_acceso))
                 cursor.execute(f"""
                     SELECT id_residente, nombre, apellido, costo_habitacion, metodo_pago_preferido, fecha_ingreso, id_residencia
-                    FROM residente
+                FROM residente
                     WHERE id_residencia IN ({placeholders})
-                      AND activo = TRUE 
-                      AND costo_habitacion IS NOT NULL 
-                      AND costo_habitacion > 0
+                  AND activo = TRUE 
+                  AND costo_habitacion IS NOT NULL 
+                  AND costo_habitacion > 0
                       AND fecha_ingreso IS NOT NULL
                 """, tuple(g.residencias_acceso))
                 
@@ -3389,19 +3395,19 @@ def ultimos_cobros_completados():
             if g.id_rol == SUPER_ADMIN_ROLE_ID:
                 # Super admin: sin filtro
                 query_mensual = f"""
-                    SELECT DISTINCT ON (p.id_residente)
-                        {select_clause}
-                    FROM pago_residente p
-                    JOIN residente r ON p.id_residente = r.id_residente
+                SELECT DISTINCT ON (p.id_residente)
+                    {select_clause}
+                FROM pago_residente p
+                JOIN residente r ON p.id_residente = r.id_residente
                     WHERE p.estado = 'cobrado'
-                      AND p.fecha_pago IS NOT NULL
+                  AND p.fecha_pago IS NOT NULL
                       AND (p.concepto ILIKE 'enero %%' OR p.concepto ILIKE 'febrero %%' OR p.concepto ILIKE 'marzo %%' 
                            OR p.concepto ILIKE 'abril %%' OR p.concepto ILIKE 'mayo %%' OR p.concepto ILIKE 'junio %%'
                            OR p.concepto ILIKE 'julio %%' OR p.concepto ILIKE 'agosto %%' OR p.concepto ILIKE 'septiembre %%'
                            OR p.concepto ILIKE 'octubre %%' OR p.concepto ILIKE 'noviembre %%' OR p.concepto ILIKE 'diciembre %%'
                            OR p.concepto ILIKE 'Pago %%' OR p.concepto ILIKE 'Pago mensual%%')
-                    ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
-                """
+                ORDER BY p.id_residente, p.fecha_pago DESC, p.fecha_creacion DESC
+            """
                 cursor.execute(query_mensual)
                 ultimos_mensuales = cursor.fetchall()
                 
@@ -3748,8 +3754,8 @@ def actualizar_cobro(id_pago):
             # Verificar que el cobro existe y obtener su residencia
             cursor.execute("""
                 SELECT id_pago, id_residencia FROM pago_residente
-                WHERE id_pago = %s
-            """, (id_pago,))
+                    WHERE id_pago = %s
+                """, (id_pago,))
             
             cobro_existente = cursor.fetchone()
             if not cobro_existente:
@@ -3794,13 +3800,13 @@ def actualizar_cobro(id_pago):
                 return jsonify({'error': 'No hay campos para actualizar'}), 400
             
             # Actualizar el cobro (ya validamos acceso arriba)
-            valores.append(id_pago)
-            query = f"""
-                UPDATE pago_residente
-                SET {', '.join(updates)}
-                WHERE id_pago = %s
-                RETURNING id_pago
-            """
+                valores.append(id_pago)
+                query = f"""
+                    UPDATE pago_residente
+                    SET {', '.join(updates)}
+                    WHERE id_pago = %s
+                    RETURNING id_pago
+                """
             
             cursor.execute(query, valores)
             conn.commit()
@@ -3831,8 +3837,8 @@ def eliminar_cobro(id_pago):
             # Verificar que el cobro existe y obtener su estado
             cursor.execute("""
                 SELECT id_pago, id_residencia, estado, es_cobro_previsto FROM pago_residente
-                WHERE id_pago = %s
-            """, (id_pago,))
+                    WHERE id_pago = %s
+                """, (id_pago,))
             
             cobro = cursor.fetchone()
             
@@ -3854,11 +3860,11 @@ def eliminar_cobro(id_pago):
                 }), 400
             
             # Eliminar el cobro
-            cursor.execute("""
-                DELETE FROM pago_residente
-                WHERE id_pago = %s
-                RETURNING id_pago
-            """, (id_pago,))
+                cursor.execute("""
+                    DELETE FROM pago_residente
+                    WHERE id_pago = %s
+                    RETURNING id_pago
+                """, (id_pago,))
             
             eliminado = cursor.fetchone()
             
@@ -4195,8 +4201,8 @@ def obtener_pago_proveedor(id_pago):
             else:
                 cursor.execute("""
                     SELECT id_pago, id_residencia, proveedor, concepto, monto, fecha_pago, fecha_prevista,
-                           metodo_pago, estado, numero_factura, observaciones, fecha_creacion
-                    FROM pago_proveedor
+                       metodo_pago, estado, numero_factura, observaciones, fecha_creacion
+                FROM pago_proveedor
                     WHERE id_pago = %s
             """, (id_pago,))
             
@@ -5827,9 +5833,9 @@ def listar_proveedores():
                 # Super admin: sin filtro (acceso total)
                 cursor.execute("""
                     SELECT id_proveedor, id_residencia, nombre, nif_cif, direccion, telefono, email,
-                           contacto, tipo_servicio, activo, observaciones, fecha_creacion
-                    FROM proveedor
-                    ORDER BY nombre
+                       contacto, tipo_servicio, activo, observaciones, fecha_creacion
+                FROM proveedor
+                ORDER BY nombre
                 """)
             
             proveedores = cursor.fetchall()
@@ -6204,9 +6210,9 @@ def listar_personal():
             if g.id_rol == SUPER_ADMIN_ROLE_ID:
                 cursor.execute("""
                     SELECT id_personal, id_residencia, nombre, apellido, documento_identidad,
-                           telefono, email, cargo, activo, fecha_contratacion, fecha_creacion
-                    FROM personal
-                    ORDER BY apellido, nombre
+                       telefono, email, cargo, activo, fecha_contratacion, fecha_creacion
+                FROM personal
+                ORDER BY apellido, nombre
                 """)
             else:
                 if not g.residencias_acceso:
@@ -7654,7 +7660,7 @@ def listar_receivers():
         
         try:
             cursor.execute("""
-                SELECT id_receiver, nombre, nif_cif, direccion, telefono, email, activo, fecha_creacion
+                SELECT id_receiver, nombre, nif_cif, direccion, telefono, email, cuenta_bancaria, activo, fecha_creacion
                 FROM receiver
                 ORDER BY nombre
             """)
@@ -7670,8 +7676,9 @@ def listar_receivers():
                     'direccion': r[3],
                     'telefono': r[4],
                     'email': r[5],
-                    'activo': r[6],
-                    'fecha_creacion': r[7].isoformat() if r[7] else None
+                    'cuenta_bancaria': r[6],
+                    'activo': r[7],
+                    'fecha_creacion': r[8].isoformat() if r[8] else None
                 })
             
             return jsonify({'receivers': resultado, 'total': len(resultado)}), 200
@@ -7706,15 +7713,16 @@ def crear_receiver():
         
         try:
             cursor.execute("""
-                INSERT INTO receiver (nombre, nif_cif, direccion, telefono, email, activo)
-                VALUES (%s, %s, %s, %s, %s, TRUE)
+                INSERT INTO receiver (nombre, nif_cif, direccion, telefono, email, cuenta_bancaria, activo)
+                VALUES (%s, %s, %s, %s, %s, %s, TRUE)
                 RETURNING id_receiver
             """, (
                 nombre,
                 data.get('nif_cif'),
                 data.get('direccion'),
                 data.get('telefono'),
-                data.get('email')
+                data.get('email'),
+                data.get('cuenta_bancaria')
             ))
             
             id_receiver = cursor.fetchone()[0]
@@ -7751,7 +7759,7 @@ def listar_receivers_residencia(id_residencia):
         
         try:
             cursor.execute("""
-                SELECT r.id_receiver, r.nombre, r.nif_cif, r.direccion, r.telefono, r.email, r.activo
+                SELECT r.id_receiver, r.nombre, r.nif_cif, r.direccion, r.telefono, r.email, r.cuenta_bancaria, r.activo
                 FROM receiver r
                 INNER JOIN residencia_receiver rr ON r.id_receiver = rr.id_receiver
                 WHERE rr.id_residencia = %s AND rr.activo = TRUE AND r.activo = TRUE
@@ -7769,7 +7777,8 @@ def listar_receivers_residencia(id_residencia):
                     'direccion': r[3],
                     'telefono': r[4],
                     'email': r[5],
-                    'activo': r[6]
+                    'cuenta_bancaria': r[6],
+                    'activo': r[7]
                 })
             
             return jsonify({'receivers': resultado, 'total': len(resultado)}), 200
@@ -8396,7 +8405,7 @@ def actualizar_usuario(id_usuario):
                     is_valid, error_msg = validate_password_strength(password)
                     if not is_valid:
                         return jsonify({'error': error_msg}), 400
-                    password_hash = generate_password_hash(password)
+                    password_hash = generate_password_hash(password, method='pbkdf2:sha256')
                     updates.append("password_hash = %s")
                     updates.append("requiere_cambio_clave = FALSE")  # Marcar que ya cambió la contraseña
                     params.append(password_hash)
@@ -8520,7 +8529,7 @@ def actualizar_usuario(id_usuario):
                     is_valid, error_msg = validate_password_strength(password)
                     if not is_valid:
                         return jsonify({'error': error_msg}), 400
-                    password_hash = generate_password_hash(password)
+                    password_hash = generate_password_hash(password, method='pbkdf2:sha256')
                     updates.append("password_hash = %s")
                     updates.append("requiere_cambio_clave = FALSE")  # Marcar que ya cambió la contraseña
                     params.append(password_hash)
@@ -9725,13 +9734,16 @@ if __name__ == '__main__':
     )
     
     # Para desarrollo local
+    # Usar puerto 5001 porque 5000 está ocupado por AirPlay en macOS
+    port = int(os.getenv('PORT', 5001))
+    
     print("\n" + "="*50)
     print("  Servidor Flask Violetas iniciado")
     print("="*50)
-    print(f"  URL: http://localhost:5000")
+    print(f"  URL: http://localhost:{port}")
     print(f"  Modo: DEBUG")
     print(f"  Presiona Ctrl+C para detener")
     print("="*50 + "\n")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=port)
 

@@ -87,7 +87,8 @@ def get_db_connection():
         connect_params['host'] = db_host
         
         # Agregar port solo si no es Unix socket (Unix socket no usa puerto)
-        if db_port and not cloud_sql_connection:
+        # Si db_host comienza con /cloudsql, es Unix socket y no necesita puerto
+        if db_port and not db_host.startswith('/cloudsql'):
             connect_params['port'] = db_port
         
         # Crear conexión

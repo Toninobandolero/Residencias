@@ -4,70 +4,51 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
-.venv
+*.egg-info/
 
-# IDEs
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
-# Archivos de entorno (no incluir credenciales en la imagen)
+# Local env
 .env
 .env.local
-.env.*.local
 
-# Cloud SQL Proxy (no necesario en producción)
+# Cloud SQL Proxy
 cloud-sql-proxy/
 
-# Scripts de desarrollo
+# Scripts
 *.ps1
 *.bat
-*.sh
-start_server*.ps1
-setup_cloud_sql_proxy.ps1
-configurar_proxy_env.ps1
-restart_server.ps1
-stop_server.ps1
 
-# Archivos de credenciales (se usarán Secret Manager en producción)
-*.json
-residencias-*.json
-
-# Logs
-*.log
-logs/
+# Documentation (keep README)
+*.md
+!README.md
 
 # Tests
 tests/
-test_*.py
-*_test.py
+*.log
 
-# Documentación
-*.md
-!README.md
+# Credentials (never include)
+*.json
+!package.json
+
+# Backups
+backups/
+*.sql
+!create_schema.sql
 
 # Git
 .git/
 .gitignore
 
-# Archivos temporales
-*.tmp
-*.bak
-*.swp
-
-# Base de datos local (si existe)
-*.db
-*.sqlite
-
-# Archivos SQL de migración (ya ejecutados)
-*.sql
-
-# Archivos de backup
-backup/
-*.backup
-
+# Build artifacts
+build/
+dist/

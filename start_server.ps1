@@ -21,7 +21,8 @@ if (-not (Test-Path ".env")) {
 }
 
 Write-Host "Iniciando servidor Flask..." -ForegroundColor Yellow
-Write-Host "  URL: http://localhost:5000" -ForegroundColor Cyan
+Write-Host "  URL: http://localhost:5001" -ForegroundColor Cyan
+Write-Host "  (Puerto 5001 - configurable con variable PORT)" -ForegroundColor Gray
 Write-Host "  Presiona Ctrl+C para detener el servidor" -ForegroundColor Gray
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan

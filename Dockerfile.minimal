@@ -1,0 +1,18 @@
+# Dockerfile mínimo para testing
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Solo dependencias esenciales
+COPY requirements.txt .
+RUN pip install --no-cache-dir flask gunicorn psycopg2-binary python-dotenv
+
+# Copiar aplicación
+COPY app.py .
+COPY db_connector.py .
+COPY storage_manager.py .
+COPY validators.py .
+
+# Usar formato array (más robusto)
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "0", "--log-level", "debug"]
+

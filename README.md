@@ -54,9 +54,22 @@ python init_database.py
 
 ### 4. Acceder al Sistema
 
-- **URL**: http://localhost:5000
+- **URL**: http://localhost:5001
 - **Usuario**: `admin@residencias.com`
 - **Contraseña**: `CambiarContraseña123!` (luego cambiarás esta)
+
+> **Nota sobre el puerto**: El servidor usa el puerto **5001** por defecto (en lugar de 5000) para evitar conflictos con AirPlay Receiver en macOS. Puedes cambiar el puerto usando la variable de entorno `PORT`.
+
+---
+
+## ✅ Estado de Producción
+
+**Aplicación desplegada y funcionando**
+
+- **URL:** https://violetas-app-621063984498.europe-west9.run.app
+- **Estado:** ✅ Operacional
+- **Última actualización:** Diciembre 6, 2025
+- **Documentación:** Ver `DESPLIEGUE_EXITOSO.md` para detalles
 
 ---
 
@@ -119,13 +132,18 @@ python init_database.py
 
 ## 📚 Documentación
 
-La documentación está organizada en 5 documentos principales:
+### Documentación principal
 
 1. **`README.md`** (este archivo) - Inicio rápido y características
-2. **`GUIA_INSTALACION_Y_CONFIGURACION.md`** - Instalación detallada, configuración de Cloud SQL, base de datos
-3. **`GUIA_SEGURIDAD_Y_USUARIOS.md`** - Sistema de seguridad, autenticación, gestión de usuarios y roles
+2. **`GUIA_INSTALACION_Y_DESPLIEGUE.md`** - Instalación local, configuración y despliegue a Cloud Run
+3. **`GUIA_SEGURIDAD_Y_PERMISOS.md`** - Sistema de seguridad, autenticación, usuarios, roles y permisos IAM
 4. **`REFERENCIA_API.md`** - Referencia completa de endpoints de la API
-5. **`GUIA_TECNICA.md`** - Troubleshooting, desarrollo, detalles técnicos
+5. **`GUIA_TROUBLESHOOTING.md`** - Solución de problemas comunes, logs y debugging
+
+### Documentación de producción
+
+- **`DESPLIEGUE_EXITOSO.md`** - Estado actual de producción, configuración y comandos útiles
+- **`SOLUCION_CONTAINER_IMPORT_FAILED.md`** - Caso de estudio: solución al error "Container import failed"
 
 ---
 
@@ -149,7 +167,7 @@ La documentación está organizada en 5 documentos principales:
 Solo el super_admin puede crear usuarios mediante el endpoint:
 - `POST /api/v1/usuarios`
 
-Ver `GUIA_SEGURIDAD_Y_USUARIOS.md` para más detalles.
+Ver `GUIA_SEGURIDAD_Y_PERMISOS.md` para más detalles.
 
 ---
 
@@ -215,7 +233,7 @@ python test_conexion_bd.py
 2. Verificar token en localStorage (F12 → Console)
 3. Verificar que hay residentes en la BD para tus residencias asignadas
 
-> Para más detalles, ver `GUIA_TECNICA.md`
+> Para más detalles, ver `GUIA_TROUBLESHOOTING.md`
 
 ---
 
@@ -254,7 +272,7 @@ Este proyecto es privado y está destinado para uso interno de las residencias V
 
 ## 📖 Más Información
 
-- **`GUIA_INSTALACION_Y_CONFIGURACION.md`** - Configuración detallada paso a paso
-- **`GUIA_SEGURIDAD_Y_USUARIOS.md`** - Sistema de seguridad y gestión de usuarios
+- **`GUIA_INSTALACION_Y_DESPLIEGUE.md`** - Instalación local y despliegue a Cloud Run
+- **`GUIA_SEGURIDAD_Y_PERMISOS.md`** - Seguridad, usuarios, roles y permisos IAM
 - **`REFERENCIA_API.md`** - Referencia completa de la API
-- **`GUIA_TECNICA.md`** - Troubleshooting y detalles técnicos
+- **`GUIA_TROUBLESHOOTING.md`** - Solución de problemas y debugging

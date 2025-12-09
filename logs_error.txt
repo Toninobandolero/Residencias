@@ -1,0 +1,31 @@
+﻿=== LOGS DEL CONTENEDOR ===
+
+1. Ãsltima revisiÃ³n desplegada:
+   violetas-app-00006-sx5
+
+2. Estado de la revisiÃ³n:
+TYPE: ['Ready', 'ContainerReady']
+STATUS: ['False', 'False']
+MESSAGE: ['Container import failed: ', 'Container import failed: ']
+
+3. Logs del contenedor (Ãºltimos 20 errores):
+2025-12-04T13:32:49.360888Z	ERROR		
+2025-12-04T13:27:10.662607Z	ERROR		
+2025-12-04T12:50:21.513690Z	ERROR		
+2025-12-04T12:43:54.285569Z	ERROR		
+2025-12-04T12:33:13.554897Z	ERROR		
+2025-12-04T12:26:22.662464Z	ERROR		
+
+4. Logs de inicio del contenedor:
+
+
+
+
+
+
+
+
+
+
+
+=== FIN DE LOGS ===

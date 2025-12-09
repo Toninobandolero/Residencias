@@ -9,16 +9,22 @@ from datetime import datetime, timedelta
 def get_storage_client():
     """Obtiene el cliente de Cloud Storage."""
     try:
-        # Si hay credenciales en variable de entorno, usarlas
+        # En Cloud Run, las credenciales vienen automáticamente de la cuenta de servicio del servicio
+        # En desarrollo local, puede venir de GOOGLE_APPLICATION_CREDENTIALS
         credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
         if credentials_path and os.path.exists(credentials_path):
+            # Desarrollo local: usar archivo JSON
             return storage.Client.from_service_account_json(credentials_path)
         else:
-            # Intentar usar credenciales por defecto (para Cloud Run)
+            # Cloud Run o desarrollo con credenciales por defecto
+            # Cloud Run usa automáticamente la cuenta de servicio del servicio
             return storage.Client()
     except Exception as e:
-        error_msg = f"Error al inicializar cliente de Cloud Storage: {str(e)}. Verifique que GOOGLE_APPLICATION_CREDENTIALS esté configurado o que las credenciales por defecto estén disponibles."
-        print(error_msg)
+        # No fallar al importar, solo al usar
+        error_msg = f"Error al inicializar cliente de Cloud Storage: {str(e)}"
+        print(f"ADVERTENCIA: {error_msg}")
+        # En Cloud Run, esto debería funcionar automáticamente
+        # Si falla, puede ser un problema de permisos IAM
         raise Exception(error_msg)
 
 
