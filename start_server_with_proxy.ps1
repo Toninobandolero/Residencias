@@ -101,7 +101,8 @@ if (-not $proxyProcess.HasExited) {
 
 Write-Host ""
 Write-Host "🚀 Iniciando servidor Flask..." -ForegroundColor Cyan
-Write-Host "   URL: http://localhost:5000" -ForegroundColor Gray
+Write-Host "   URL: http://localhost:5001" -ForegroundColor Gray
+Write-Host "   (Puerto 5001 - configurable con variable PORT)" -ForegroundColor Gray
 Write-Host "   Presiona Ctrl+C para detener ambos servicios" -ForegroundColor Gray
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan

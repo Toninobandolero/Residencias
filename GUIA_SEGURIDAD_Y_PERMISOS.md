@@ -2,14 +2,52 @@
 
 ## 📋 Tabla de Contenidos
 
-1. [Arquitectura de Seguridad](#arquitectura-de-seguridad)
-2. [Sistema de Autenticación](#sistema-de-autenticación)
-3. [Sistema de Autorización](#sistema-de-autorización)
-4. [Super Administrador](#super-administrador)
-5. [Gestión de Usuarios](#gestión-de-usuarios)
-6. [Roles y Permisos](#roles-y-permisos)
-7. [Permisos IAM en Cloud Run](#permisos-iam-en-cloud-run)
-8. [Secrets y Configuración Segura](#secrets-y-configuración-segura)
+1. [Seguridad del Repositorio](#seguridad-del-repositorio)
+2. [Arquitectura de Seguridad](#arquitectura-de-seguridad)
+3. [Sistema de Autenticación](#sistema-de-autenticación)
+4. [Sistema de Autorización](#sistema-de-autorización)
+5. [Super Administrador](#super-administrador)
+6. [Gestión de Usuarios](#gestión-de-usuarios)
+7. [Roles y Permisos](#roles-y-permisos)
+8. [Permisos IAM en Cloud Run](#permisos-iam-en-cloud-run)
+9. [Secrets y Configuración Segura](#secrets-y-configuración-segura)
+
+---
+
+## 🔒 Seguridad del Repositorio
+
+### Archivos Protegidos
+
+Los siguientes archivos están protegidos por `.gitignore` y NO se suben a GitHub:
+
+- `github-actions-key.json` - Clave de Service Account
+- `residencias-*-*.json` - Credenciales de GCP  
+- `*.service-account.json` - Service accounts
+- `.env` - Variables de entorno
+- `*.key.json` - Archivos de claves
+- `*password*.sh`, `*secret*.sh` - Scripts con información sensible
+
+### Mejores Prácticas
+
+1. ✅ Variables de entorno para credenciales
+2. ✅ Secrets Manager de GCP para valores sensibles
+3. ✅ Scripts usan parámetros o variables de entorno
+4. ✅ No hay credenciales hardcodeadas en código
+
+### Verificación de Seguridad
+
+```bash
+# Buscar patrones sospechosos en código
+grep -r "password.*=" --include="*.py" --include="*.sh" --include="*.ps1" . | grep -v "#\|TODO\|example"
+
+# Verificar archivos JSON que no deberían estar en Git
+git ls-files | grep -E "\.(json|key|pem|p12)$"
+
+# Buscar tokens en historial
+git log -p | grep -i "ghp_"
+```
+
+> Para más detalles sobre seguridad del repositorio, ver `SEGURIDAD_REPOSITORIO.md`
 
 ---
 

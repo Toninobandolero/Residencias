@@ -37,7 +37,8 @@ if not exist ".env" (
 
 REM Iniciar el servidor
 echo Iniciando servidor Flask...
-echo   URL: http://localhost:5000
+echo   URL: http://localhost:5001
+echo   (Puerto 5001 - configurable con variable PORT)
 echo   Presiona Ctrl+C para detener el servidor
 echo.
 echo ========================================

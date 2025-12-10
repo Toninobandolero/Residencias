@@ -144,6 +144,7 @@ python init_database.py
 
 - **`DESPLIEGUE_EXITOSO.md`** - Estado actual de producción, configuración y comandos útiles
 - **`SOLUCION_CONTAINER_IMPORT_FAILED.md`** - Caso de estudio: solución al error "Container import failed"
+- **`.github/GITHUB_ACTIONS_SETUP.md`** - Configuración de CI/CD automático con GitHub Actions
 
 ---
 
@@ -274,5 +275,6 @@ Este proyecto es privado y está destinado para uso interno de las residencias V
 
 - **`GUIA_INSTALACION_Y_DESPLIEGUE.md`** - Instalación local y despliegue a Cloud Run
 - **`GUIA_SEGURIDAD_Y_PERMISOS.md`** - Seguridad, usuarios, roles y permisos IAM
+- **`SEGURIDAD_REPOSITORIO.md`** - Seguridad del repositorio y protección de archivos sensibles
 - **`REFERENCIA_API.md`** - Referencia completa de la API
 - **`GUIA_TROUBLESHOOTING.md`** - Solución de problemas y debugging
