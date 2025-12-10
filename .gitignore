@@ -80,3 +80,8 @@ env.example
 config.local.*
 settings.local.*
 
+# Archivos de proceso y runtime
+server.pid
+*.pid
+server.log
+
