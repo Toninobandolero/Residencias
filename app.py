@@ -873,8 +873,20 @@ def crear_usuario():
         residencias = data.get('residencias', [])
         permisos = data.get('permisos', [])  # Array de nombres de permisos personalizados
         
-        if not email or not password or not id_rol:
-            return jsonify({'error': 'Email, contraseña e id_rol son requeridos'}), 400
+        # Validar campos requeridos con mensajes específicos
+        if not email or not email.strip():
+            return jsonify({'error': 'El email es requerido'}), 400
+        
+        if not password or not password.strip():
+            return jsonify({'error': 'La contraseña es requerida'}), 400
+        
+        if not id_rol:
+            return jsonify({'error': 'El rol es requerido'}), 400
+        
+        try:
+            id_rol = int(id_rol)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'El id_rol debe ser un número válido'}), 400
         
         if not residencias or len(residencias) == 0:
             return jsonify({'error': 'Debe asignar al menos una residencia'}), 400
@@ -994,14 +1006,32 @@ def crear_usuario():
             
         except Exception as e:
             conn.rollback()
-            app.logger.error(f"Error al crear usuario: {str(e)}")
-            return jsonify({'error': 'Error al crear usuario'}), 500
+            import traceback
+            error_trace = traceback.format_exc()
+            app.logger.error(f"Error al crear usuario: {str(e)}\n{error_trace}")
+            # En desarrollo, incluir más detalles del error
+            if app.config.get('DEBUG'):
+                return jsonify({
+                    'error': 'Error al crear usuario',
+                    'detalle': str(e),
+                    'traceback': error_trace.split('\n')[-5:]  # Últimas 5 líneas del traceback
+                }), 500
+            return jsonify({'error': 'Error al crear usuario. Por favor, verifica los datos e intenta nuevamente.'}), 500
         finally:
             cursor.close()
             conn.close()
             
     except Exception as e:
-        app.logger.error(f"Error: {str(e)}")
+        import traceback
+        error_trace = traceback.format_exc()
+        app.logger.error(f"Error en crear_usuario: {str(e)}\n{error_trace}")
+        # En desarrollo, incluir más detalles del error
+        if app.config.get('DEBUG'):
+            return jsonify({
+                'error': 'Error interno del servidor',
+                'detalle': str(e),
+                'traceback': error_trace.split('\n')[-5:]  # Últimas 5 líneas del traceback
+            }), 500
         return jsonify({'error': 'Error interno del servidor'}), 500
 
 

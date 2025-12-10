@@ -1971,9 +1971,9 @@
                         <input type="email" id="usuario_email" name="email" required placeholder="usuario@ejemplo.com">
                     </div>
                     <div class="form-group">
-                        <label for="usuario_password">Contraseña *</label>
-                        <input type="password" id="usuario_password" name="password" placeholder="Mínimo 6 caracteres">
-                        <small style="color: #666; font-size: 12px;">Dejar vacío para no cambiar (solo en edición)</small>
+                        <label for="usuario_password">Contraseña <span id="passwordRequired" style="color: red;">*</span></label>
+                        <input type="password" id="usuario_password" name="password" placeholder="Mínimo 8 caracteres, con mayúscula, minúscula, número y carácter especial" required>
+                        <small id="passwordHelp" style="color: #666; font-size: 12px;">Requerida al crear. Mínimo 8 caracteres, debe incluir mayúscula, minúscula, número y carácter especial (!@#$%^&*...)</small>
                     </div>
                 </div>
                 
@@ -9637,7 +9637,9 @@
                         document.getElementById('usuario_id_rol').value = usuario.id_rol;
                         document.getElementById('usuario_activo').checked = usuario.activo !== false;
                         document.getElementById('usuario_password').required = false;
-                        
+                        document.getElementById('passwordRequired').style.display = 'none';
+                        document.getElementById('passwordHelp').textContent = 'Dejar vacío para no cambiar la contraseña. Si desea cambiarla, debe cumplir los requisitos: mínimo 8 caracteres, mayúscula, minúscula, número y carácter especial';
+
                         document.getElementById('modalUsuarioTitulo').innerHTML = '<img src="/static/icons/medical/settings.svg" alt="Editar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Usuario';
                         
                         await loadRolesForSelect();
@@ -9660,6 +9662,8 @@
             document.getElementById('formUsuario').reset();
             document.getElementById('usuario_id_usuario').value = '';
             document.getElementById('usuario_password').required = true;
+            document.getElementById('passwordRequired').style.display = 'inline';
+            document.getElementById('passwordHelp').textContent = 'Requerida al crear. Mínimo 8 caracteres, debe incluir mayúscula, minúscula, número y carácter especial (!@#$%^&*...)';
             document.getElementById('modalUsuarioTitulo').innerHTML = '<img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Agregar Usuario';
             
             // Desmarcar todos los checkboxes de residencias
@@ -9884,10 +9888,37 @@
             const formData = new FormData(form);
             const idUsuario = formData.get('id_usuario');
             const password = formData.get('password');
+            const isEditing = idUsuario && idUsuario.trim() !== '';
+            
+            // Validar email
+            const email = formData.get('email');
+            if (!email || !email.trim()) {
+                showUsuarioModalError('El email es requerido');
+                resetSaveButton('saveUsuarioBtn', originalText);
+                return;
+            }
+            
+            // Validar rol
+            const idRol = formData.get('id_rol');
+            if (!idRol || idRol.trim() === '' || isNaN(parseInt(idRol))) {
+                showUsuarioModalError('Debe seleccionar un rol');
+                resetSaveButton('saveUsuarioBtn', originalText);
+                return;
+            }
+            
+            // Validar contraseña: requerida al crear, opcional al editar
+            if (!isEditing && (!password || !password.trim())) {
+                showUsuarioModalError('La contraseña es requerida al crear un usuario nuevo');
+                resetSaveButton('saveUsuarioBtn', originalText);
+                return;
+            }
             
             // Recoger residencias seleccionadas (checkboxes)
             const residenciasCheckboxes = document.querySelectorAll('input[name="residencias[]"]:checked');
-            const residencias = Array.from(residenciasCheckboxes).map(cb => parseInt(cb.value));
+            const residencias = Array.from(residenciasCheckboxes).map(cb => {
+                const val = parseInt(cb.value);
+                return isNaN(val) ? null : val;
+            }).filter(v => v !== null);
             
             if (residencias.length === 0) {
                 showUsuarioModalError('Debe seleccionar al menos una residencia');
@@ -9897,29 +9928,32 @@
             
             // Recoger permisos seleccionados (checkboxes)
             const permisosCheckboxes = document.querySelectorAll('input[name="permisos[]"]:checked');
-            const permisos = Array.from(permisosCheckboxes).map(cb => cb.value);
+            const permisos = Array.from(permisosCheckboxes).map(cb => cb.value).filter(v => v && v.trim());
             
-            // Si es edición y no hay contraseña, no incluirla
+            // Preparar datos
             const data = {
-                email: formData.get('email'),
-                nombre: formData.get('nombre') || null,
-                apellido: formData.get('apellido') || null,
-                id_rol: parseInt(formData.get('id_rol')),
-                residencias: residencias, // Array de residencias
-                permisos: permisos, // Array de permisos seleccionados
+                email: email.trim(),
+                id_rol: parseInt(idRol),
+                residencias: residencias,
+                permisos: permisos,
                 activo: document.getElementById('usuario_activo').checked
             };
             
-            if (password && password.trim()) {
-                data.password = password;
+            // Agregar campos opcionales solo si tienen valor
+            const nombre = formData.get('nombre');
+            if (nombre && nombre.trim()) {
+                data.nombre = nombre.trim();
             }
             
-            // Limpiar valores vacíos
-            Object.keys(data).forEach(key => {
-                if (data[key] === '' || data[key] === null) {
-                    delete data[key];
-                }
-            });
+            const apellido = formData.get('apellido');
+            if (apellido && apellido.trim()) {
+                data.apellido = apellido.trim();
+            }
+            
+            // Si es edición y hay contraseña, incluirla; si es creación, siempre incluirla
+            if (password && password.trim()) {
+                data.password = password.trim();
+            }
             
             saveBtn.disabled = true;
             saveBtn.textContent = 'Guardando...';
@@ -9947,9 +9981,13 @@
                         result = await response.json();
                     } else {
                         const text = await response.text();
-                        throw new Error(`Error del servidor (${response.status}): ${text.substring(0, 100)}`);
+                        console.error('Respuesta no JSON del servidor:', text);
+                        showUsuarioModalError(`Error del servidor (${response.status}): ${text.substring(0, 200)}`);
+                        resetSaveButton('saveUsuarioBtn', originalText);
+                        return;
                     }
                 } catch (parseError) {
+                    console.error('Error al parsear respuesta:', parseError);
                     showUsuarioModalError(`Error del servidor (${response.status}). Por favor, intenta de nuevo.`);
                     resetSaveButton('saveUsuarioBtn', originalText);
                     return;
@@ -9964,7 +10002,17 @@
                         loadUsuarios();
                     }, 1500);
                 } else {
-                    showUsuarioModalError(result.error || 'Error al guardar el usuario');
+                    // Mostrar error más detallado
+                    let errorMessage = 'Error al guardar el usuario';
+                    if (result.error) {
+                        errorMessage = result.error;
+                    } else if (result.detalles && Array.isArray(result.detalles)) {
+                        errorMessage = result.detalles.join(', ');
+                    } else if (result.mensaje) {
+                        errorMessage = result.mensaje;
+                    }
+                    console.error('Error del servidor:', response.status, result);
+                    showUsuarioModalError(errorMessage);
                     resetSaveButton('saveUsuarioBtn', originalText);
                 }
             } catch (error) {

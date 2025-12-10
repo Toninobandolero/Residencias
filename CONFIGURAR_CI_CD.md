@@ -1,6 +1,8 @@
 # 🚀 Configurar CI/CD Automático con GitHub Actions
 
-Esta guía te ayuda a configurar GitHub Actions para que **cada vez que hagas push a `main`**, tu aplicación se despliegue automáticamente a Cloud Run.
+Esta guía te ayuda a configurar GitHub Actions para desplegar automáticamente a Cloud Run cada vez que hagas push a `main`.
+
+> **Nota:** Para documentación más detallada, ver `.github/GITHUB_ACTIONS_SETUP.md`
 
 ---
 

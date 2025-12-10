@@ -35,6 +35,8 @@ residencias-*.json
 *credentials*.json
 *-*-*.json
 *.service-account.json
+github-actions-key.json
+*.key.json
 
 # IDE
 .vscode/
@@ -66,4 +68,15 @@ Thumbs.db
 # Backups de base de datos
 backups/
 *.sql.backup
+
+# Archivos con información sensible
+*password*.sh
+*secret*.sh
+*key*.sh
+*.env.example
+env.example
+
+# Archivos de configuración local
+config.local.*
+settings.local.*
 
