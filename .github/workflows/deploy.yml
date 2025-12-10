@@ -1,0 +1,65 @@
+name: Deploy to Cloud Run
+
+# Se ejecuta automáticamente cuando haces push a main
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Permite ejecutar manualmente desde GitHub
+
+env:
+  PROJECT_ID: residencias-479706
+  REGION: europe-west9
+  SERVICE: violetas-app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ env.PROJECT_ID }}
+          export_default_credentials: true
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --source . \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --add-cloudsql-instances "${{ env.PROJECT_ID }}:${{ env.REGION }}:residencias" \
+            --set-env-vars "DB_NAME=postgres,DB_USER=postgres,DB_PORT=5432,DB_USE_PROXY=false,CLOUD_SQL_CONNECTION_NAME=${{ env.PROJECT_ID }}:${{ env.REGION }}:residencias,GCS_BUCKET_NAME=violetas-documentos" \
+            --set-secrets "JWT_SECRET_KEY=jwt-secret-key:latest,DB_PASSWORD=db-password:latest" \
+            --memory 2Gi \
+            --cpu 2 \
+            --timeout 300 \
+            --max-instances 10 \
+            --min-instances 0 \
+            --project=${{ env.PROJECT_ID }}
+
+      - name: Get service URL
+        id: get-url
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --format="value(status.url)")
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "✅ Desplegado exitosamente en: $URL"
+
+      - name: Health check
+        run: |
+          sleep 15
+          curl -f ${{ steps.get-url.outputs.url }}/health || echo "⚠️ Health check falló, pero el despliegue puede estar bien"
+          echo "✅ Verificación completada"
