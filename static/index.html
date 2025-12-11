@@ -3,7 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Violetas - Sistema de Gestión</title>
+    <script>
+        // SEGURIDAD CRÍTICA: Limpiar credenciales de URL ANTES DE QUE CHROME PARSEE EL RESTO
+        (function() {
+            if (window.location && window.location.search) {
+                var search = window.location.search;
+                if (search.indexOf('email=') >= 0 || search.indexOf('password=') >= 0) {
+                    // STOP INMEDIATO - Redirect sin credenciales
+                    window.location.replace(window.location.pathname);
+                    throw new Error('Redirect por seguridad');
+                }
+            }
+        })();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <!-- Flatpickr para calendarios con formato español -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -430,6 +446,15 @@
         .module-btn-historicos:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(245, 101, 101, 0.3);
+        }
+
+        .module-btn-configuracion {
+            background: linear-gradient(135deg, #718096 0%, #4a5568 100%);
+        }
+
+        .module-btn-configuracion:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(113, 128, 150, 0.3);
         }
 
         .module-btn img {
@@ -1028,7 +1053,7 @@
             <div style="margin-top: 20px;">
                 <h3 style="color: #667eea; margin-bottom: 15px;">Módulos del Sistema</h3>
                 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;" id="modulesGrid">
                     <button class="module-btn module-btn-residentes" onclick="showModule('residentes')">
                         <img src="/static/icons/medical/users.svg" alt="Residentes" style="width: 20px; height: 20px; margin-right: 8px;"> Residentes
                     </button>
@@ -1043,6 +1068,9 @@
                     </button>
                     <button class="module-btn module-btn-historicos" onclick="showModule('historicos')">
                         <img src="/static/icons/medical/calendar-medical.svg" alt="Históricos" style="width: 20px; height: 20px; margin-right: 8px;"> Históricos
+                    </button>
+                    <button class="module-btn module-btn-configuracion" id="configuracionBtn" onclick="showConfiguracion()" style="display: none;">
+                        <img src="/static/icons/medical/settings.svg" alt="Configuración" style="width: 20px; height: 20px; margin-right: 8px;"> Configuración
                     </button>
                 </div>
             </div>
@@ -1652,8 +1680,8 @@
                 
                 <div id="modalCobroAlert" class="alert" style="display: none;"></div>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="submit" id="saveCobroBtn" style="flex: 1;">Guardar</button>
-                    <button type="button" id="deleteCobroBtn" onclick="confirmarEliminarCobro()" style="flex: 1; background: #dc3545; display: none;">Eliminar</button>
+                    ${usuarioTienePermiso('crear:cobro') || usuarioTienePermiso('editar:cobro') ? `<button type="submit" id="saveCobroBtn" style="flex: 1;">Guardar</button>` : ''}
+                    ${usuarioTienePermiso('eliminar:cobro') ? `<button type="button" id="deleteCobroBtn" onclick="confirmarEliminarCobro()" style="flex: 1; background: #dc3545; display: none;">Eliminar</button>` : ''}
                     <button type="button" onclick="closeModal('modalCobro')" style="flex: 1; background: #6c757d;">Cancelar</button>
                 </div>
             </form>
@@ -1822,11 +1850,11 @@
                 
                 <div id="modalPagoProveedorAlert" class="alert" style="display: none;"></div>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    <button type="submit" id="savePagoProveedorBtn" style="flex: 1;">Guardar</button>
-                    <button type="button" id="pago_eliminar_factura_btn" onclick="eliminar_factura_pago()" style="display: none; flex: 1; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; align-items: center; justify-content: center; gap: 6px;">
+                    ${usuarioTienePermiso('crear:pago_proveedor') || usuarioTienePermiso('editar:pago_proveedor') ? `<button type="submit" id="savePagoProveedorBtn" style="flex: 1;">Guardar</button>` : ''}
+                    ${usuarioTienePermiso('eliminar:pago_proveedor') ? `<button type="button" id="pago_eliminar_factura_btn" onclick="eliminar_factura_pago()" style="display: none; flex: 1; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; align-items: center; justify-content: center; gap: 6px;">
                         <img src="/static/icons/medical/user-x.svg" alt="Eliminar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);">
                         Eliminar
-                    </button>
+                    </button>` : ''}
                     <button type="button" onclick="closeModal('modalPagoProveedor')" style="flex: 1; background: #6c757d;">Cancelar</button>
                 </div>
             </form>
@@ -2007,10 +2035,26 @@
                     </div>
                     <div class="form-group" style="margin-top: 20px;">
                         <label>Módulos y Permisos</label>
-                        <div id="usuario_modulos_container" style="margin-top: 10px; padding: 15px; border: 2px solid #e0e0e0; border-radius: 8px; background: #f9f9f9; max-height: 400px; overflow-y: auto;">
+                        <div id="usuario_modulos_container" style="margin-top: 10px; padding: 15px; border: 2px solid #e0e0e0; border-radius: 8px; background: #f9f9f9; max-height: 600px; overflow-y: auto; overflow-x: hidden; position: relative;">
+                            <style>
+                                #usuario_modulos_container::-webkit-scrollbar {
+                                    width: 12px;
+                                }
+                                #usuario_modulos_container::-webkit-scrollbar-track {
+                                    background: #f1f1f1;
+                                    border-radius: 6px;
+                                }
+                                #usuario_modulos_container::-webkit-scrollbar-thumb {
+                                    background: #667eea;
+                                    border-radius: 6px;
+                                }
+                                #usuario_modulos_container::-webkit-scrollbar-thumb:hover {
+                                    background: #5568d3;
+                                }
+                            </style>
                             <div style="text-align: center; color: #666; padding: 20px;">Cargando módulos...</div>
                         </div>
-                        <small style="color: #666; font-size: 12px; display: block; margin-top: 5px;">Seleccione los módulos y permisos a los que el usuario tendrá acceso dentro de las residencias seleccionadas</small>
+                        <small style="color: #666; font-size: 12px; display: block; margin-top: 5px;">Seleccione los módulos y permisos a los que el usuario tendrá acceso dentro de las residencias seleccionadas. <strong>Desplázate hacia abajo para ver todos los módulos disponibles.</strong></small>
                     </div>
                     <div class="form-group" style="margin-top: 15px;">
                         <label style="display: flex; align-items: center; gap: 8px;">
@@ -2262,6 +2306,23 @@
 
         // Verificar si hay token guardado
         window.addEventListener('DOMContentLoaded', () => {
+            // La limpieza de credenciales ya se hizo en el script inline del <head>
+            // Verificar una vez más y mostrar advertencia si es necesario
+            try {
+                var search = window.location.search || '';
+                if (search.indexOf('email=') >= 0 || search.indexOf('password=') >= 0) {
+                    console.warn('⚠️ ADVERTENCIA DE SEGURIDAD: Las credenciales nunca deben estar en la URL. Usa el formulario de login.');
+                    // Intentar limpiar de nuevo por si acaso
+                    var params = new URLSearchParams(search);
+                    params.delete('email');
+                    params.delete('password');
+                    var newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + (window.location.hash || '');
+                    window.history.replaceState(null, '', newUrl);
+                }
+            } catch (e) {
+                // Ignorar errores silenciosamente
+            }
+            
             const savedToken = localStorage.getItem('violetas_token');
             if (savedToken) {
                 verifyToken(savedToken);
@@ -2335,6 +2396,76 @@
             }
         }
         
+        // Variable global para almacenar permisos del usuario
+        let usuarioActual = null;
+
+        // ============================================
+        // FUNCIONES HELPER PARA BOTONES CON PERMISOS
+        // ============================================
+        
+        /**
+         * Genera un botón solo si el usuario tiene el permiso requerido
+         * @param {string} permiso - Nombre del permiso (ej: 'crear:cobro')
+         * @param {object} config - Configuración del botón
+         * @returns {string} HTML del botón o string vacío
+         */
+        function botonSiPermiso(permiso, config) {
+            if (!usuarioTienePermiso(permiso)) return '';
+            
+            const {
+                texto = '',
+                onclick = '',
+                id = '',
+                estilo = '',
+                clase = 'add-btn',
+                icono = null
+            } = config;
+            
+            const idAttr = id ? `id="${id}"` : '';
+            const onclickAttr = onclick ? `onclick="${onclick}"` : '';
+            const estiloAttr = estilo ? `style="${estilo}"` : '';
+            
+            let contenido = texto;
+            if (icono) {
+                contenido = `${icono} ${texto}`;
+            }
+            
+            return `<button ${idAttr} ${onclickAttr} class="${clase}" ${estiloAttr}>${contenido}</button>`;
+        }
+
+        /**
+         * Genera un botón con ID dinámico (ej: onclick con parámetros)
+         * @param {string} permiso - Nombre del permiso
+         * @param {object} config - Configuración del botón
+         * @param {number|string} id - ID del elemento para onclick
+         * @returns {string} HTML del botón o string vacío
+         */
+        function botonConIdSiPermiso(permiso, config, ...params) {
+            if (!usuarioTienePermiso(permiso)) return '';
+            
+            const {
+                texto = '',
+                funcionOnclick = '',
+                idBtn = '',
+                estilo = '',
+                clase = '',
+                icono = null
+            } = config;
+            
+            const idAttr = idBtn ? `id="${idBtn}"` : '';
+            const paramsStr = params.join(', ');
+            const onclickAttr = funcionOnclick ? `onclick="${funcionOnclick}(${paramsStr})"` : '';
+            const estiloAttr = estilo ? `style="${estilo}"` : '';
+            const claseAttr = clase ? `class="${clase}"` : '';
+            
+            let contenido = texto;
+            if (icono) {
+                contenido = icono + ' ' + texto;
+            }
+            
+            return '<button ' + idAttr + ' ' + onclickAttr + ' ' + claseAttr + ' ' + estiloAttr + '>' + contenido + '</button>';
+        }
+
         async function cargarNombreUsuario(token) {
             try {
                 const response = await fetch(`${API_URL}/api/v1/usuarios/me`, {
@@ -2342,19 +2473,20 @@
                         'Authorization': `Bearer ${token}`
                     }
                 });
-                
+
                 if (response.ok) {
-                    const usuario = await response.json();
+                    usuarioActual = await response.json();
                     const userNameText = document.getElementById('userNameText');
                     if (userNameText) {
                         // Mostrar nombre completo o solo nombre si no hay apellido
-                        const nombreCompleto = usuario.nombre || '';
-                        const apellido = usuario.apellido || '';
+                        const nombreCompleto = usuarioActual.nombre || '';
+                        const apellido = usuarioActual.apellido || '';
                         const nombreMostrar = nombreCompleto + (apellido ? ` ${apellido}` : '');
-                        userNameText.textContent = nombreMostrar || usuario.email || 'Usuario';
+                        userNameText.textContent = nombreMostrar || usuarioActual.email || 'Usuario';
                     }
                 } else {
                     console.error('Error al cargar información del usuario');
+                    usuarioActual = null;
                     const userNameText = document.getElementById('userNameText');
                     if (userNameText) {
                         userNameText.textContent = 'Usuario';
@@ -2362,11 +2494,25 @@
                 }
             } catch (error) {
                 console.error('Error al cargar nombre del usuario:', error);
+                usuarioActual = null;
                 const userNameText = document.getElementById('userNameText');
                 if (userNameText) {
                     userNameText.textContent = 'Usuario';
                 }
             }
+        }
+
+        // Función helper para verificar si el usuario tiene un permiso
+        function usuarioTienePermiso(nombrePermiso) {
+            // Administrador tiene acceso a todo
+            if (usuarioActual && usuarioActual.id_rol === 2) {
+                return true;
+            }
+            // Verificar en permisos individuales
+            if (usuarioActual && usuarioActual.permisos && Array.isArray(usuarioActual.permisos)) {
+                return usuarioActual.permisos.includes(nombrePermiso);
+            }
+            return false;
         }
 
         async function showDashboard(token) {
@@ -2382,8 +2528,53 @@
             // tokenDisplay no existe en el HTML inicial, solo se crea dinámicamente
             // No intentamos acceder a él aquí para evitar errores
             
-            // Cargar información del usuario para mostrar su nombre
+            // Cargar información del usuario para mostrar su nombre y permisos
             await cargarNombreUsuario(token);
+            
+            // Mostrar/ocultar módulos según permisos del usuario
+            actualizarVisibilidadModulos();
+        }
+
+        // Función para mostrar/ocultar módulos según permisos del usuario
+        function actualizarVisibilidadModulos() {
+            // Mapeo de módulos a permisos de lectura necesarios
+            const modulosPermisos = {
+                'residentes': 'leer:residente',
+                'facturacion': ['leer:cobro', 'leer:pago_proveedor'],  // Acceso si tiene cualquiera
+                'personal': 'leer:personal',
+                'documentacion': 'leer:documento',
+                'historicos': 'leer:registro_asistencial',
+                'configuracion': ['leer:usuario', 'leer:residencia']  // Configuración requiere permisos específicos
+            };
+
+            // Botones de módulos
+            const botonesModulos = {
+                'residentes': document.querySelector('.module-btn-residentes'),
+                'facturacion': document.querySelector('.module-btn-facturacion'),
+                'personal': document.querySelector('.module-btn-personal'),
+                'documentacion': document.querySelector('.module-btn-documentacion'),
+                'historicos': document.querySelector('.module-btn-historicos'),
+                'configuracion': document.getElementById('configuracionBtn')
+            };
+
+            // Verificar y mostrar/ocultar cada módulo
+            for (const [modulo, permisoRequerido] of Object.entries(modulosPermisos)) {
+                const boton = botonesModulos[modulo];
+                if (!boton) continue;
+
+                let tieneAcceso = false;
+                
+                if (Array.isArray(permisoRequerido)) {
+                    // Si es array, el usuario necesita al menos uno de los permisos
+                    tieneAcceso = permisoRequerido.some(perm => usuarioTienePermiso(perm));
+                } else {
+                    // Si es string, necesita ese permiso específico
+                    tieneAcceso = usuarioTienePermiso(permisoRequerido);
+                }
+
+                // Mostrar u ocultar el botón
+                boton.style.display = tieneAcceso ? 'block' : 'none';
+            }
         }
 
         function logout() {
@@ -2436,7 +2627,7 @@
                 
                 if (response.ok) {
                     usuarioActual = await response.json();
-                    esAdmin = usuarioActual.id_rol === 1;
+                    esAdmin = usuarioActual.id_rol === 2; // Administrador (id_rol=2)
                 } else {
                     const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
                     console.error('Error al obtener usuario:', errorData);
@@ -2639,6 +2830,9 @@
                         residentesPorResidencia[residenciaId].push(res);
                     });
                     
+                    // Verificar permisos para mostrar botón de agregar
+                    const puedeCrear = usuarioTienePermiso('crear:residente');
+                    
                     let html = `
                         <div class="module-content">
                             <h3 style="color: #667eea; margin-bottom: 15px;"><img src="/static/icons/medical/users.svg" alt="Residentes" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Residentes Activos (${residentesActivos.length})</h3>
@@ -2646,7 +2840,7 @@
                                 <div style="flex: 1; min-width: 200px;">
                                     <input type="text" id="filtroBusquedaResidentes" placeholder="Buscar por nombre, habitación, contacto..." oninput="aplicarBusquedaResidentes()" style="padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; width: 100%;">
                                 </div>
-                                <button class="add-btn" onclick="openModal('modalResidente')" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Residente</button>
+                                ${puedeCrear ? `<button class="add-btn" onclick="openModal('modalResidente')" style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;"><img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Agregar Residente</button>` : ''}
                             </div>
                     `;
                     
@@ -3119,7 +3313,7 @@
                                 <div id="tabCobros" class="tab-content active">
                                     <div style="margin-bottom: 20px;">
                                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                                            <button class="add-btn" onclick="openModal('modalCobro')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Cobro</button>
+                                            ${usuarioTienePermiso('crear:cobro') ? `<button class="add-btn" onclick="openModal('modalCobro')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Cobro</button>` : ''}
                                         </div>
                                         <p style="font-size: 12px; color: #666; margin-top: -10px; margin-bottom: 15px;">
                                             💡 <strong>Nota:</strong> Se muestran los cobros pendientes del mes siguiente y los cobros completados recientes. Para ver el historial completo, usa el módulo <strong>Históricos</strong>.
@@ -3179,8 +3373,10 @@
                                     }
                                 }
                                 
+                            const puedeEditarCobro = usuarioTienePermiso('editar:cobro');
+                            const puedeEliminarCobro = usuarioTienePermiso('eliminar:cobro');
                             html += `
-                                    <tr style="cursor: pointer;" onclick="editarCobro(${cobro.id_pago})" title="Haz clic para editar">
+                                    <tr style="cursor: ${puedeEditarCobro ? 'pointer' : 'default'};" ${puedeEditarCobro ? `onclick="editarCobro(${cobro.id_pago})" title="Haz clic para editar"` : 'title="Sin permisos para editar"'}>
                                     <td style="color: #333;">${cobro.residente}</td>
                                         <td style="color: #333;">${formatearNumeroEspanol(cobro.monto)} €</td>
                                         <td style="color: #333;">${concepto}</td>
@@ -3188,8 +3384,8 @@
                                     <td style="${fechaPrevistaStyle}">${fechaPrevista}</td>
                                     <td><span style="color: #ffc107; font-weight: 600;">Pendiente</span></td>
                                         <td onclick="event.stopPropagation();" style="display: flex; gap: 5px; align-items: center; justify-content: center;">
-                                        <button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'cobrado')" style="padding: 6px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Marcar como Cobrado</button>
-                                        <button onclick="eliminarCobro(${cobro.id_pago})" style="padding: 0; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; line-height: 1; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;" title="Eliminar cobro previsto">×</button>
+                                        ${puedeEditarCobro ? `<button onclick="cambiarEstadoCobro(${cobro.id_pago}, 'cobrado')" style="padding: 6px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Marcar como Cobrado</button>` : ''}
+                                        ${puedeEliminarCobro ? `<button onclick="eliminarCobro(${cobro.id_pago})" style="padding: 0; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; line-height: 1; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;" title="Eliminar cobro previsto">×</button>` : ''}
                                     </td>
                                 </tr>
                             `;
@@ -3265,8 +3461,9 @@
                                     }
                                 }
                                 
+                            const puedeEditarCobroTabla = usuarioTienePermiso('editar:cobro');
                             html += `
-                                <tr style="cursor: pointer;" onclick="editarCobro(${cobro.id_pago})" title="Haz clic para editar">
+                                <tr style="cursor: ${puedeEditarCobroTabla ? 'pointer' : 'default'};" ${puedeEditarCobroTabla ? 'onclick="editarCobro(' + cobro.id_pago + ')" title="Haz clic para editar"' : 'title="Sin permisos para editar"'}>
                                     <td style="color: #333;">${cobro.residente}</td>
                                         <td style="color: #333;">${formatearNumeroEspanol(cobro.monto)} €</td>
                                         <td style="color: #333;">${concepto}</td>
@@ -3308,19 +3505,19 @@
                                     <div style="margin-bottom: 20px;">
                                         <h4 style="color: #667eea; margin: 0; margin-bottom: 15px;"><img src="/static/icons/medical/package.svg" alt="Proveedores" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Pagos a Proveedores (${proveedoresData.total || 0})</h4>
                                         <div class="botones-proveedores-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%;">
-                                            <button class="add-btn" onclick="openModalProveedor()" style="padding: 8px 16px; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;">
+                                            ${usuarioTienePermiso('crear:pago_proveedor') ? `<button class="add-btn" onclick="openModalProveedor()" style="padding: 8px 16px; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;">
                                                 <img src="/static/icons/medical/file-medical.svg" alt="Factura" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Factura Manual
-                                            </button>
-                                            <button class="add-btn" onclick="abrirModalProcesarFactura()" style="padding: 8px 16px; font-size: 14px; background: #667eea; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;">
+                                            </button>` : ''}
+                                            ${usuarioTienePermiso('crear:pago_proveedor') ? `<button class="add-btn" onclick="abrirModalProcesarFactura()" style="padding: 8px 16px; font-size: 14px; background: #667eea; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;">
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);">
                                                     <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="currentColor"/>
                                                     <path d="M20 12l-3-3v2h-2v2h2v2l3-3z" fill="currentColor"/>
                                                 </svg>
                                                 <span>Procesar Factura</span>
-                                            </button>
-                                            <button class="add-btn" onclick="abrirModalListaProveedores()" style="padding: 8px 16px; font-size: 14px; background: #17a2b8; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;">
+                                            </button>` : ''}
+                                            ${usuarioTienePermiso('leer:proveedor') ? `<button class="add-btn" onclick="abrirModalListaProveedores()" style="padding: 8px 16px; font-size: 14px; background: #17a2b8; display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;">
                                                 <img src="/static/icons/medical/package.svg" alt="Proveedores" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Ver Proveedores
-                                            </button>
+                                            </button>` : ''}
                                         </div>
                                     </div>
                     `;
@@ -3348,8 +3545,9 @@
                             const metodoPago = pago.metodo_pago || pago.tipo_pago || '-';
                             const monto = parseFloat(pago.monto || pago.monto_estimado || 0);
                             totalPagos += monto;
+                            const puedeEditarPagoTabla = usuarioTienePermiso('editar:pago_proveedor');
                             html += `
-                                <tr style="cursor: pointer;" onclick="editarPagoProveedor(${pago.id_pago})" title="Haz clic para editar">
+                                <tr style="cursor: ${puedeEditarPagoTabla ? 'pointer' : 'default'};" ${puedeEditarPagoTabla ? 'onclick="editarPagoProveedor(' + pago.id_pago + ')" title="Haz clic para editar"' : 'title="Sin permisos para editar"'}>
                                     <td>${pago.proveedor}</td>
                                     <td>${pago.concepto}</td>
                                     <td>${formatearNumeroEspanol(monto)} €</td>
@@ -6746,9 +6944,14 @@
                         }
                     }
                     
-                    // MOSTRAR SIEMPRE el botón de eliminar en la parte inferior si hay factura
+                    // MOSTRAR el botón de eliminar solo si hay factura Y el usuario tiene permiso
                     const mostrar_boton_eliminar = () => {
                         const btn_eliminar_completa = document.getElementById('pago_eliminar_factura_btn');
+                        // Solo mostrar si el usuario tiene permiso de eliminar
+                        if (btn_eliminar_completa && !usuarioTienePermiso('eliminar:pago_proveedor')) {
+                            btn_eliminar_completa.style.display = 'none';
+                            return;
+                        }
                         console.log('🔍 Intentando mostrar botón:', {
                             boton_encontrado: !!btn_eliminar_completa,
                             tiene_factura: tiene_factura,
@@ -7180,7 +7383,7 @@
                                 <div id="tabPersonal" class="tab-content active">
                                     <div style="margin-bottom: 20px;">
                                         <h4 style="color: #667eea; margin: 0; margin-bottom: 15px;"><img src="/static/icons/medical/user-medical.svg" alt="Personal" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Personal (${data.total || 0})</h4>
-                                        <button class="add-btn" onclick="resetFormPersonal(); openModal('modalPersonal')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Personal</button>
+                                        ${usuarioTienePermiso('crear:personal') ? `<button class="add-btn" onclick="resetFormPersonal(); openModal('modalPersonal')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Personal</button>` : ''}
                                     </div>
                     `;
                     
@@ -7199,8 +7402,9 @@
                         `;
                         
                         data.personal.forEach(p => {
+                            const puedeEditar = usuarioTienePermiso('editar:personal');
                             html += `
-                                <tr style="cursor: pointer;" onclick="editarPersonal(${p.id_personal})" title="Haz clic para editar">
+                                <tr style="cursor: ${puedeEditar ? 'pointer' : 'default'};" ${puedeEditar ? `onclick="editarPersonal(${p.id_personal})" title="Haz clic para editar"` : 'title="Sin permisos para editar"'}>
                                     <td>${p.nombre} ${p.apellido}</td>
                                     <td>${p.cargo || '-'}</td>
                                     <td>${p.telefono || '-'}</td>
@@ -8292,7 +8496,11 @@
                                         <input type="file" id="doc_archivo" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; background: white; color: #333;">
                                     </div>
                                     <textarea id="doc_descripcion" placeholder="Descripción (opcional)" rows="2" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; margin-bottom: 10px; background: white; color: #333; font-family: inherit;"></textarea>
-                                    <button type="button" onclick="agregarDocumento(${idResidente})" style="width: auto; padding: 8px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;">+ Subir Documento</button>
+                                    ${botonConIdSiPermiso('crear:documento', {
+                                        texto: '+ Subir Documento',
+                                        funcionOnclick: 'agregarDocumento',
+                                        estilo: 'width: auto; padding: 8px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px;'
+                                    }, idResidente)}
                                 </div>
                             </div>
                             
@@ -8306,9 +8514,7 @@
                                         <p style="color: #28a745; font-weight: 600; margin-bottom: 15px;">
                                             <img src="/static/icons/medical/check-circle.svg" alt="Activo" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Residente Activo
                                         </p>
-                                        <button type="button" onclick="abrirModalBaja(${res.id_residente})" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
-                                            <img src="/static/icons/medical/user-x.svg" alt="Dar de baja" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Dar de Baja
-                                        </button>
+                                        ${usuarioTienePermiso('editar:residente') ? '<button type="button" onclick="abrirModalBaja(' + res.id_residente + ')" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;"><img src="/static/icons/medical/user-x.svg" alt="Dar de baja" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Dar de Baja</button>' : ''}
                                     </div>
                                 ` : `
                                     <div class="form-group">
@@ -8318,12 +8524,8 @@
                                         <p style="color: #666; margin-bottom: 5px;"><strong>Motivo:</strong> ${res.motivo_baja || 'No especificado'}</p>
                                         <p style="color: #666; margin-bottom: 15px;"><strong>Fecha de baja:</strong> ${res.fecha_baja ? fechaISOToEspanol(res.fecha_baja) : 'No especificada'}</p>
                                         <div style="display: flex; gap: 10px; margin-top: 15px;">
-                                            <button type="button" onclick="reactivarResidente(${res.id_residente})" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
-                                                <img src="/static/icons/medical/check-circle.svg" alt="Dar de alta" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Dar de Alta
-                                            </button>
-                                            <button type="button" onclick="confirmarEliminarResidente(${res.id_residente})" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
-                                                <img src="/static/icons/medical/alert-circle.svg" alt="Eliminar" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Eliminar Completamente
-                                            </button>
+                                            ${usuarioTienePermiso('editar:residente') ? '<button type="button" onclick="reactivarResidente(' + res.id_residente + ')" style="padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;"><img src="/static/icons/medical/check-circle.svg" alt="Dar de alta" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Dar de Alta</button>' : ''}
+                                            ${usuarioTienePermiso('eliminar:residente') ? '<button type="button" onclick="confirmarEliminarResidente(' + res.id_residente + ')" style="padding: 10px 20px; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;"><img src="/static/icons/medical/alert-circle.svg" alt="Eliminar" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px; filter: brightness(0) invert(1);"> Eliminar Completamente</button>' : ''}
                                         </div>
                                     </div>
                                 `}
@@ -8332,7 +8534,7 @@
                             <div id="editModalAlert" class="alert" style="display: none;"></div>
                             
                             <div style="display: flex; gap: 10px; margin-top: 20px;">
-                                <button type="submit" id="updateResidenteBtn" style="flex: 1;">Guardar Cambios</button>
+                                ${usuarioTienePermiso('editar:residente') ? `<button type="submit" id="updateResidenteBtn" style="flex: 1;">Guardar Cambios</button>` : ''}
                                 <button type="button" onclick="closeModal('modalViewResidente')" style="flex: 1; background: #6c757d;">Cerrar</button>
                             </div>
                         </form>
@@ -8497,11 +8699,7 @@
                                             <div></div>
                                             <div></div>
                                         `}
-                                        <button onclick="eliminarDocumento(${doc.id_documento}, ${idResidente})" style="padding: 8px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Eliminar documento">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);">
-                                                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
-                                            </svg>
-                                        </button>
+                                        ${usuarioTienePermiso('eliminar:documento') ? '<button onclick="eliminarDocumento(' + doc.id_documento + ', ' + idResidente + ')" style="padding: 8px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Eliminar documento"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg></button>' : ''}
                                     </div>
                                 </div>
                             `;
@@ -9696,18 +9894,49 @@
                         select.innerHTML += `<option value="${rol.id_rol}" ${rol.id_rol == currentValue ? 'selected' : ''}>${rol.nombre}</option>`;
                     });
                     
-                    // Agregar evento onchange para seleccionar automáticamente todos los permisos si es Administrador
+                    // Agregar evento onchange para seleccionar automáticamente permisos según el rol
                     select.onchange = function() {
                         const rolSeleccionado = parseInt(this.value);
-                        if (rolSeleccionado === 2) { // Administrador (id_rol = 2)
-                            // Seleccionar todos los checkboxes de permisos
-                            setTimeout(() => {
-                                const permisosCheckboxes = document.querySelectorAll('input[name="permisos[]"]');
+                        setTimeout(() => {
+                            const permisosCheckboxes = document.querySelectorAll('input[name="permisos[]"]');
+                            
+                            if (rolSeleccionado === 2) { 
+                                // Administrador (id_rol = 2): Seleccionar TODOS los permisos
                                 permisosCheckboxes.forEach(cb => {
                                     cb.checked = true;
                                 });
-                            }, 100); // Pequeño delay para asegurar que los checkboxes estén cargados
-                        }
+                            } else if (rolSeleccionado === 3) { 
+                                // Director (id_rol = 3): Seleccionar todos EXCEPTO Configuración
+                                permisosCheckboxes.forEach(cb => {
+                                    // Si el permiso es de Configuración, no seleccionarlo
+                                    const permisoValue = cb.value;
+                                    const esConfiguracion = permisoValue === 'leer:usuario' || 
+                                                          permisoValue === 'crear:usuario' || 
+                                                          permisoValue === 'editar:usuario' || 
+                                                          permisoValue === 'eliminar:usuario' || 
+                                                          permisoValue === 'leer:residencia' || 
+                                                          permisoValue === 'editar:residencia';
+                                    cb.checked = !esConfiguracion;
+                                });
+                            } else {
+                                // Otros roles: No seleccionar ningún permiso por defecto
+                                permisosCheckboxes.forEach(cb => {
+                                    cb.checked = false;
+                                });
+                            }
+                            
+                            // Actualizar textos de los botones "Todo"/"Ninguno"
+                            document.querySelectorAll('#usuario_modulos_container button[type="button"]').forEach(btn => {
+                                if (btn.textContent === 'Todo' || btn.textContent === 'Ninguno') {
+                                    const moduloDiv = btn.closest('div[style*="margin-bottom: 20px"]');
+                                    if (moduloDiv) {
+                                        const checkboxes = moduloDiv.querySelectorAll('input[name="permisos[]"]');
+                                        const todosSeleccionados = Array.from(checkboxes).every(cb => cb.checked);
+                                        btn.textContent = todosSeleccionados ? 'Ninguno' : 'Todo';
+                                    }
+                                }
+                            });
+                        }, 100); // Pequeño delay para asegurar que los checkboxes estén cargados
                     };
                 }
             } catch (error) {
@@ -9738,15 +9967,31 @@
                             moduloDiv.style.cssText = 'margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; border: 1px solid #e0e0e0;';
                             
                             const moduloHeader = document.createElement('div');
-                            moduloHeader.style.cssText = 'font-weight: 600; font-size: 16px; color: #667eea; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;';
-                            moduloHeader.innerHTML = `<span>${modulo.nombre}</span>`;
+                            moduloHeader.style.cssText = 'font-weight: 600; font-size: 16px; color: #667eea; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;';
+                            
+                            const moduloTitle = document.createElement('span');
+                            moduloTitle.textContent = modulo.nombre;
+                            
+                            const selectAllBtn = document.createElement('button');
+                            selectAllBtn.type = 'button';
+                            selectAllBtn.textContent = 'Todo';
+                            selectAllBtn.style.cssText = 'padding: 3px 8px; font-size: 11px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.2s; white-space: nowrap;';
+                            selectAllBtn.onmouseover = () => selectAllBtn.style.background = '#5568d3';
+                            selectAllBtn.onmouseout = () => selectAllBtn.style.background = '#667eea';
+                            
+                            moduloHeader.appendChild(moduloTitle);
+                            moduloHeader.appendChild(selectAllBtn);
                             
                             const permisosDiv = document.createElement('div');
                             permisosDiv.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;';
                             
+                            // Almacenar todos los IDs de permisos de este módulo
+                            const permisoIds = [];
+                            
                             modulo.permisos.forEach(permiso => {
                                 const permisoId = `permiso_${permiso.id}`;
                                 const estaSeleccionado = permisosSeleccionados.includes(permiso.id);
+                                permisoIds.push(permisoId); // Guardar ID para el botón "Seleccionar Todo"
                                 
                                 const permisoLabel = document.createElement('label');
                                 permisoLabel.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 8px; background: #f9f9f9; border-radius: 6px; cursor: pointer; transition: background 0.2s;';
@@ -9761,6 +10006,15 @@
                                 checkbox.checked = estaSeleccionado;
                                 checkbox.style.cssText = 'width: auto; margin: 0;';
                                 
+                                // Actualizar estado del botón cuando se cambia manualmente un checkbox
+                                checkbox.onchange = function() {
+                                    const todosSeleccionados = permisoIds.every(id => {
+                                        const cb = document.getElementById(id);
+                                        return cb && cb.checked;
+                                    });
+                                    selectAllBtn.textContent = todosSeleccionados ? 'Deseleccionar Todo' : 'Seleccionar Todo';
+                                };
+                                
                                 const permisoText = document.createElement('span');
                                 permisoText.style.cssText = 'font-size: 14px; color: #333;';
                                 permisoText.innerHTML = `<strong>${permiso.nombre}</strong> - ${permiso.descripcion}`;
@@ -9769,6 +10023,34 @@
                                 permisoLabel.appendChild(permisoText);
                                 permisosDiv.appendChild(permisoLabel);
                             });
+                            
+                            // Funcionalidad del botón "Seleccionar Todo" para este módulo
+                            selectAllBtn.onclick = function() {
+                                const todosSeleccionados = permisoIds.every(id => {
+                                    const checkbox = document.getElementById(id);
+                                    return checkbox && checkbox.checked;
+                                });
+                                
+                                // Si todos están seleccionados, deseleccionar todos. Si no, seleccionar todos.
+                                permisoIds.forEach(id => {
+                                    const checkbox = document.getElementById(id);
+                                    if (checkbox) {
+                                        checkbox.checked = !todosSeleccionados;
+                                    }
+                                });
+                                
+                                // Actualizar texto del botón
+                                selectAllBtn.textContent = todosSeleccionados ? 'Todo' : 'Ninguno';
+                            };
+                            
+                            // Verificar estado inicial del botón
+                            const todosSeleccionados = permisoIds.every(id => {
+                                const checkbox = document.getElementById(id);
+                                return checkbox && checkbox.checked;
+                            });
+                            if (todosSeleccionados && permisoIds.length > 0) {
+                                selectAllBtn.textContent = 'Ninguno';
+                            }
                             
                             moduloDiv.appendChild(moduloHeader);
                             moduloDiv.appendChild(permisosDiv);
@@ -9832,12 +10114,26 @@
                     container.innerHTML = '';
                     
                     if (data.residencias && data.residencias.length > 0) {
-                        data.residencias.forEach(res => {
+                        // Filtrar solo residencias activas para asegurar que solo se asignen residencias válidas
+                        const residenciasActivas = data.residencias.filter(res => res.activa === true);
+                        
+                        if (residenciasActivas.length === 0) {
+                            container.innerHTML = '<div style="text-align: center; color: #dc3545; padding: 20px; font-weight: 600;">⚠️ No hay residencias activas disponibles. Debe crear o activar al menos una residencia antes de crear usuarios.</div>';
+                            return;
+                        }
+                        
+                        // Filtrar residencias seleccionadas para que solo se marquen las que están activas
+                        const residenciasSeleccionadasActivas = residenciasSeleccionadas.filter(r => {
+                            const idResidencia = typeof r === 'object' ? r.id_residencia : r;
+                            return residenciasActivas.some(res => res.id_residencia === idResidencia);
+                        });
+                        
+                        residenciasActivas.forEach(res => {
                             const checkboxId = `usuario_residencia_${res.id_residencia}`;
-                            const estaSeleccionada = residenciasSeleccionadas.some(r => 
+                            const estaSeleccionada = residenciasSeleccionadasActivas.some(r =>
                                 (typeof r === 'object' ? r.id_residencia : r) === res.id_residencia
                             );
-                            
+
                             const checkbox = document.createElement('div');
                             checkbox.style.display = 'flex';
                             checkbox.style.alignItems = 'center';
@@ -9847,13 +10143,22 @@
                             checkbox.style.transition = 'background-color 0.2s';
                             checkbox.onmouseover = () => checkbox.style.backgroundColor = '#f0f0f0';
                             checkbox.onmouseout = () => checkbox.style.backgroundColor = 'transparent';
-                            
+
                             checkbox.innerHTML = `
                                 <input type="checkbox" id="${checkboxId}" name="residencias[]" value="${res.id_residencia}" ${estaSeleccionada ? 'checked' : ''} style="width: auto; margin: 0; cursor: pointer;">
                                 <label for="${checkboxId}" style="margin: 0; cursor: pointer; flex: 1; font-weight: 500;">${res.nombre}</label>
                             `;
                             container.appendChild(checkbox);
                         });
+                        
+                        // Asegurar que al menos una residencia esté seleccionada (si estamos editando y el usuario tenía residencias activas)
+                        if (residenciasSeleccionadasActivas.length === 0 && residenciasActivas.length > 0) {
+                            // Si no hay ninguna seleccionada pero hay residencias activas, seleccionar la primera por defecto
+                            const firstCheckbox = document.getElementById(`usuario_residencia_${residenciasActivas[0].id_residencia}`);
+                            if (firstCheckbox) {
+                                firstCheckbox.checked = true;
+                            }
+                        }
                     } else {
                         container.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No hay residencias disponibles</div>';
                     }
@@ -9913,7 +10218,7 @@
                 return;
             }
             
-            // Recoger residencias seleccionadas (checkboxes)
+            // Recoger residencias seleccionadas (checkboxes) - solo activas
             const residenciasCheckboxes = document.querySelectorAll('input[name="residencias[]"]:checked');
             const residencias = Array.from(residenciasCheckboxes).map(cb => {
                 const val = parseInt(cb.value);
@@ -9921,7 +10226,7 @@
             }).filter(v => v !== null);
             
             if (residencias.length === 0) {
-                showUsuarioModalError('Debe seleccionar al menos una residencia');
+                showUsuarioModalError('Debe seleccionar al menos una residencia activa');
                 resetSaveButton('saveUsuarioBtn', originalText);
                 return;
             }
@@ -11079,13 +11384,11 @@
                                                                     <div></div>
                                                                     <div></div>
                                                                 `}
-                                                                ${doc.tipo_entidad !== 'pago_proveedor' ? `
-                                                                    <button onclick="eliminarDocumentoUnificado(${doc.id_documento})" style="padding: 8px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Eliminar documento">
-                                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);">
-                                                                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
-                                                                        </svg>
-                                                                    </button>
-                                                                ` : '<div></div>'}
+                                                                ${(function() {
+                                                                    if (doc.tipo_entidad === 'pago_proveedor') return '';
+                                                                    if (!usuarioTienePermiso('eliminar:documento')) return '<div></div>';
+                                                                    return '<button onclick="eliminarDocumentoUnificado(' + doc.id_documento + ')" style="padding: 8px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Eliminar documento"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg></button>';
+                                                                })()}
                                                             </div>
                                                         </td>
                                                     </tr>

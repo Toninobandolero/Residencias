@@ -64,8 +64,7 @@ app.config['JSON_AS_ASCII'] = False  # Permitir caracteres Unicode en JSON (ñ, 
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 
 # Constantes de seguridad
-SUPER_ADMIN_ROLE_ID = 1  # ID fijo del rol super_admin
-ADMIN_ROLE_ID = 2  # ID fijo del rol Administrador (acceso a todos los módulos y residencias)
+ADMIN_ROLE_ID = 2  # ID fijo del rol Administrador (acceso total a todos los módulos y residencias)
 
 # Rate limiting simple en memoria (en producción usar Redis)
 login_attempts = defaultdict(list)
@@ -172,19 +171,19 @@ def log_security_event(tipo_evento, id_usuario=None, detalles=None):
         app.logger.error(f"Error al registrar evento de seguridad: {str(e)}")
 
 
-def validate_residencia_access(id_residencia_from_db, allow_super_admin=True):
+def validate_residencia_access(id_residencia_from_db, allow_Administrador=True):
     """
     Valida que el id_residencia del recurso esté en la lista de acceso del usuario.
     
     Args:
         id_residencia_from_db: El id_residencia del registro obtenido de la BD
-        allow_super_admin: Si True, permite acceso a super_admin (rol 1)
+        allow_Administrador: Si True, permite acceso a Administrador (rol 1)
         
     Returns:
         tuple: (is_valid, error_response) donde error_response es None si es válido
     """
-    # BYPASS para super_admin
-    if allow_super_admin and g.id_rol == SUPER_ADMIN_ROLE_ID:
+    # BYPASS para Administrador
+    if allow_Administrador and g.id_rol == ADMIN_ROLE_ID:
         return True, None
     
     # Verificar que la residencia está en la lista de acceso
@@ -358,10 +357,10 @@ def build_residencia_filter(table_alias='', column_name='id_residencia'):
         
     Returns:
         tuple: (sql_condition, params)
-               - Si super_admin: (None, None) = sin filtro
+               - Si Administrador: (None, None) = sin filtro
                - Si usuario normal: ('WHERE ... IN (...)', [lista_ids])
     """
-    if g.id_rol == SUPER_ADMIN_ROLE_ID:
+    if g.id_rol == ADMIN_ROLE_ID:
         return None, None
     
     if not hasattr(g, 'residencias_acceso') or not g.residencias_acceso:
@@ -373,18 +372,78 @@ def build_residencia_filter(table_alias='', column_name='id_residencia'):
     return f"WHERE {column} IN ({placeholders})", g.residencias_acceso
 
 
+def usuario_tiene_permiso(id_usuario, id_rol, nombre_permiso, cursor=None):
+    """
+    Verifica si un usuario tiene un permiso específico.
+    
+    IMPORTANTE: Solo se verifican los permisos individuales asignados al usuario.
+    El rol (Director, Personal, etc.) NO influye en la autorización, solo es
+    una conveniencia para pre-seleccionar permisos en el frontend al crear usuarios.
+    
+    Lógica:
+    - Administrador (id_rol=2) siempre tiene bypass total
+    - Para todos los demás: verificar SOLO en tabla usuario_permiso
+    - Si el usuario no tiene el permiso en usuario_permiso, NO tiene acceso
+    
+    Args:
+        id_usuario: ID del usuario
+        id_rol: ID del rol del usuario (solo se usa para verificar si es Administrador)
+        nombre_permiso: Nombre del permiso a verificar
+        cursor: Cursor de base de datos (opcional, si no se proporciona se crea uno nuevo)
+    
+    Returns:
+        bool: True si el usuario tiene el permiso en usuario_permiso, False en caso contrario
+    """
+    # Administrador tiene bypass total
+    if id_rol == ADMIN_ROLE_ID:
+        return True
+    
+    usar_cursor_externo = cursor is not None
+    if not usar_cursor_externo:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+    
+    try:
+        # SOLO verificar permisos individuales del usuario
+        # El rol NO influye en la autorización, solo en la UI para pre-seleccionar
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM usuario_permiso up
+            WHERE up.id_usuario = %s 
+              AND up.nombre_permiso = %s
+        """, (id_usuario, nombre_permiso))
+        
+        tiene_permiso = cursor.fetchone()[0] > 0
+        
+        if not usar_cursor_externo:
+            cursor.close()
+            conn.close()
+        
+        return tiene_permiso
+            
+    except Exception as e:
+        app.logger.error(f"Error al verificar permiso: {str(e)}")
+        if not usar_cursor_externo:
+            cursor.close()
+            conn.close()
+        return False
+
+
 def permiso_requerido(nombre_permiso):
     """
     Decorador que valida permisos granulares para endpoints.
     
+    IMPORTANTE: Solo verifica permisos individuales del usuario (tabla usuario_permiso).
+    El rol no influye en la autorización, solo sirve para pre-seleccionar permisos en la UI.
+    
     Lógica:
     1. Valida JWT (ya hecho en before_request)
-    2. Si es super_admin (id_rol = 1): BYPASS TOTAL (retorna True inmediatamente)
-    3. Si NO es super_admin: Consulta DB para verificar permiso
+    2. Si es Administrador (id_rol = 2): BYPASS TOTAL (retorna True inmediatamente)
+    3. Si NO es Administrador: Verifica SOLO en usuario_permiso (no en rol_permiso)
     4. Adjunta lista de residencias a g.residencias_acceso (ya hecho en before_request)
     
     Args:
-        nombre_permiso: String del permiso (ej: "escribir:tratamiento", "leer:residente")
+        nombre_permiso: String del permiso (ej: "editar:tratamiento", "leer:residente")
         
     Returns:
         Decorador de función Flask
@@ -395,38 +454,22 @@ def permiso_requerido(nombre_permiso):
             # 1. Validación JWT ya hecha en before_request
             # g.id_usuario y g.id_rol ya están disponibles
             
-            # 2. BYPASS para super_admin
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+            # 2. BYPASS para Administrador
+            if g.id_rol == ADMIN_ROLE_ID:
                 return f(*args, **kwargs)
             
-            # 3. Verificar permiso en BD
-            conn = get_db_connection()
-            cursor = conn.cursor()
+            # 3. Verificar permiso (rol + permisos individuales del usuario)
+            tiene_permiso = usuario_tiene_permiso(g.id_usuario, g.id_rol, nombre_permiso)
             
-            try:
-                cursor.execute("""
-                    SELECT COUNT(*) 
-                    FROM rol_permiso rp
-                    JOIN permiso p ON rp.id_permiso = p.id_permiso
-                    WHERE rp.id_rol = %s 
-                      AND p.nombre = %s
-                """, (g.id_rol, nombre_permiso))
-                
-                tiene_permiso = cursor.fetchone()[0] > 0
-                
-                if not tiene_permiso:
-                    log_security_event('acceso_denegado', g.id_usuario, {
-                        'permiso_requerido': nombre_permiso,
-                        'endpoint': request.path
-                    })
-                    return jsonify({
-                        'error': 'No tienes permisos para realizar esta acción',
-                        'permiso_requerido': nombre_permiso
-                    }), 403
-                    
-            finally:
-                cursor.close()
-                conn.close()
+            if not tiene_permiso:
+                log_security_event('acceso_denegado', g.id_usuario, {
+                    'permiso_requerido': nombre_permiso,
+                    'endpoint': request.path
+                })
+                return jsonify({
+                    'error': 'No tienes permisos para realizar esta acción',
+                    'permiso_requerido': nombre_permiso
+                }), 403
             
             # 4. Continuar con la ejecución del endpoint
             return f(*args, **kwargs)
@@ -449,8 +492,11 @@ def before_request():
     # Rutas que permiten actualización del propio usuario (incluyendo cambio de contraseña inicial)
     rutas_actualizacion_propia = ['/api/v1/usuarios']
     
-    # Excluir archivos estáticos y favicon
-    if request.path in public_paths or request.path.startswith('/static/') or request.path == '/favicon.ico':
+    # Excluir archivos estáticos, favicon y rutas de Chrome DevTools
+    if (request.path in public_paths or 
+        request.path.startswith('/static/') or 
+        request.path == '/favicon.ico' or
+        request.path.startswith('/.well-known/')):
         return None
     
     # Obtener token del header Authorization
@@ -498,13 +544,10 @@ def before_request():
     cursor = conn.cursor()
     
     try:
-        # Si es super_admin o Administrador, establecer lista vacía (bypass total)
-        app.logger.debug(f"Usuario {g.id_usuario} con rol {g.id_rol}, SUPER_ADMIN_ROLE_ID={SUPER_ADMIN_ROLE_ID}, ADMIN_ROLE_ID={ADMIN_ROLE_ID}")
-        if g.id_rol == SUPER_ADMIN_ROLE_ID or g.id_rol == ADMIN_ROLE_ID:
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
-                app.logger.debug(f"Usuario {g.id_usuario} es super_admin, estableciendo residencias_acceso = []")
-            else:
-                app.logger.debug(f"Usuario {g.id_usuario} es Administrador, estableciendo residencias_acceso = []")
+        # Si es Administrador, establecer lista vacía (bypass total)
+        app.logger.debug(f"Usuario {g.id_usuario} con rol {g.id_rol}, ADMIN_ROLE_ID={ADMIN_ROLE_ID}")
+        if g.id_rol == ADMIN_ROLE_ID:
+            app.logger.debug(f"Usuario {g.id_usuario} es Administrador, estableciendo residencias_acceso = []")
             g.residencias_acceso = []  # Lista vacía = acceso total a todas las residencias
         else:
             # Verificar si la tabla usuario_residencia existe
@@ -636,8 +679,21 @@ def login():
     {
         "token": "jwt_token_here"
     }
+    
+    IMPORTANTE: Solo acepta POST con JSON en el cuerpo. NO acepta credenciales en URL.
     """
     try:
+        # SEGURIDAD: Rechazar explícitamente credenciales en query parameters
+        if request.args.get('email') or request.args.get('password'):
+            app.logger.warning(f"⚠️ INTENTO DE LOGIN CON CREDENCIALES EN URL desde IP: {request.remote_addr}")
+            log_security_event('login_credenciales_url', None, {
+                'ip': request.remote_addr,
+                'user_agent': request.headers.get('User-Agent', 'Unknown')
+            })
+            return jsonify({
+                'error': 'Las credenciales no pueden enviarse en la URL por razones de seguridad. Use POST con JSON en el cuerpo.'
+            }), 400
+        
         data = request.get_json()
         
         if not data:
@@ -841,11 +897,11 @@ def cambiar_clave():
 
 
 @app.route('/api/v1/usuarios', methods=['POST'])
-@permiso_requerido('crear:usuario')  # Nota: super_admin tiene bypass automático
+@permiso_requerido('crear:usuario')  # Nota: Administrador tiene bypass automático
 def crear_usuario():
     """
     Endpoint para crear nuevos usuarios.
-    SOLO accesible por super_admin (tiene bypass en el decorador).
+    SOLO accesible por Administrador (tiene bypass en el decorador).
     
     Request:
     {
@@ -858,8 +914,8 @@ def crear_usuario():
     }
     """
     try:
-        # Verificación adicional: solo super_admin y admin pueden crear usuarios
-        if g.id_rol not in [SUPER_ADMIN_ROLE_ID, 2]:
+        # Verificación adicional: solo Administrador puede crear usuarios
+        if g.id_rol != ADMIN_ROLE_ID:
             return jsonify({'error': 'Solo administradores pueden crear usuarios'}), 403
         
         data = request.get_json()
@@ -891,16 +947,10 @@ def crear_usuario():
         if not residencias or len(residencias) == 0:
             return jsonify({'error': 'Debe asignar al menos una residencia'}), 400
         
-        # Prevenir creación de super_admin por usuarios que no son super_admin
-        if id_rol == SUPER_ADMIN_ROLE_ID and g.id_rol != SUPER_ADMIN_ROLE_ID:
+        # Solo Administradores pueden crear otros Administradores
+        if id_rol == ADMIN_ROLE_ID and g.id_rol != ADMIN_ROLE_ID:
             return jsonify({
-                'error': 'No tienes permisos para crear usuarios con rol super_admin'
-            }), 403
-        
-        # Prevenir creación accidental de super_admin (protección adicional)
-        if id_rol == SUPER_ADMIN_ROLE_ID:
-            return jsonify({
-                'error': 'No se puede crear super_admin a través de este endpoint. Contacte al administrador del sistema.'
+                'error': 'Solo los Administradores pueden crear otros Administradores'
             }), 403
         
         # Validar formato de email
@@ -936,10 +986,15 @@ def crear_usuario():
             
             residencias_validas = [row[0] for row in cursor.fetchall()]
             
+            if len(residencias_validas) == 0:
+                return jsonify({
+                    'error': 'Debe asignar al menos una residencia activa. Ninguna de las residencias seleccionadas está activa.'
+                }), 400
+            
             if len(residencias_validas) != len(residencias):
                 residencias_invalidas = [r for r in residencias if r not in residencias_validas]
                 return jsonify({
-                    'error': 'Una o más residencias no existen o están inactivas',
+                    'error': f'Una o más residencias no existen o están inactivas: {residencias_invalidas}. Solo se pueden asignar residencias activas.',
                     'residencias_invalidas': residencias_invalidas
                 }), 400
             
@@ -961,13 +1016,28 @@ def crear_usuario():
             
             id_usuario = cursor.fetchone()[0]
             
-            # Asignar residencias
+            # Asignar residencias (solo activas)
             for id_residencia in residencias_validas:
                 cursor.execute("""
                     INSERT INTO usuario_residencia (id_usuario, id_residencia)
                     VALUES (%s, %s)
                     ON CONFLICT DO NOTHING
                 """, (id_usuario, id_residencia))
+            
+            # Verificar que el usuario tiene al menos una residencia activa después de la creación
+            cursor.execute("""
+                SELECT COUNT(*) 
+                FROM usuario_residencia ur
+                JOIN residencia r ON ur.id_residencia = r.id_residencia
+                WHERE ur.id_usuario = %s AND r.activa = TRUE
+            """, (id_usuario,))
+            total_residencias_activas = cursor.fetchone()[0]
+            
+            if total_residencias_activas == 0:
+                conn.rollback()
+                return jsonify({
+                    'error': 'Error: El usuario debe tener al menos una residencia activa. No se pudo completar la creación.'
+                }), 400
             
             # Crear tabla usuario_permiso si no existe
             cursor.execute("""
@@ -981,7 +1051,18 @@ def crear_usuario():
             
             # Asignar permisos personalizados si se proporcionaron
             if permisos and len(permisos) > 0:
+                # Verificar que los permisos existen antes de insertarlos
                 for nombre_permiso in permisos:
+                    # Verificar que el permiso existe
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM permiso WHERE nombre_permiso = %s AND activo = TRUE
+                    """, (nombre_permiso,))
+                    permiso_existe = cursor.fetchone()[0] > 0
+                    
+                    if not permiso_existe:
+                        app.logger.warning(f"Permiso '{nombre_permiso}' no existe en la tabla permiso. Se omitirá.")
+                        continue
+                    
                     cursor.execute("""
                         INSERT INTO usuario_permiso (id_usuario, nombre_permiso)
                         VALUES (%s, %s)
@@ -1185,8 +1266,8 @@ def listar_residentes():
             
             # Filtrar por residencias según acceso del usuario
             params = []
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
-                # Super admin: sin filtro
+            if g.id_rol == ADMIN_ROLE_ID:
+                # Administrador: sin filtro
                 pass
             else:
                 # Usuario normal: filtrar por lista de residencias
@@ -2302,6 +2383,7 @@ def actualizar_residente(id_residente):
 # ============================================================================
 
 @app.route('/api/v1/facturacion/cobros', methods=['GET'])
+@permiso_requerido('leer:cobro')
 def listar_cobros():
     """
     Lista los cobros del período cercano (Facturación):
@@ -2412,7 +2494,7 @@ def listar_cobros():
                 params_query = params_extended  # Guardar params para reutilizar
                 cursor.execute(query, params_extended)
             else:
-                # Super admin: sin filtro (acceso total)
+                # Administrador: sin filtro (acceso total)
                 query = """
                     WITH cobros_pendientes AS (
                         -- Todos los cobros pendientes
@@ -2500,40 +2582,41 @@ def listar_cobros():
             
             # Identificar residentes con cobros completados pero sin cobro pendiente para el mes siguiente
             # Obtener residentes activos con costo_habitacion que tienen cobros completados
-            if where_clause:
+            if where_clause and params:
                 # Usuario normal: filtrar por residencias asignadas
                 # Construir filtro para residente (donde clause tiene formato "WHERE p.id_residencia IN (...)")
                 # Necesitamos extraer los IDs de residencia de params
-                if params:
-                    placeholders = ','.join(['%s'] * len(params))
-                    query_residentes = f"""
-                        SELECT DISTINCT r.id_residente, r.id_residencia, r.costo_habitacion, 
-                               r.metodo_pago_preferido, r.nombre, r.apellido
-                        FROM residente r
-                        JOIN pago_residente p ON r.id_residente = p.id_residente
-                        WHERE r.activo = TRUE
-                          AND r.costo_habitacion IS NOT NULL
-                          AND r.costo_habitacion > 0
-                          AND p.estado = 'cobrado'
-                          AND p.fecha_pago IS NOT NULL
-                          AND r.id_residencia IN ({placeholders})
-                          AND NOT EXISTS (
-                              SELECT 1 FROM pago_residente p2
-                              WHERE p2.id_residente = r.id_residente
-                                AND p2.id_residencia = r.id_residencia
-                                AND p2.mes_pagado = %s
-                                AND (p2.concepto ILIKE 'enero %%' OR p2.concepto ILIKE 'febrero %%' OR p2.concepto ILIKE 'marzo %%' 
-                                     OR p2.concepto ILIKE 'abril %%' OR p2.concepto ILIKE 'mayo %%' OR p2.concepto ILIKE 'junio %%'
-                                     OR p2.concepto ILIKE 'julio %%' OR p2.concepto ILIKE 'agosto %%' OR p2.concepto ILIKE 'septiembre %%'
-                                     OR p2.concepto ILIKE 'octubre %%' OR p2.concepto ILIKE 'noviembre %%' OR p2.concepto ILIKE 'diciembre %%'
-                                     OR p2.concepto ILIKE 'Pago %%')
-                          )
-                    """
-                    cursor.execute(query_residentes, list(params) + [mes_siguiente_str])
-                else:
-                    residentes_sin_cobro_pendiente = []
+                placeholders = ','.join(['%s'] * len(params))
+                query_residentes = f"""
+                    SELECT DISTINCT r.id_residente, r.id_residencia, r.costo_habitacion, 
+                           r.metodo_pago_preferido, r.nombre, r.apellido
+                    FROM residente r
+                    JOIN pago_residente p ON r.id_residente = p.id_residente
+                    WHERE r.activo = TRUE
+                      AND r.costo_habitacion IS NOT NULL
+                      AND r.costo_habitacion > 0
+                      AND p.estado = 'cobrado'
+                      AND p.fecha_pago IS NOT NULL
+                      AND r.id_residencia IN ({placeholders})
+                      AND NOT EXISTS (
+                          SELECT 1 FROM pago_residente p2
+                          WHERE p2.id_residente = r.id_residente
+                            AND p2.id_residencia = r.id_residencia
+                            AND p2.mes_pagado = %s
+                            AND (p2.concepto ILIKE 'enero %%' OR p2.concepto ILIKE 'febrero %%' OR p2.concepto ILIKE 'marzo %%' 
+                                 OR p2.concepto ILIKE 'abril %%' OR p2.concepto ILIKE 'mayo %%' OR p2.concepto ILIKE 'junio %%'
+                                 OR p2.concepto ILIKE 'julio %%' OR p2.concepto ILIKE 'agosto %%' OR p2.concepto ILIKE 'septiembre %%'
+                                 OR p2.concepto ILIKE 'octubre %%' OR p2.concepto ILIKE 'noviembre %%' OR p2.concepto ILIKE 'diciembre %%'
+                                 OR p2.concepto ILIKE 'Pago %%')
+                      )
+                """
+                cursor.execute(query_residentes, list(params) + [mes_siguiente_str])
+                residentes_sin_cobro_pendiente = cursor.fetchall()
+            elif where_clause and not params:
+                # Usuario sin residencias activas asignadas
+                residentes_sin_cobro_pendiente = []
             else:
-                # Super admin: sin filtro
+                # Administrador: sin filtro
                 query_residentes = """
                     SELECT DISTINCT r.id_residente, r.id_residencia, r.costo_habitacion, 
                            r.metodo_pago_preferido, r.nombre, r.apellido
@@ -2558,6 +2641,10 @@ def listar_cobros():
                 """
                 cursor.execute(query_residentes, [mes_siguiente_str])
                 residentes_sin_cobro_pendiente = cursor.fetchall()
+            
+            # Inicializar variable si no se ha hecho (para evitar errores)
+            if 'residentes_sin_cobro_pendiente' not in locals():
+                residentes_sin_cobro_pendiente = []
             
             # Generar cobros pendientes faltantes
             cobros_generados = 0
@@ -2666,8 +2753,17 @@ def listar_cobros():
             conn.close()
             
     except Exception as e:
-        app.logger.error(f"Error al listar pagos: {str(e)}")
-        return jsonify({'error': 'Error al obtener pagos'}), 500
+        import traceback
+        error_trace = traceback.format_exc()
+        app.logger.error(f"Error al listar cobros: {str(e)}\n{error_trace}")
+        # En desarrollo, incluir más detalles del error
+        if app.config.get('DEBUG'):
+            return jsonify({
+                'error': 'Error al obtener cobros',
+                'detalle': str(e),
+                'traceback': error_trace.split('\n')[-5:]  # Últimas 5 líneas del traceback
+            }), 500
+        return jsonify({'error': 'Error al obtener cobros'}), 500
 
 
 @app.route('/api/v1/facturacion/cobros', methods=['POST'])
@@ -2848,11 +2944,11 @@ def regenerar_cobros_historicos_endpoint():
     """
     Regenera cobros históricos completados para todos los residentes activos.
     Útil para corregir residentes que fueron creados recientemente pero tienen fecha_ingreso anterior.
-    Solo accesible por super_admin o Administrador.
+    Solo accesible por Administrador o Administrador.
     """
     try:
-        # Solo super_admin o Administrador pueden ejecutar esto
-        if g.id_rol not in [SUPER_ADMIN_ROLE_ID, ADMIN_ROLE_ID]:
+        # Solo Administrador o Administrador pueden ejecutar esto
+        if g.id_rol not in [ADMIN_ROLE_ID, ADMIN_ROLE_ID]:
             return jsonify({'error': 'Solo administradores pueden regenerar cobros históricos'}), 403
         
         conn = get_db_connection()
@@ -2959,6 +3055,7 @@ def regenerar_cobros_historicos_endpoint():
 
 
 @app.route('/api/v1/facturacion/cobros/generar-previstos', methods=['POST'])
+@permiso_requerido('crear:cobro')
 def generar_cobros_previstos():
     """
     Genera automáticamente cobros previstos para el MES SIGUIENTE para todos los residentes activos
@@ -3001,8 +3098,8 @@ def generar_cobros_previstos():
             mes_siguiente = siguiente_mes.strftime('%Y-%m')
             
             # Limpiar TODOS los cobros previstos pendientes antes de regenerar
-            # Si es super_admin, limpia de TODAS las residencias. Si no, solo de las asignadas.
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+            # Si es Administrador, limpia de TODAS las residencias. Si no, solo de las asignadas.
+            if g.id_rol == ADMIN_ROLE_ID:
                 cursor.execute("""
                     DELETE FROM pago_residente
                     WHERE es_cobro_previsto = TRUE
@@ -3037,8 +3134,8 @@ def generar_cobros_previstos():
             fecha_prevista = siguiente_mes.date()  # Día 1 del mes siguiente
             
             # Obtener residentes activos con costo_habitacion
-            # Si es super_admin, obtiene de TODAS las residencias. Si no, solo de las asignadas.
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+            # Si es Administrador, obtiene de TODAS las residencias. Si no, solo de las asignadas.
+            if g.id_rol == ADMIN_ROLE_ID:
                 cursor.execute("""
                     SELECT id_residente, nombre, apellido, costo_habitacion, metodo_pago_preferido, fecha_ingreso, id_residencia
                     FROM residente
@@ -3049,7 +3146,7 @@ def generar_cobros_previstos():
                 """)
                 cursor.execute("SELECT COUNT(*) FROM residente WHERE activo = TRUE")
                 total_residentes_activos = cursor.fetchone()[0]
-                app.logger.info(f"Generando cobros previstos GLOBAL (Super Admin) para mes siguiente: {mes_siguiente_str}")
+                app.logger.info(f"Generando cobros previstos GLOBAL (Administrador) para mes siguiente: {mes_siguiente_str}")
             else:
                 # Usuario normal: filtrar por residencias asignadas
                 if not g.residencias_acceso:
@@ -3211,7 +3308,7 @@ def estadisticas_cobros():
         
         try:
             # Si es Admin (rol 1), obtiene de TODAS las residencias agrupado. Si no, solo de la suya.
-            if g.id_rol == 1:
+            if g.id_rol == ADMIN_ROLE_ID:
                 # Obtener cobros históricos (cobrados) agrupados por mes y residencia
                 cursor.execute("""
                     SELECT 
@@ -3388,6 +3485,7 @@ def estadisticas_cobros():
 
 
 @app.route('/api/v1/facturacion/cobros/ultimos-completados', methods=['GET'])
+@permiso_requerido('leer:cobro')
 def ultimos_cobros_completados():
     """
     Obtiene el último pago mensual y el último pago extra completado de cada residente.
@@ -3422,8 +3520,8 @@ def ultimos_cobros_completados():
             
             # Obtener último pago mensual de cada residente
             # Consideramos "mensual" los que tienen concepto que empieza con "Pago" seguido de un mes
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
-                # Super admin: sin filtro
+            if g.id_rol == ADMIN_ROLE_ID:
+                # Administrador: sin filtro
                 query_mensual = f"""
                 SELECT DISTINCT ON (p.id_residente)
                     {select_clause}
@@ -3576,6 +3674,7 @@ def ultimos_cobros_completados():
 
 
 @app.route('/api/v1/facturacion/cobros/<int:id_pago>', methods=['GET'])
+@permiso_requerido('leer:cobro')
 def obtener_cobro(id_pago):
     """Obtiene un cobro específico por su ID."""
     try:
@@ -3648,6 +3747,7 @@ def obtener_cobro(id_pago):
 
 
 @app.route('/api/v1/facturacion/cobros/normalizar-conceptos', methods=['POST'])
+@permiso_requerido('editar:cobro')
 def normalizar_conceptos_cobros():
     """
     Normaliza los conceptos de cobros existentes:
@@ -3768,6 +3868,7 @@ def normalizar_conceptos_cobros():
 
 
 @app.route('/api/v1/facturacion/cobros/<int:id_pago>', methods=['PUT'])
+@permiso_requerido('editar:cobro')
 def actualizar_cobro(id_pago):
     """Actualiza un cobro (cambiar estado, marcar como cobrado, etc.)."""
     try:
@@ -3857,6 +3958,7 @@ def actualizar_cobro(id_pago):
 
 
 @app.route('/api/v1/facturacion/cobros/<int:id_pago>', methods=['DELETE'])
+@permiso_requerido('eliminar:cobro')
 def eliminar_cobro(id_pago):
     """Elimina un cobro completamente. Solo permite eliminar cobros pendientes/previstos."""
     try:
@@ -3926,6 +4028,7 @@ def eliminar_cobro(id_pago):
 
 
 @app.route('/api/v1/facturacion/proveedores', methods=['GET'])
+@permiso_requerido('leer:pago_proveedor')
 def listar_pagos_proveedores():
     """Lista los pagos a proveedores de la residencia."""
     try:
@@ -3944,8 +4047,8 @@ def listar_pagos_proveedores():
             """
             params = []
             
-            # Filtrar por residencias de acceso (excepto super_admin)
-            if g.id_rol != SUPER_ADMIN_ROLE_ID:
+            # Filtrar por residencias de acceso (excepto Administrador)
+            if g.id_rol != ADMIN_ROLE_ID:
                 if g.residencias_acceso:
                     placeholders = ','.join(['%s'] * len(g.residencias_acceso))
                     query += f" AND p.id_residencia IN ({placeholders})"
@@ -3991,6 +4094,7 @@ def listar_pagos_proveedores():
 
 
 @app.route('/api/v1/facturacion/proveedores', methods=['POST'])
+@permiso_requerido('crear:pago_proveedor')
 def crear_pago_proveedor():
     """Crea un pago a proveedor o una estimación basada en historial."""
     try:
@@ -4205,6 +4309,7 @@ def crear_pago_proveedor():
 
 
 @app.route('/api/v1/facturacion/proveedores/<int:id_pago>', methods=['GET'])
+@permiso_requerido('leer:pago_proveedor')
 def obtener_pago_proveedor(id_pago):
     """Obtiene un pago a proveedor por su ID."""
     try:
@@ -4305,6 +4410,7 @@ def obtener_pago_proveedor(id_pago):
 
 
 @app.route('/api/v1/facturacion/proveedores/<int:id_pago>', methods=['DELETE'])
+@permiso_requerido('eliminar:pago_proveedor')
 def eliminar_pago_proveedor(id_pago):
     """Elimina completamente un pago a proveedor de la base de datos."""
     try:
@@ -4388,7 +4494,7 @@ def eliminar_pago_proveedor(id_pago):
 
 
 @app.route('/api/v1/facturacion/procesar-factura', methods=['POST'])
-@permiso_requerido('escribir:pago_proveedor')
+@permiso_requerido('crear:pago_proveedor')
 def procesar_factura():
     """
     Procesa una factura PDF usando Google Document AI para extraer datos.
@@ -4421,8 +4527,8 @@ def procesar_factura():
         id_residencia = request.form.get('id_residencia', type=int)
         if not id_residencia:
             # Si no se proporciona, usar la primera residencia del usuario
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
-                # Para superadmin, usar 1 por defecto
+            if g.id_rol == ADMIN_ROLE_ID:
+                # Para Administrador, usar 1 por defecto
                 id_residencia = 1
             else:
                 if not g.residencias_acceso:
@@ -5119,7 +5225,7 @@ def procesar_factura():
                         
                         columnas_select = ', '.join(columnas_select_list)
                         
-                        if g.id_rol == SUPER_ADMIN_ROLE_ID or g.id_rol == ADMIN_ROLE_ID:
+                        if g.id_rol == ADMIN_ROLE_ID or g.id_rol == ADMIN_ROLE_ID:
                             cursor_residencias.execute(f"""
                                 SELECT {columnas_select}
                                 FROM residencia
@@ -5425,7 +5531,7 @@ def procesar_factura():
         # Si se detectó una residencia automáticamente y el usuario tiene acceso, usarla
         if id_residencia_detectada:
             # Verificar que el usuario tiene acceso a la residencia detectada
-            if g.id_rol == SUPER_ADMIN_ROLE_ID or g.id_rol == ADMIN_ROLE_ID or id_residencia_detectada in g.residencias_acceso:
+            if g.id_rol == ADMIN_ROLE_ID or g.id_rol == ADMIN_ROLE_ID or id_residencia_detectada in g.residencias_acceso:
                 id_residencia = id_residencia_detectada
                 app.logger.info(f"Usando residencia detectada automáticamente: {id_residencia}")
             else:
@@ -5542,6 +5648,7 @@ def procesar_factura():
 
 
 @app.route('/api/v1/facturacion/proveedores/<int:id_pago>', methods=['PUT'])
+@permiso_requerido('editar:pago_proveedor')
 def actualizar_pago_proveedor(id_pago):
     """Actualiza un pago a proveedor. Acepta JSON o multipart/form-data (si hay archivo)."""
     try:
@@ -5860,7 +5967,7 @@ def listar_proveedores():
                 """
                 cursor.execute(query, params)
             else:
-                # Super admin: sin filtro (acceso total)
+                # Administrador: sin filtro (acceso total)
                 cursor.execute("""
                     SELECT id_proveedor, id_residencia, nombre, nif_cif, direccion, telefono, email,
                        contacto, tipo_servicio, activo, observaciones, fecha_creacion
@@ -5901,7 +6008,7 @@ def listar_proveedores():
 
 
 @app.route('/api/v1/proveedores', methods=['POST'])
-@permiso_requerido('escribir:proveedor')
+@permiso_requerido('crear:proveedor')
 def crear_proveedor():
     """Crea un nuevo proveedor."""
     try:
@@ -5939,8 +6046,8 @@ def crear_proveedor():
         
         # Si no se proporciona id_residencia, usar la primera residencia asignada (si solo hay una)
         if not id_residencia:
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
-                # Super admin debe especificar id_residencia explícitamente
+            if g.id_rol == ADMIN_ROLE_ID:
+                # Administrador debe especificar id_residencia explícitamente
                 return jsonify({'error': 'id_residencia es requerido. Por favor, especifica la residencia (1 o 2)'}), 400
             elif not g.residencias_acceso or len(g.residencias_acceso) == 0:
                 return jsonify({'error': 'Usuario sin residencias asignadas'}), 403
@@ -5950,7 +6057,7 @@ def crear_proveedor():
                 return jsonify({'error': 'id_residencia es requerido cuando el usuario tiene acceso a múltiples residencias'}), 400
         
         # Validar que el usuario tiene acceso a la residencia especificada
-        if g.id_rol != SUPER_ADMIN_ROLE_ID:
+        if g.id_rol != ADMIN_ROLE_ID:
             if id_residencia not in g.residencias_acceso:
                 return jsonify({'error': 'No tienes permisos para crear proveedores en esta residencia'}), 403
         
@@ -5998,6 +6105,7 @@ def crear_proveedor():
 
 
 @app.route('/api/v1/proveedores/<int:id_proveedor>', methods=['GET'])
+@permiso_requerido('leer:proveedor')
 def obtener_proveedor(id_proveedor):
     """Obtiene un proveedor por su ID."""
     try:
@@ -6054,6 +6162,7 @@ def obtener_proveedor(id_proveedor):
 
 
 @app.route('/api/v1/proveedores/<int:id_proveedor>/baja', methods=['POST'])
+@permiso_requerido('editar:proveedor')
 def dar_baja_proveedor(id_proveedor):
     """Da de baja a un proveedor con motivo y fecha."""
     try:
@@ -6146,6 +6255,7 @@ def dar_baja_proveedor(id_proveedor):
 
 
 @app.route('/api/v1/proveedores/<int:id_proveedor>', methods=['PUT'])
+@permiso_requerido('editar:proveedor')
 def actualizar_proveedor(id_proveedor):
     """Actualiza un proveedor."""
     try:
@@ -6237,7 +6347,7 @@ def listar_personal():
         
         try:
             # Construir query según acceso del usuario
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+            if g.id_rol == ADMIN_ROLE_ID:
                 cursor.execute("""
                     SELECT id_personal, id_residencia, nombre, apellido, documento_identidad,
                        telefono, email, cargo, activo, fecha_contratacion, fecha_creacion
@@ -6363,7 +6473,7 @@ def obtener_personal(id_personal):
         
         try:
             # Construir query según acceso del usuario
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+            if g.id_rol == ADMIN_ROLE_ID:
                 cursor.execute("""
                     SELECT id_personal, id_residencia, nombre, apellido, documento_identidad,
                            telefono, email, cargo, activo, fecha_contratacion, fecha_creacion
@@ -6431,7 +6541,7 @@ def actualizar_personal(id_personal):
         
         try:
             # Verificar que el personal existe y el usuario tiene acceso
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+            if g.id_rol == ADMIN_ROLE_ID:
                 cursor.execute("""
                     SELECT id_personal, id_residencia FROM personal WHERE id_personal = %s
                 """, (id_personal,))
@@ -6551,7 +6661,7 @@ def listar_turnos_extra():
             aprobado = request.args.get('aprobado', type=str)  # 'true', 'false', o None para todos
             
             # Construir query según acceso del usuario
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+            if g.id_rol == ADMIN_ROLE_ID:
                 query = """
                     SELECT te.id_turno_extra, te.id_personal, te.id_residencia,
                            te.fecha, te.hora_entrada, te.hora_salida, te.motivo,
@@ -6666,7 +6776,7 @@ def crear_turno_extra():
             id_residencia = data.get('id_residencia', personal_id_residencia)
             
             # Verificar que la residencia solicitada esté en la lista de acceso
-            if g.id_rol != SUPER_ADMIN_ROLE_ID and id_residencia not in g.residencias_acceso:
+            if g.id_rol != ADMIN_ROLE_ID and id_residencia not in g.residencias_acceso:
                 return jsonify({'error': 'No tienes permisos para crear turnos en esta residencia'}), 403
             
             cursor.execute("""
@@ -7159,7 +7269,7 @@ def descargar_documento(id_documento):
 
 @app.route('/api/v1/roles', methods=['GET'])
 def listar_roles():
-    """Lista roles disponibles. Super_admin ve todos, admin ve desde admin hacia abajo."""
+    """Lista roles disponibles. Administrador ve todos, admin ve desde admin hacia abajo."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -7191,7 +7301,6 @@ def listar_roles():
             
             # Filtrar roles según el rol del usuario actual
             # Mostrar: Administrador (id_rol=2), Director (id_rol=3), Personal (id_rol=4)
-            # NO mostrar super_admin (id_rol=1)
             filtro_rol = "AND id_rol IN (2, 3, 4)"
             
             cursor.execute(f"""
@@ -7265,9 +7374,11 @@ def listar_modulos():
                 {'id': 'leer:cobro', 'nombre': 'Leer Cobros', 'descripcion': 'Ver cobros de residentes'},
                 {'id': 'crear:cobro', 'nombre': 'Crear Cobros', 'descripcion': 'Registrar nuevos cobros'},
                 {'id': 'editar:cobro', 'nombre': 'Editar Cobros', 'descripcion': 'Modificar cobros existentes'},
+                {'id': 'eliminar:cobro', 'nombre': 'Eliminar Cobros', 'descripcion': 'Eliminar cobros pendientes'},
                 {'id': 'leer:pago_proveedor', 'nombre': 'Leer Pagos', 'descripcion': 'Ver pagos a proveedores'},
                 {'id': 'crear:pago_proveedor', 'nombre': 'Crear Pagos', 'descripcion': 'Registrar nuevos pagos'},
-                {'id': 'editar:pago_proveedor', 'nombre': 'Editar Pagos', 'descripcion': 'Modificar pagos existentes'}
+                {'id': 'editar:pago_proveedor', 'nombre': 'Editar Pagos', 'descripcion': 'Modificar pagos existentes'},
+                {'id': 'eliminar:pago_proveedor', 'nombre': 'Eliminar Pagos', 'descripcion': 'Eliminar pagos a proveedores'}
             ]
         },
         {
@@ -7297,12 +7408,25 @@ def listar_modulos():
             ]
         },
         {
+            'id_modulo': 'historicos',
+            'nombre': 'Históricos',
+            'permisos': [
+                {'id': 'leer:registro_asistencial', 'nombre': 'Leer Registros Asistenciales', 'descripcion': 'Ver registros asistenciales históricos'},
+                {'id': 'crear:registro_asistencial', 'nombre': 'Crear Registros Asistenciales', 'descripcion': 'Registrar eventos asistenciales históricos'},
+                {'id': 'editar:registro_asistencial', 'nombre': 'Editar Registros Asistenciales', 'descripcion': 'Modificar registros asistenciales históricos'},
+                {'id': 'eliminar:registro_asistencial', 'nombre': 'Eliminar Registros', 'descripcion': 'Eliminar registros asistenciales'}
+            ]
+        },
+        {
             'id_modulo': 'configuracion',
             'nombre': 'Configuración',
             'permisos': [
                 {'id': 'leer:usuario', 'nombre': 'Leer Usuarios', 'descripcion': 'Ver lista de usuarios'},
                 {'id': 'crear:usuario', 'nombre': 'Crear Usuarios', 'descripcion': 'Crear nuevos usuarios'},
-                {'id': 'editar:usuario', 'nombre': 'Editar Usuarios', 'descripcion': 'Modificar usuarios existentes'}
+                {'id': 'editar:usuario', 'nombre': 'Editar Usuarios', 'descripcion': 'Modificar usuarios existentes'},
+                {'id': 'eliminar:usuario', 'nombre': 'Eliminar Usuarios', 'descripcion': 'Eliminar usuarios'},
+                {'id': 'leer:residencia', 'nombre': 'Leer Residencias', 'descripcion': 'Ver información de residencias'},
+                {'id': 'editar:residencia', 'nombre': 'Editar Residencias', 'descripcion': 'Modificar información de residencias'}
             ]
         }
     ]
@@ -7318,12 +7442,14 @@ def listar_residencias():
         cursor = conn.cursor()
         
         try:
-            # Si es superadmin, mostrar todas las residencias (activas e inactivas)
-            # Si no es superadmin, solo mostrar las residencias a las que tiene acceso
-            if g.id_rol == SUPER_ADMIN_ROLE_ID:
+            # Si es Administrador, mostrar todas las residencias activas (para asignación de usuarios)
+            # Si no es Administrador, solo mostrar las residencias activas a las que tiene acceso
+            # IMPORTANTE: Solo se muestran residencias activas para evitar asignar usuarios a residencias desactivadas
+            if g.id_rol == ADMIN_ROLE_ID:
                 cursor.execute("""
                     SELECT id_residencia, nombre, direccion, telefono, activa, fecha_creacion
                     FROM residencia
+                    WHERE activa = TRUE
                     ORDER BY id_residencia
                 """)
             else:
@@ -7369,10 +7495,10 @@ def listar_residencias():
 @app.route('/api/v1/residencias', methods=['POST'])
 @permiso_requerido('escribir:residencia')
 def crear_residencia():
-    """Crea una nueva residencia. Solo superadmin."""
-    # Verificar que es superadmin
-    if g.id_rol != SUPER_ADMIN_ROLE_ID:
-        return jsonify({'error': 'Solo el super administrador puede crear residencias'}), 403
+    """Crea una nueva residencia. Solo Administrador."""
+    # Verificar que es Administrador
+    if g.id_rol != ADMIN_ROLE_ID:
+        return jsonify({'error': 'Solo el Administradoristrador puede crear residencias'}), 403
     
     try:
         data = request.get_json()
@@ -7498,10 +7624,10 @@ def crear_residencia():
 @app.route('/api/v1/residencias/<int:id_residencia>', methods=['PUT'])
 @permiso_requerido('escribir:residencia')
 def actualizar_residencia(id_residencia):
-    """Actualiza una residencia existente. Solo superadmin."""
-    # Verificar que es superadmin
-    if g.id_rol != SUPER_ADMIN_ROLE_ID:
-        return jsonify({'error': 'Solo el super administrador puede actualizar residencias'}), 403
+    """Actualiza una residencia existente. Solo Administrador."""
+    # Verificar que es Administrador
+    if g.id_rol != ADMIN_ROLE_ID:
+        return jsonify({'error': 'Solo el Administradoristrador puede actualizar residencias'}), 403
     
     try:
         data = request.get_json()
@@ -7920,10 +8046,10 @@ def desasociar_receiver_residencia(id_residencia, id_receiver):
 @app.route('/api/v1/residencias/<int:id_residencia>', methods=['DELETE'])
 @permiso_requerido('escribir:residencia')
 def eliminar_residencia(id_residencia):
-    """Elimina (desactiva) una residencia. Solo superadmin."""
-    # Verificar que es superadmin
-    if g.id_rol != SUPER_ADMIN_ROLE_ID:
-        return jsonify({'error': 'Solo el super administrador puede eliminar residencias'}), 403
+    """Elimina (desactiva) una residencia. Solo Administrador."""
+    # Verificar que es Administrador
+    if g.id_rol != ADMIN_ROLE_ID:
+        return jsonify({'error': 'Solo el Administradoristrador puede eliminar residencias'}), 403
     
     try:
         conn = get_db_connection()
@@ -8005,7 +8131,7 @@ def obtener_usuario_actual():
         cursor = conn.cursor()
         
         try:
-            # Consulta que maneja tanto usuarios con id_residencia como super_admin sin id_residencia
+            # Consulta que maneja tanto usuarios con id_residencia como Administrador sin id_residencia
             # Verificar primero si las columnas nombre y apellido existen
             cursor.execute("""
                 SELECT column_name 
@@ -8080,7 +8206,7 @@ def obtener_usuario_actual():
             nombre_residencia = usuario[campos_index['nombre_residencia']] if len(usuario) > campos_index['nombre_residencia'] else None
             requiere_cambio_clave = usuario[campos_index['requiere_cambio_clave']] if campos_index['requiere_cambio_clave'] is not None and len(usuario) > campos_index['requiere_cambio_clave'] else False
             
-            # Obtener residencias asignadas
+            # Obtener residencias asignadas (SOLO desde usuario_residencia - igual que permisos)
             residencias = []
             try:
                 # Verificar si la tabla usuario_residencia existe
@@ -8096,13 +8222,13 @@ def obtener_usuario_actual():
                 
                 if tabla_existe:
                     # Usar usuario_residencia (modo nuevo)
-                    if g.id_rol == SUPER_ADMIN_ROLE_ID:
-                        # Super admin: acceso total
+                    if g.id_rol == ADMIN_ROLE_ID:
+                        # Administrador: acceso total
                         cursor.execute("SELECT id_residencia, nombre FROM residencia WHERE activa = TRUE ORDER BY nombre")
                         todas_residencias = cursor.fetchall()
                         residencias = [{'id_residencia': r[0], 'nombre': r[1]} for r in todas_residencias]
                     else:
-                        # Usuario normal: obtener residencias asignadas
+                        # Usuario normal: obtener residencias asignadas ACTIVAS
                         cursor.execute("""
                             SELECT ur.id_residencia, res.nombre
                             FROM usuario_residencia ur
@@ -8127,6 +8253,22 @@ def obtener_usuario_actual():
                 if id_residencia:
                     residencias = [{'id_residencia': id_residencia, 'nombre': nombre_residencia if nombre_residencia else 'N/A'}]
             
+            # Obtener permisos individuales del usuario
+            permisos = []
+            try:
+                cursor.execute("""
+                    SELECT nombre_permiso
+                    FROM usuario_permiso
+                    WHERE id_usuario = %s
+                    ORDER BY nombre_permiso
+                """, (g.id_usuario,))
+                permisos_data = cursor.fetchall()
+                permisos = [p[0] for p in permisos_data]
+            except Exception as e:
+                app.logger.warning(f"Error al obtener permisos del usuario (tabla puede no existir): {str(e)}")
+                # Si no existe la tabla o hay error, lista vacía (usuario sin permisos)
+                permisos = []
+            
             respuesta = {
                 'id_usuario': usuario[campos_index['id_usuario']],
                 'email': usuario[campos_index['email']],
@@ -8138,7 +8280,8 @@ def obtener_usuario_actual():
                 'nombre_residencia': nombre_residencia,
                 'activo': usuario[campos_index['activo']] if len(usuario) > campos_index['activo'] else True,
                 'requiere_cambio_clave': requiere_cambio_clave,
-                'residencias': residencias
+                'residencias': residencias,
+                'permisos': permisos  # Permisos individuales del usuario
             }
             
             return jsonify(respuesta), 200
@@ -8156,9 +8299,9 @@ def obtener_usuario_actual():
 
 @app.route('/api/v1/usuarios', methods=['GET'])
 def listar_usuarios():
-    """Lista usuarios del sistema. Super_admin ve todos, admin ve desde admin hacia abajo."""
-    # Solo super_admin (id_rol = 1) y admin (id_rol = 2) pueden acceder
-    if g.id_rol not in [1, 2]:
+    """Lista usuarios del sistema. Administrador ve todos."""
+    # Solo Administrador (id_rol = 2) puede acceder
+    if g.id_rol != ADMIN_ROLE_ID:
         return jsonify({'error': 'No tienes permisos para acceder a esta información'}), 403
     
     try:
@@ -8203,17 +8346,12 @@ def listar_usuarios():
                 # Si no existe usuario_residencia, intentar usar id_residencia de usuario (modo legacy)
                 if columna_id_residencia_existe:
                     try:
-                        # Filtrar usuarios según el rol del usuario actual
-                        filtro_rol = ""
-                        if g.id_rol == 2:  # Si es admin, excluir super_admin
-                            filtro_rol = "WHERE u.id_rol != 1"
-                        
-                        cursor.execute(f"""
+                        # Administrador ve todos los usuarios (sin filtro de rol)
+                        cursor.execute("""
                             SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.activo, u.fecha_creacion,
                                    r.nombre as nombre_rol, u.id_residencia
                             FROM usuario u
                             JOIN rol r ON u.id_rol = r.id_rol
-                            {filtro_rol}
                             ORDER BY u.fecha_creacion DESC
                         """)
                         
@@ -8248,17 +8386,12 @@ def listar_usuarios():
                     except Exception as e:
                         app.logger.error(f"Error al obtener usuarios con id_residencia: {str(e)}")
                         # Si falla, usar modo sin residencias
-                        # Filtrar usuarios según el rol del usuario actual
-                        filtro_rol = ""
-                        if g.id_rol == 2:  # Si es admin, excluir super_admin
-                            filtro_rol = "WHERE u.id_rol != 1"
-                        
-                        cursor.execute(f"""
+                        # Administrador ve todos los usuarios (sin filtro de rol)
+                        cursor.execute("""
                             SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.activo, u.fecha_creacion,
                                    r.nombre as nombre_rol
                             FROM usuario u
                             JOIN rol r ON u.id_rol = r.id_rol
-                            {filtro_rol}
                             ORDER BY u.fecha_creacion DESC
                         """)
                         
@@ -8279,17 +8412,12 @@ def listar_usuarios():
                             })
                 else:
                     # No existe ni usuario_residencia ni id_residencia, devolver usuarios sin residencias
-                    # Filtrar usuarios según el rol del usuario actual
-                    filtro_rol = ""
-                    if g.id_rol == 2:  # Si es admin, excluir super_admin
-                        filtro_rol = "WHERE u.id_rol != 1"
-                    
-                    cursor.execute(f"""
+                    # Administrador ve todos los usuarios (sin filtro de rol)
+                    cursor.execute("""
                         SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.activo, u.fecha_creacion,
                                r.nombre as nombre_rol
                         FROM usuario u
                         JOIN rol r ON u.id_rol = r.id_rol
-                        {filtro_rol}
                         ORDER BY u.fecha_creacion DESC
                     """)
                     
@@ -8310,17 +8438,12 @@ def listar_usuarios():
                         })
             else:
                 # Usar usuario_residencia (modo nuevo)
-                # Filtrar usuarios según el rol del usuario actual
-                filtro_rol = ""
-                if g.id_rol == 2:  # Si es admin, excluir super_admin
-                    filtro_rol = "WHERE u.id_rol != 1"
-                
-                cursor.execute(f"""
+                # Administrador ve todos los usuarios (sin filtro de rol)
+                cursor.execute("""
                     SELECT u.id_usuario, u.email, u.nombre, u.apellido, u.id_rol, u.activo, u.fecha_creacion,
                            r.nombre as nombre_rol
                     FROM usuario u
                     JOIN rol r ON u.id_rol = r.id_rol
-                    {filtro_rol}
                     ORDER BY u.fecha_creacion DESC
                 """)
                 
@@ -8330,12 +8453,12 @@ def listar_usuarios():
                 usuarios_con_residencias = []
                 for u in usuarios:
                     id_usuario = u[0]
-                    # Obtener residencias del usuario desde usuario_residencia
+                    # Obtener residencias ACTIVAS del usuario desde usuario_residencia
                     cursor.execute("""
                         SELECT ur.id_residencia, res.nombre
                         FROM usuario_residencia ur
                         JOIN residencia res ON ur.id_residencia = res.id_residencia
-                        WHERE ur.id_usuario = %s
+                        WHERE ur.id_usuario = %s AND res.activa = TRUE
                         ORDER BY res.nombre
                     """, (id_usuario,))
                     residencias_usuario = cursor.fetchall()
@@ -8388,10 +8511,9 @@ def listar_usuarios():
 
 @app.route('/api/v1/usuarios/<int:id_usuario>', methods=['PUT'])
 def actualizar_usuario(id_usuario):
-    """Actualiza un usuario. Los usuarios pueden actualizar su propia información, los super_admin y admin pueden actualizar otros usuarios."""
-    # Verificar permisos: el propio usuario, super_admin o admin pueden actualizar
-    # Pero admin no puede actualizar usuarios con rol super_admin
-    if g.id_rol not in [SUPER_ADMIN_ROLE_ID, 2] and g.id_usuario != id_usuario:
+    """Actualiza un usuario. Los usuarios pueden actualizar su propia información, los Administradores pueden actualizar otros usuarios."""
+    # Verificar permisos: el propio usuario o Administrador pueden actualizar
+    if g.id_rol != ADMIN_ROLE_ID and g.id_usuario != id_usuario:
         return jsonify({'error': 'No tienes permisos para actualizar este usuario'}), 403
     
     try:
@@ -8411,12 +8533,8 @@ def actualizar_usuario(id_usuario):
             if not usuario_existente:
                 return jsonify({'error': 'Usuario no encontrado'}), 404
             
-            # Si admin intenta actualizar un usuario con rol super_admin, denegar
-            if g.id_rol == 2 and usuario_existente[1] == SUPER_ADMIN_ROLE_ID:
-                return jsonify({'error': 'No tienes permisos para actualizar usuarios con rol super_admin'}), 403
-            
-            # Si no es super_admin ni admin, solo puede actualizar ciertos campos (y solo su propia cuenta)
-            if g.id_rol not in [SUPER_ADMIN_ROLE_ID, 2]:
+            # Si no es Administrador, solo puede actualizar ciertos campos (y solo su propia cuenta)
+            if g.id_rol != ADMIN_ROLE_ID:
                 # Usuario normal solo puede actualizar nombre, apellido y contraseña (solo su propia cuenta)
                 updates = []
                 params = []
@@ -8480,9 +8598,12 @@ def actualizar_usuario(id_usuario):
                 
                 if 'id_rol' in data:
                     nuevo_id_rol = data.get('id_rol')
-                    # Prevenir que admin asigne rol super_admin
-                    if nuevo_id_rol == SUPER_ADMIN_ROLE_ID and g.id_rol != SUPER_ADMIN_ROLE_ID:
-                        return jsonify({'error': 'No tienes permisos para asignar el rol super_admin'}), 403
+                    # Prevenir que admin asigne rol Administrador
+                    if nuevo_id_rol == ADMIN_ROLE_ID and g.id_rol != ADMIN_ROLE_ID:
+                        return jsonify({'error': 'No tienes permisos para asignar el rol Administrador'}), 403
+                    # Solo Administradores pueden asignar rol Administrador
+                    if nuevo_id_rol == ADMIN_ROLE_ID and g.id_rol != ADMIN_ROLE_ID:
+                        return jsonify({'error': 'Solo los Administradores pueden asignar el rol Administrador'}), 403
                     # Verificar que el rol existe
                     cursor.execute("SELECT id_rol FROM rol WHERE id_rol = %s AND activo = TRUE", (nuevo_id_rol,))
                     if not cursor.fetchone():
@@ -8505,23 +8626,49 @@ def actualizar_usuario(id_usuario):
                     
                     residencias_validas = [row[0] for row in cursor.fetchall()]
                     
+                    if len(residencias_validas) == 0:
+                        return jsonify({
+                            'error': 'Debe asignar al menos una residencia activa. Ninguna de las residencias seleccionadas está activa.'
+                        }), 400
+                    
                     if len(residencias_validas) != len(residencias):
                         residencias_invalidas = [r for r in residencias if r not in residencias_validas]
                         return jsonify({
-                            'error': 'Una o más residencias no existen o están inactivas',
+                            'error': f'Una o más residencias no existen o están inactivas: {residencias_invalidas}. Solo se pueden asignar residencias activas.',
                             'residencias_invalidas': residencias_invalidas
                         }), 400
                     
                     # Eliminar residencias actuales del usuario
                     cursor.execute("DELETE FROM usuario_residencia WHERE id_usuario = %s", (id_usuario,))
                     
-                    # Asignar nuevas residencias
+                    # Verificar que después de eliminar y antes de insertar, el usuario tendrá al menos una residencia activa
+                    if len(residencias_validas) == 0:
+                        return jsonify({
+                            'error': 'Debe asignar al menos una residencia activa. No se pueden dejar usuarios sin residencias activas.'
+                        }), 400
+                    
+                    # Asignar nuevas residencias (solo activas)
                     for id_residencia in residencias_validas:
                         cursor.execute("""
                             INSERT INTO usuario_residencia (id_usuario, id_residencia)
                             VALUES (%s, %s)
                             ON CONFLICT DO NOTHING
                         """, (id_usuario, id_residencia))
+                    
+                    # Verificar que el usuario tiene al menos una residencia activa después de la actualización
+                    cursor.execute("""
+                        SELECT COUNT(*) 
+                        FROM usuario_residencia ur
+                        JOIN residencia r ON ur.id_residencia = r.id_residencia
+                        WHERE ur.id_usuario = %s AND r.activa = TRUE
+                    """, (id_usuario,))
+                    total_residencias_activas = cursor.fetchone()[0]
+                    
+                    if total_residencias_activas == 0:
+                        conn.rollback()
+                        return jsonify({
+                            'error': 'Error: El usuario debe tener al menos una residencia activa. No se puede completar la actualización.'
+                        }), 400
                 
                 # Manejar permisos personalizados (array)
                 if 'permisos' in data:
@@ -8543,6 +8690,16 @@ def actualizar_usuario(id_usuario):
                     # Asignar nuevos permisos
                     if permisos and len(permisos) > 0:
                         for nombre_permiso in permisos:
+                            # Verificar que el permiso existe antes de insertarlo
+                            cursor.execute("""
+                                SELECT COUNT(*) FROM permiso WHERE nombre_permiso = %s AND activo = TRUE
+                            """, (nombre_permiso,))
+                            permiso_existe = cursor.fetchone()[0] > 0
+                            
+                            if not permiso_existe:
+                                app.logger.warning(f"Permiso '{nombre_permiso}' no existe en la tabla permiso. Se omitirá.")
+                                continue
+                            
                             cursor.execute("""
                                 INSERT INTO usuario_permiso (id_usuario, nombre_permiso)
                                 VALUES (%s, %s)
@@ -8582,7 +8739,16 @@ def actualizar_usuario(id_usuario):
             
         except Exception as e:
             conn.rollback()
-            app.logger.error(f"Error al actualizar usuario: {str(e)}")
+            import traceback
+            error_trace = traceback.format_exc()
+            app.logger.error(f"Error al actualizar usuario: {str(e)}\n{error_trace}")
+            # En desarrollo, incluir más detalles del error
+            if app.config.get('DEBUG'):
+                return jsonify({
+                    'error': 'Error al actualizar usuario',
+                    'detalle': str(e),
+                    'traceback': error_trace.split('\n')[-5:]  # Últimas 5 líneas del traceback
+                }), 500
             return jsonify({'error': 'Error al actualizar usuario'}), 500
         finally:
             cursor.close()
@@ -8634,7 +8800,7 @@ def listar_documentacion():
             residencias_filtro = ""
             params = []
             
-            if g.id_rol != SUPER_ADMIN_ROLE_ID:
+            if g.id_rol != ADMIN_ROLE_ID:
                 if g.residencias_acceso:
                     placeholders = ','.join(['%s'] * len(g.residencias_acceso))
                     residencias_filtro = f" AND id_residencia IN ({placeholders})"
@@ -8646,7 +8812,7 @@ def listar_documentacion():
             # Si hay filtro específico por residencia, aplicarlo
             if id_residencia_filtro:
                 # Verificar que el usuario tiene acceso a esa residencia
-                if g.id_rol != SUPER_ADMIN_ROLE_ID:
+                if g.id_rol != ADMIN_ROLE_ID:
                     if id_residencia_filtro not in g.residencias_acceso:
                         return jsonify({'error': 'No tienes acceso a esta residencia'}), 403
                 # Aplicar filtro específico
@@ -8708,12 +8874,12 @@ def listar_documentacion():
                 params_legacy_residencias = [id_residencia_filtro]
             elif residencias_filtro:
                 # Construir el filtro con el alias correcto
-                if g.id_rol != SUPER_ADMIN_ROLE_ID and g.residencias_acceso:
+                if g.id_rol != ADMIN_ROLE_ID and g.residencias_acceso:
                     placeholders = ','.join(['%s'] * len(g.residencias_acceso))
                     residencias_filtro_legacy = f" AND dr.id_residencia IN ({placeholders})"
                     params_legacy_residencias = g.residencias_acceso.copy()
             else:
-                # Si no hay filtro de residencias (superadmin sin filtro), no aplicar filtro
+                # Si no hay filtro de residencias (Administrador sin filtro), no aplicar filtro
                 residencias_filtro_legacy = ""
                 params_legacy_residencias = []
             
@@ -8861,7 +9027,7 @@ def listar_documentacion():
                             query_facturas += " AND pp.id_residencia = %s"
                             params_facturas.append(id_residencia_filtro)
                         elif residencias_filtro:
-                            if g.id_rol != SUPER_ADMIN_ROLE_ID and g.residencias_acceso:
+                            if g.id_rol != ADMIN_ROLE_ID and g.residencias_acceso:
                                 placeholders = ','.join(['%s'] * len(g.residencias_acceso))
                                 query_facturas += f" AND pp.id_residencia IN ({placeholders})"
                                 params_facturas.extend(g.residencias_acceso)
@@ -9324,7 +9490,7 @@ def listar_historicos():
                 params_cobros = []
                 
                 # Filtrar por residencias de acceso
-                if g.id_rol != SUPER_ADMIN_ROLE_ID:
+                if g.id_rol != ADMIN_ROLE_ID:
                     if g.residencias_acceso:
                         placeholders = ','.join(['%s'] * len(g.residencias_acceso))
                         query_cobros += f" AND p.id_residencia IN ({placeholders})"
@@ -9387,7 +9553,7 @@ def listar_historicos():
                 params_pagos = []
                 
                 # Filtrar por residencias de acceso
-                if g.id_rol != SUPER_ADMIN_ROLE_ID:
+                if g.id_rol != ADMIN_ROLE_ID:
                     if g.residencias_acceso:
                         placeholders = ','.join(['%s'] * len(g.residencias_acceso))
                         query_pagos += f" AND p.id_residencia IN ({placeholders})"

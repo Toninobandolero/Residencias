@@ -146,6 +146,40 @@ CREATE TABLE IF NOT EXISTS registro_asistencial (
     FOREIGN KEY (id_usuario_registro) REFERENCES usuario(id_usuario)
 );
 
+-- Tabla de permisos del sistema
+CREATE TABLE IF NOT EXISTS permiso (
+    nombre_permiso VARCHAR(255) PRIMARY KEY,
+    descripcion TEXT,
+    activo BOOLEAN DEFAULT TRUE
+);
+
+-- Tabla de relación entre roles y permisos
+CREATE TABLE IF NOT EXISTS rol_permiso (
+    id_rol INTEGER NOT NULL,
+    nombre_permiso VARCHAR(255) NOT NULL,
+    PRIMARY KEY (id_rol, nombre_permiso),
+    FOREIGN KEY (id_rol) REFERENCES rol(id_rol) ON DELETE CASCADE,
+    FOREIGN KEY (nombre_permiso) REFERENCES permiso(nombre_permiso) ON DELETE CASCADE
+);
+
+-- Tabla de relación entre usuarios y residencias (permite múltiples residencias por usuario)
+CREATE TABLE IF NOT EXISTS usuario_residencia (
+    id_usuario INTEGER NOT NULL,
+    id_residencia INTEGER NOT NULL,
+    PRIMARY KEY (id_usuario, id_residencia),
+    FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE,
+    FOREIGN KEY (id_residencia) REFERENCES residencia(id_residencia) ON DELETE CASCADE
+);
+
+-- Tabla de permisos personalizados por usuario (opcional)
+CREATE TABLE IF NOT EXISTS usuario_permiso (
+    id_usuario INTEGER NOT NULL,
+    nombre_permiso VARCHAR(255) NOT NULL,
+    PRIMARY KEY (id_usuario, nombre_permiso),
+    FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE,
+    FOREIGN KEY (nombre_permiso) REFERENCES permiso(nombre_permiso) ON DELETE CASCADE
+);
+
 -- Índices para mejorar el rendimiento
 CREATE INDEX IF NOT EXISTS idx_usuario_email ON usuario(email);
 CREATE INDEX IF NOT EXISTS idx_usuario_residencia ON usuario(id_residencia);
@@ -156,6 +190,11 @@ CREATE INDEX IF NOT EXISTS idx_pago_proveedor_residencia ON pago_proveedor(id_re
 CREATE INDEX IF NOT EXISTS idx_turno_normal_residencia ON turno_normal(id_residencia);
 CREATE INDEX IF NOT EXISTS idx_turno_extra_residencia ON turno_extra(id_residencia);
 CREATE INDEX IF NOT EXISTS idx_registro_asistencial_residencia ON registro_asistencial(id_residencia);
+CREATE INDEX IF NOT EXISTS idx_rol_permiso_rol ON rol_permiso(id_rol);
+CREATE INDEX IF NOT EXISTS idx_rol_permiso_permiso ON rol_permiso(nombre_permiso);
+CREATE INDEX IF NOT EXISTS idx_usuario_residencia_usuario ON usuario_residencia(id_usuario);
+CREATE INDEX IF NOT EXISTS idx_usuario_residencia_residencia ON usuario_residencia(id_residencia);
+CREATE INDEX IF NOT EXISTS idx_usuario_permiso_usuario ON usuario_permiso(id_usuario);
 
 -- Datos iniciales: Residencias
 INSERT INTO residencia (id_residencia, nombre) VALUES 
@@ -169,4 +208,7 @@ INSERT INTO rol (id_rol, nombre, descripcion) VALUES
     (2, 'Director', 'Gestión de la residencia'),
     (3, 'Personal', 'Personal de la residencia')
 ON CONFLICT DO NOTHING;
+
+-- NOTA: Los permisos se inicializan ejecutando: python3 inicializar_permisos.py
+-- Esto asegura que todos los permisos necesarios estén disponibles antes de crear usuarios
 

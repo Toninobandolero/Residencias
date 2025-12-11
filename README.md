@@ -19,32 +19,41 @@ pip install -r requirements.txt
 
 **Opción A: Con Cloud SQL Proxy (Recomendado)**
 
-```powershell
-# 1. Configurar Cloud SQL Proxy
+```bash
+# macOS/Linux
+./start_server_with_proxy.sh
+
+# Windows PowerShell
 .\setup_cloud_sql_proxy.ps1
-
-# 2. Configurar .env automáticamente
 .\configurar_proxy_env.ps1
-
-# 3. Iniciar servidor (inicia proxy y Flask juntos)
 .\start_server_with_proxy.ps1
 ```
 
 **Opción B: Conexión Directa (Requiere autorizar IP)**
 
-```powershell
-# 1. Crear archivo .env con tus credenciales
-# 2. Autorizar tu IP en Cloud SQL Console
-# 3. Iniciar servidor
+```bash
+# macOS/Linux
+./start_server.sh
+
+# Windows PowerShell
 .\start_server.ps1
 ```
 
-### 3. Crear Super Administrador
+### 3. Inicializar Base de Datos
 
-El sistema requiere un super administrador inicial:
+**Crear esquema y datos iniciales:**
+```bash
+python3 create_database.py
+```
 
-```powershell
-python init_database.py
+**Inicializar permisos del sistema:**
+```bash
+python3 inicializar_permisos.py
+```
+
+**Crear Super Administrador:**
+```bash
+python3 init_database.py
 ```
 
 **Credenciales por defecto:**
@@ -57,6 +66,21 @@ python init_database.py
 - **URL**: http://localhost:5001
 - **Usuario**: `admin@residencias.com`
 - **Contraseña**: `CambiarContraseña123!` (luego cambiarás esta)
+
+### 5. Scripts de Gestión del Servidor
+
+```bash
+# Iniciar servidor (macOS/Linux)
+./start_server.sh
+
+# Detener servidor
+./stop_server.sh
+
+# Reiniciar servidor
+./restart_server.sh
+```
+
+> **Nota**: Los scripts muestran los logs directamente en la terminal para facilitar el debugging.
 
 > **Nota sobre el puerto**: El servidor usa el puerto **5001** por defecto (en lugar de 5000) para evitar conflictos con AirPlay Receiver en macOS. Puedes cambiar el puerto usando la variable de entorno `PORT`.
 

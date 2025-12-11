@@ -1,10 +1,23 @@
 #!/bin/bash
-# Script para iniciar el servidor Flask en macOS/Linux
-# Uso: ./start_server.sh
+# Script para reiniciar el servidor Flask en macOS/Linux
+# Uso: ./restart_server.sh
 
 echo "========================================"
-echo "  Iniciando Servidor Flask Violetas"
+echo "  Reiniciando Servidor Flask Violetas"
 echo "========================================"
+echo ""
+
+# Detener servidor anterior
+if [ -f "./stop_server.sh" ]; then
+    ./stop_server.sh
+else
+    echo "Deteniendo procesos existentes..."
+    pkill -f "python.*app.py" 2>/dev/null
+    lsof -ti:5001 | xargs kill -9 2>/dev/null
+    sleep 2
+    echo "✅ Procesos detenidos"
+fi
+
 echo ""
 
 # Verificar que el archivo app.py existe
@@ -21,15 +34,7 @@ if [ ! -f ".env" ]; then
     echo ""
 fi
 
-# Verificar si el puerto está en uso
-if lsof -ti:5001 > /dev/null 2>&1; then
-    echo "⚠️  ADVERTENCIA: El puerto 5001 está en uso"
-    echo "  Deteniendo procesos anteriores..."
-    lsof -ti:5001 | xargs kill -9 2>/dev/null
-    pkill -f "python.*app.py" 2>/dev/null
-    sleep 2
-fi
-
+# Iniciar el servidor
 echo "Iniciando servidor Flask..."
 echo "  URL: http://localhost:5001"
 echo "  (Puerto 5001 - configurable con variable PORT)"
