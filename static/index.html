@@ -5489,7 +5489,7 @@
             let html = `
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
                     <div>
-                        <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;">✅ Factura Procesada</h3>
+                        <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/check-circle.svg" alt="OK" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Factura Procesada</h3>
                         <p style="color: #666; margin-bottom: 10px;"><strong>Archivo:</strong> ${nombreArchivo}</p>
                         ${pdfUrl ? `
                             <div style="margin-top: 15px;">
@@ -5562,7 +5562,7 @@
                         <label for="factura_proveedor">Proveedor *</label>
                         ${proveedoresCoincidentes.length > 0 ? `
                             <div style="background: #e6ffed; padding: 12px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #48bb78;">
-                                <div style="font-size: 12px; color: #22543d; margin-bottom: 8px; font-weight: 600;">✅ Proveedores encontrados que coinciden:</div>
+                                <div style="font-size: 12px; color: #22543d; margin-bottom: 8px; font-weight: 600; display: flex; align-items: center; gap: 4px;"><img src="/static/icons/medical/check-circle.svg" alt="OK" style="width: 14px; height: 14px;"> Proveedores encontrados que coinciden:</div>
                                 <select id="factura_proveedor_existente" style="width: 100%; padding: 8px; border: 2px solid #48bb78; border-radius: 6px; font-size: 14px; margin-bottom: 8px;">
                                     <option value="">Seleccione un proveedor existente</option>
                                     ${proveedoresCoincidentes.map(p => `<option value="${p.id_proveedor}" data-residencia="${p.id_residencia}">${p.nombre}${p.nif_cif ? ' - ' + p.nif_cif : ''}</option>`).join('')}
@@ -6318,9 +6318,9 @@
                             `;
                             
                             proveedoresResidencia.forEach(prov => {
-                                const estado = prov.activo ? 
-                                    '<span style="color: #28a745; font-weight: 600;">✅</span>' : 
-                                    '<span style="color: #dc3545; font-weight: 600;">❌</span>';
+                                const estado = prov.activo ?
+                                    '<img src="/static/icons/medical/check-circle.svg" alt="Activo" style="width: 16px; height: 16px; vertical-align: middle;">' :
+                                    '<img src="/static/icons/medical/alert-circle.svg" alt="Inactivo" style="width: 16px; height: 16px; vertical-align: middle;">';
                                 
                                 html += `
                                     <tr style="cursor: pointer;" onclick="editarProveedor(${prov.id_proveedor})" title="Haz clic para editar">
@@ -9789,9 +9789,9 @@
                         
                         data.turnos_extra.forEach(t => {
                             const fechaFormateada = t.fecha ? fechaISOToEspanol(t.fecha) : '-';
-                            const estadoBadge = t.aprobado 
-                                ? '<span style="background: #48bb78; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">✓ Aprobado</span>'
-                                : '<span style="background: #ed8936; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;">⏳ Pendiente</span>';
+                            const estadoBadge = t.aprobado
+                                ? '<span style="background: #48bb78; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><img src="/static/icons/medical/check-circle.svg" alt="Aprobado" style="width: 14px; height: 14px; filter: brightness(0) invert(1);"> Aprobado</span>'
+                                : '<span style="background: #ed8936; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><img src="/static/icons/medical/alert-circle.svg" alt="Pendiente" style="width: 14px; height: 14px; filter: brightness(0) invert(1);"> Pendiente</span>';
                             
                             html += `
                                 <tr>
@@ -10771,9 +10771,9 @@
                     `;
                 } else {
                     residencias.forEach(residencia => {
-                        const estadoBadge = residencia.activa 
-                            ? '<span style="background: #28a745; color: white; padding: 4px 8px; border-radius: 12px; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; cursor: help;" title="Activa">✓</span>'
-                            : '<span style="background: #dc3545; color: white; padding: 4px 8px; border-radius: 12px; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; cursor: help;" title="Inactiva">✗</span>';
+                        const estadoBadge = residencia.activa
+                            ? '<span style="background: #28a745; color: white; padding: 4px 8px; border-radius: 12px; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; cursor: help;" title="Activa"><img src="/static/icons/medical/check-circle.svg" alt="Activa" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"></span>'
+                            : '<span style="background: #dc3545; color: white; padding: 4px 8px; border-radius: 12px; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; cursor: help;" title="Inactiva"><img src="/static/icons/medical/alert-circle.svg" alt="Inactiva" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"></span>';
                         
                         const direccion = residencia.direccion && residencia.direccion.trim() 
                             ? `<span style="color: #333; font-size: 13px;">${residencia.direccion.length > 40 ? residencia.direccion.substring(0, 40) + '...' : residencia.direccion}</span>` 
