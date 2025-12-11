@@ -376,23 +376,24 @@ def usuario_tiene_permiso(id_usuario, id_rol, nombre_permiso, cursor=None):
     """
     Verifica si un usuario tiene un permiso específico.
     
-    IMPORTANTE: Solo se verifican los permisos individuales asignados al usuario.
-    El rol (Director, Personal, etc.) NO influye en la autorización, solo es
-    una conveniencia para pre-seleccionar permisos en el frontend al crear usuarios.
+    Lógica de verificación (en orden):
+    1. Si es Administrador (id_rol=2) → bypass total (siempre True)
+    2. Verificar permisos individuales en usuario_permiso
+    3. Si no tiene permisos individuales, heredar permisos del rol desde rol_permiso
     
-    Lógica:
-    - Administrador (id_rol=2) siempre tiene bypass total
-    - Para todos los demás: verificar SOLO en tabla usuario_permiso
-    - Si el usuario no tiene el permiso en usuario_permiso, NO tiene acceso
+    Esto permite:
+    - Permisos individualizados que sobrescriben/complementan los del rol
+    - Herencia automática de permisos del rol
+    - Máxima flexibilidad en la asignación de permisos
     
     Args:
         id_usuario: ID del usuario
-        id_rol: ID del rol del usuario (solo se usa para verificar si es Administrador)
-        nombre_permiso: Nombre del permiso a verificar
+        id_rol: ID del rol del usuario
+        nombre_permiso: Nombre del permiso a verificar (ej: 'leer:documento')
         cursor: Cursor de base de datos (opcional, si no se proporciona se crea uno nuevo)
     
     Returns:
-        bool: True si el usuario tiene el permiso en usuario_permiso, False en caso contrario
+        bool: True si el usuario tiene el permiso (individual o heredado), False en caso contrario
     """
     # Administrador tiene bypass total
     if id_rol == ADMIN_ROLE_ID:
@@ -404,22 +405,28 @@ def usuario_tiene_permiso(id_usuario, id_rol, nombre_permiso, cursor=None):
         cursor = conn.cursor()
     
     try:
-        # SOLO verificar permisos individuales del usuario
-        # El rol NO influye en la autorización, solo en la UI para pre-seleccionar
+        # Paso 1: Verificar permisos individuales en usuario_permiso
         cursor.execute("""
-            SELECT COUNT(*) 
-            FROM usuario_permiso up
-            WHERE up.id_usuario = %s 
-              AND up.nombre_permiso = %s
+            SELECT 1 FROM usuario_permiso
+            WHERE id_usuario = %s AND nombre_permiso = %s
         """, (id_usuario, nombre_permiso))
         
-        tiene_permiso = cursor.fetchone()[0] > 0
+        if cursor.fetchone():
+            return True  # Tiene permiso individual
+        
+        # Paso 2: Si no tiene permiso individual, verificar permisos heredados del rol
+        cursor.execute("""
+            SELECT 1 FROM rol_permiso
+            WHERE id_rol = %s AND nombre_permiso = %s
+        """, (id_rol, nombre_permiso))
+        
+        tiene_permiso_rol = cursor.fetchone() is not None
         
         if not usar_cursor_externo:
             cursor.close()
             conn.close()
         
-        return tiene_permiso
+        return tiene_permiso_rol
             
     except Exception as e:
         app.logger.error(f"Error al verificar permiso: {str(e)}")
@@ -496,6 +503,7 @@ def before_request():
     if (request.path in public_paths or 
         request.path.startswith('/static/') or 
         request.path == '/favicon.ico' or
+        request.path == '/favicon.svg' or
         request.path.startswith('/.well-known/')):
         return None
     
@@ -649,7 +657,13 @@ def index():
 @app.route('/favicon.ico')
 def favicon():
     """Maneja la petición del favicon."""
-    return '', 204  # No Content
+    return send_from_directory('static', 'favicon.svg', mimetype='image/svg+xml')
+
+
+@app.route('/favicon.svg')
+def favicon_svg():
+    """Maneja la petición del favicon SVG."""
+    return send_from_directory('static', 'favicon.svg', mimetype='image/svg+xml')
 
 
 @app.route('/health', methods=['GET'])
@@ -8253,17 +8267,33 @@ def obtener_usuario_actual():
                 if id_residencia:
                     residencias = [{'id_residencia': id_residencia, 'nombre': nombre_residencia if nombre_residencia else 'N/A'}]
             
-            # Obtener permisos individuales del usuario
+            # Obtener permisos del usuario (individuales + heredados del rol)
             permisos = []
             try:
-                cursor.execute("""
-                    SELECT nombre_permiso
-                    FROM usuario_permiso
-                    WHERE id_usuario = %s
-                    ORDER BY nombre_permiso
-                """, (g.id_usuario,))
-                permisos_data = cursor.fetchall()
-                permisos = [p[0] for p in permisos_data]
+                id_rol_actual = usuario[campos_index['id_rol']]
+                if id_rol_actual == ADMIN_ROLE_ID:
+                    # Administrador tiene todos los permisos
+                    cursor.execute("""
+                        SELECT nombre_permiso
+                        FROM permiso
+                        WHERE activo = TRUE
+                        ORDER BY nombre_permiso
+                    """)
+                    permisos_data = cursor.fetchall()
+                    permisos = [p[0] for p in permisos_data]
+                else:
+                    # Combinar permisos individuales + heredados del rol
+                    cursor.execute("""
+                        SELECT DISTINCT nombre_permiso
+                        FROM (
+                            SELECT nombre_permiso FROM usuario_permiso WHERE id_usuario = %s
+                            UNION
+                            SELECT nombre_permiso FROM rol_permiso WHERE id_rol = %s
+                        ) AS permisos_combinados
+                        ORDER BY nombre_permiso
+                    """, (g.id_usuario, id_rol_actual))
+                    permisos_data = cursor.fetchall()
+                    permisos = [p[0] for p in permisos_data]
             except Exception as e:
                 app.logger.warning(f"Error al obtener permisos del usuario (tabla puede no existir): {str(e)}")
                 # Si no existe la tabla o hay error, lista vacía (usuario sin permisos)
@@ -8463,14 +8493,30 @@ def listar_usuarios():
                     """, (id_usuario,))
                     residencias_usuario = cursor.fetchall()
                     
-                    # Obtener permisos personalizados del usuario
+                    # Obtener permisos del usuario (individuales + heredados del rol)
                     try:
-                        cursor.execute("""
-                            SELECT nombre_permiso
-                            FROM usuario_permiso
-                            WHERE id_usuario = %s
-                        """, (id_usuario,))
-                        permisos_usuario = [row[0] for row in cursor.fetchall()]
+                        id_rol_usuario = u[4]  # u[4] es id_rol
+                        if id_rol_usuario == ADMIN_ROLE_ID:
+                            # Administrador tiene todos los permisos
+                            cursor.execute("""
+                                SELECT nombre_permiso
+                                FROM permiso
+                                WHERE activo = TRUE
+                                ORDER BY nombre_permiso
+                            """)
+                            permisos_usuario = [row[0] for row in cursor.fetchall()]
+                        else:
+                            # Combinar permisos individuales + heredados del rol
+                            cursor.execute("""
+                                SELECT DISTINCT nombre_permiso
+                                FROM (
+                                    SELECT nombre_permiso FROM usuario_permiso WHERE id_usuario = %s
+                                    UNION
+                                    SELECT nombre_permiso FROM rol_permiso WHERE id_rol = %s
+                                ) AS permisos_combinados
+                                ORDER BY nombre_permiso
+                            """, (id_usuario, id_rol_usuario))
+                            permisos_usuario = [row[0] for row in cursor.fetchall()]
                     except Exception:
                         # Si la tabla no existe aún, usar lista vacía
                         permisos_usuario = []
@@ -8721,15 +8767,14 @@ def actualizar_usuario(id_usuario):
                     updates.append("requiere_cambio_clave = FALSE")  # Marcar que ya cambió la contraseña
                     params.append(password_hash)
                 
-                if not updates:
-                    return jsonify({'error': 'No hay campos para actualizar'}), 400
-                
-                params.append(id_usuario)
-                cursor.execute(f"""
-                    UPDATE usuario
-                    SET {', '.join(updates)}
-                    WHERE id_usuario = %s
-                """, params)
+                # Si hay updates en la tabla usuario, aplicarlos
+                if updates:
+                    params.append(id_usuario)
+                    cursor.execute(f"""
+                        UPDATE usuario
+                        SET {', '.join(updates)}
+                        WHERE id_usuario = %s
+                    """, params)
             
             conn.commit()
             

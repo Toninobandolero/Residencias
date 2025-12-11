@@ -7,6 +7,10 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Violetas - Sistema de Gestión</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="alternate icon" href="/favicon.ico">
     <script>
         // SEGURIDAD CRÍTICA: Limpiar credenciales de URL ANTES DE QUE CHROME PARSEE EL RESTO
         (function() {
@@ -9832,7 +9836,6 @@
                         document.getElementById('usuario_email').value = usuario.email || '';
                         document.getElementById('usuario_nombre').value = usuario.nombre || '';
                         document.getElementById('usuario_apellido').value = usuario.apellido || '';
-                        document.getElementById('usuario_id_rol').value = usuario.id_rol;
                         document.getElementById('usuario_activo').checked = usuario.activo !== false;
                         document.getElementById('usuario_password').required = false;
                         document.getElementById('passwordRequired').style.display = 'none';
@@ -9840,11 +9843,25 @@
 
                         document.getElementById('modalUsuarioTitulo').innerHTML = '<img src="/static/icons/medical/settings.svg" alt="Editar" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Usuario';
                         
+                        // IMPORTANTE: Cargar roles PRIMERO
                         await loadRolesForSelect();
+                        
+                        // Deshabilitar temporalmente el evento onchange para evitar que sobrescriba los datos al editar
+                        const selectRol = document.getElementById('usuario_id_rol');
+                        const originalOnchange = selectRol.onchange;
+                        selectRol.onchange = null;
+                        
+                        // Establecer valor del rol
+                        selectRol.value = usuario.id_rol;
+                        
                         // Cargar residencias y marcarlas automáticamente
                         await loadResidenciasForSelect(usuario.residencias || []);
-                        // Cargar permisos del usuario (si existen)
+                        
+                        // Cargar permisos del usuario (incluye individuales + heredados del rol)
                         await loadModulosForSelect(usuario.permisos || []);
+                        
+                        // Restaurar el evento onchange DESPUÉS de cargar todos los datos
+                        selectRol.onchange = originalOnchange;
                         
                         closeModal('modalUsuarios');
                         openModal('modalUsuario');
@@ -9967,7 +9984,7 @@
                             moduloDiv.style.cssText = 'margin-bottom: 20px; padding: 15px; background: white; border-radius: 8px; border: 1px solid #e0e0e0;';
                             
                             const moduloHeader = document.createElement('div');
-                            moduloHeader.style.cssText = 'font-weight: 600; font-size: 16px; color: #667eea; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;';
+                            moduloHeader.style.cssText = 'font-weight: 600; font-size: 16px; color: #667eea; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;';
                             
                             const moduloTitle = document.createElement('span');
                             moduloTitle.textContent = modulo.nombre;
@@ -9975,9 +9992,9 @@
                             const selectAllBtn = document.createElement('button');
                             selectAllBtn.type = 'button';
                             selectAllBtn.textContent = 'Todo';
-                            selectAllBtn.style.cssText = 'padding: 3px 8px; font-size: 11px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.2s; white-space: nowrap;';
+                            selectAllBtn.style.cssText = 'padding: 3px 8px; font-size: 11px; background: rgb(85, 104, 211); color: white; border: none; border-radius: 4px; cursor: pointer; transition: background 0.2s; white-space: nowrap; width: fit-content;';
                             selectAllBtn.onmouseover = () => selectAllBtn.style.background = '#5568d3';
-                            selectAllBtn.onmouseout = () => selectAllBtn.style.background = '#667eea';
+                            selectAllBtn.onmouseout = () => selectAllBtn.style.background = 'rgb(85, 104, 211)';
                             
                             moduloHeader.appendChild(moduloTitle);
                             moduloHeader.appendChild(selectAllBtn);
@@ -10007,12 +10024,9 @@
                                 checkbox.style.cssText = 'width: auto; margin: 0;';
                                 
                                 // Actualizar estado del botón cuando se cambia manualmente un checkbox
+                                // El texto siempre será "Todo", no se cambia
                                 checkbox.onchange = function() {
-                                    const todosSeleccionados = permisoIds.every(id => {
-                                        const cb = document.getElementById(id);
-                                        return cb && cb.checked;
-                                    });
-                                    selectAllBtn.textContent = todosSeleccionados ? 'Deseleccionar Todo' : 'Seleccionar Todo';
+                                    // Solo actualizar visualmente si es necesario (el botón siempre dice "Todo")
                                 };
                                 
                                 const permisoText = document.createElement('span');
@@ -10024,7 +10038,7 @@
                                 permisosDiv.appendChild(permisoLabel);
                             });
                             
-                            // Funcionalidad del botón "Seleccionar Todo" para este módulo
+                            // Funcionalidad del botón "Todo" - toggle: seleccionar/deseleccionar todo
                             selectAllBtn.onclick = function() {
                                 const todosSeleccionados = permisoIds.every(id => {
                                     const checkbox = document.getElementById(id);
@@ -10036,21 +10050,13 @@
                                     const checkbox = document.getElementById(id);
                                     if (checkbox) {
                                         checkbox.checked = !todosSeleccionados;
+                                        // Disparar evento change para que otros listeners se actualicen
+                                        checkbox.dispatchEvent(new Event('change'));
                                     }
                                 });
                                 
-                                // Actualizar texto del botón
-                                selectAllBtn.textContent = todosSeleccionados ? 'Todo' : 'Ninguno';
+                                // El texto siempre es "Todo", no se cambia
                             };
-                            
-                            // Verificar estado inicial del botón
-                            const todosSeleccionados = permisoIds.every(id => {
-                                const checkbox = document.getElementById(id);
-                                return checkbox && checkbox.checked;
-                            });
-                            if (todosSeleccionados && permisoIds.length > 0) {
-                                selectAllBtn.textContent = 'Ninguno';
-                            }
                             
                             moduloDiv.appendChild(moduloHeader);
                             moduloDiv.appendChild(permisosDiv);
@@ -10099,35 +10105,35 @@
             // Cargar residencias para checkboxes múltiples
             const container = document.getElementById('usuario_residencias_container');
             const token = localStorage.getItem('violetas_token');
-            
+
             if (!container) return;
-            
+
             container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">Cargando residencias...</div>';
-            
+
             try {
                 const response = await fetch(`${API_URL}/api/v1/residencias`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                
+
                 if (response.ok) {
                     const data = await response.json();
                     container.innerHTML = '';
-                    
+
                     if (data.residencias && data.residencias.length > 0) {
                         // Filtrar solo residencias activas para asegurar que solo se asignen residencias válidas
                         const residenciasActivas = data.residencias.filter(res => res.activa === true);
-                        
+
                         if (residenciasActivas.length === 0) {
                             container.innerHTML = '<div style="text-align: center; color: #dc3545; padding: 20px; font-weight: 600;">⚠️ No hay residencias activas disponibles. Debe crear o activar al menos una residencia antes de crear usuarios.</div>';
                             return;
                         }
-                        
+
                         // Filtrar residencias seleccionadas para que solo se marquen las que están activas
                         const residenciasSeleccionadasActivas = residenciasSeleccionadas.filter(r => {
                             const idResidencia = typeof r === 'object' ? r.id_residencia : r;
                             return residenciasActivas.some(res => res.id_residencia === idResidencia);
                         });
-                        
+
                         residenciasActivas.forEach(res => {
                             const checkboxId = `usuario_residencia_${res.id_residencia}`;
                             const estaSeleccionada = residenciasSeleccionadasActivas.some(r =>

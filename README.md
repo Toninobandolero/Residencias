@@ -156,21 +156,47 @@ python3 init_database.py
 
 ## 📚 Documentación
 
-### Documentación principal
+### 📖 Documentación Principal (Consolidada)
 
-1. **`README.md`** (este archivo) - Inicio rápido y características
-2. **`GUIA_INSTALACION_Y_DESPLIEGUE.md`** - Instalación local, configuración y despliegue a Cloud Run
-3. **`GUIA_SEGURIDAD_Y_PERMISOS.md`** - Sistema de seguridad, autenticación, usuarios, roles y permisos IAM
-4. **`REFERENCIA_API.md`** - Referencia completa de endpoints de la API
-5. **`GUIA_TROUBLESHOOTING.md`** - Solución de problemas comunes, logs y debugging
-6. **`GUIA_SISTEMA_PERMISOS_FRONTEND.md`** - Sistema de funciones helper para botones con permisos
-7. **`EJEMPLO_PERMISOS_SOLO_LECTURA.md`** - Comportamiento granular de permisos con ejemplos prácticos
+La documentación ha sido reorganizada en 6 archivos principales bien estructurados:
 
-### Documentación de producción
+1. **`README.md`** (este archivo) - Visión general, inicio rápido y características principales
 
-- **`DESPLIEGUE_EXITOSO.md`** - Estado actual de producción, configuración y comandos útiles
-- **`SOLUCION_CONTAINER_IMPORT_FAILED.md`** - Caso de estudio: solución al error "Container import failed"
-- **`.github/GITHUB_ACTIONS_SETUP.md`** - Configuración de CI/CD automático con GitHub Actions
+2. **[GUIA_COMPLETA.md](GUIA_COMPLETA.md)** - 📦 **Instalación y Configuración Completa**
+   - Instalación local (Windows/Mac/Linux)
+   - Configuración de base de datos y Cloud SQL
+   - Configuración de Google Cloud Platform
+   - Document AI (opcional)
+   - Primeros pasos y comandos útiles
+
+3. **[GUIA_SEGURIDAD_PERMISOS.md](GUIA_SEGURIDAD_PERMISOS.md)** - 🔒 **Seguridad y Sistema de Permisos**
+   - Arquitectura de seguridad (JWT, capas)
+   - Sistema de autenticación
+   - Roles y permisos (backend y frontend)
+   - Funciones helper para botones condicionales
+   - Ejemplos prácticos de permisos granulares
+   - Seguridad del repositorio
+
+4. **[GUIA_DESPLIEGUE_CI_CD.md](GUIA_DESPLIEGUE_CI_CD.md)** - 🚀 **Despliegue y CI/CD**
+   - Despliegue manual a Cloud Run
+   - Configuración de GitHub Actions (CI/CD automático)
+   - Estado actual de producción
+   - Comandos útiles y troubleshooting de despliegue
+
+5. **[GUIA_TROUBLESHOOTING.md](GUIA_TROUBLESHOOTING.md)** - 🔧 **Solución de Problemas**
+   - Problemas comunes y soluciones
+   - Diagnóstico de errores
+   - Casos de estudio resueltos
+   - Logs y debugging
+
+6. **[REFERENCIA_API.md](REFERENCIA_API.md)** - 📚 **Referencia Completa de API**
+   - Todos los endpoints documentados
+   - Parámetros, respuestas y ejemplos
+   - Códigos de error
+
+### 📁 Archivos Anteriores
+
+Los archivos anteriores han sido consolidados y movidos a `docs_archive/` para referencia histórica.
 
 ---
 
