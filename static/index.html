@@ -6303,15 +6303,15 @@
                                         ${nombreResidencia} (${proveedoresResidencia.length})
                                     </h4>
                                     <div style="overflow-x: auto;">
-                                        <table class="data-table">
+                                        <table class="data-table" style="min-width: 1000px;">
                                             <thead>
                                                 <tr>
-                                                    <th>Nombre</th>
-                                                    <th>Tipo de Servicio</th>
-                                                    <th>Teléfono</th>
-                                                    <th>Email</th>
-                                                    <th>Contacto</th>
-                                                    <th>Estado</th>
+                                                    <th style="min-width: 200px;">Nombre</th>
+                                                    <th style="min-width: 150px;">Tipo de Servicio</th>
+                                                    <th style="min-width: 120px;">Teléfono</th>
+                                                    <th style="min-width: 200px;">Email</th>
+                                                    <th style="min-width: 150px;">Contacto</th>
+                                                    <th style="min-width: 80px;">Estado</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -6324,11 +6324,11 @@
                                 
                                 html += `
                                     <tr style="cursor: pointer;" onclick="editarProveedor(${prov.id_proveedor})" title="Haz clic para editar">
-                                        <td style="color: #333; font-weight: 600;">${prov.nombre || '-'}</td>
-                                        <td style="color: #333;">${prov.tipo_servicio || '-'}</td>
-                                        <td style="color: #333;">${prov.telefono || '-'}</td>
-                                        <td style="color: #333;">${prov.email || '-'}</td>
-                                        <td style="color: #333;">${prov.contacto || '-'}</td>
+                                        <td style="color: #333; font-weight: 600; word-wrap: break-word;">${prov.nombre || '-'}</td>
+                                        <td style="color: #333; word-wrap: break-word;">${prov.tipo_servicio || '-'}</td>
+                                        <td style="color: #333; word-wrap: break-word;">${prov.telefono || '-'}</td>
+                                        <td style="color: #333; word-wrap: break-word; max-width: 250px;">${prov.email || '-'}</td>
+                                        <td style="color: #333; word-wrap: break-word;">${prov.contacto || '-'}</td>
                                         <td>${estado}</td>
                                     </tr>
                                 `;
