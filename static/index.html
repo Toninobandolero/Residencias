@@ -1126,6 +1126,22 @@
                 height: 350px !important;
             }
         }
+
+        /* Estilos para asegurar que flatpickr sea visible */
+        .flatpickr-calendar {
+            z-index: 10000 !important;
+            position: fixed !important;
+        }
+
+        .flatpickr-calendar.open {
+            z-index: 10000 !important;
+        }
+
+        /* Asegurar que input type="date" sea visible */
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            z-index: 1;
+        }
     </style>
 </head>
 <body>
@@ -4126,6 +4142,7 @@
                     locale: "es",
                     allowInput: true,
                     clickOpens: true,
+                    appendTo: document.body,
                     defaultDate: fechaPrevistaInput.value || null,
                     onChange: function(selectedDates, dateStr, instance) {
                         if (dateStr) {
@@ -4162,6 +4179,7 @@
                     locale: "es",
                     allowInput: true,
                     clickOpens: true,
+                    appendTo: document.body,
                     maxDate: "today",
                     defaultDate: fechaPagoInput.value || new Date(),
                     onChange: function(selectedDates, dateStr, instance) {
@@ -4691,6 +4709,7 @@
                     locale: "es",
                     allowInput: true,
                     clickOpens: true,
+                    appendTo: document.body,
                     maxDate: "today",
                     defaultDate: fechaPagoInput.value || "today",
                     onChange: function(selectedDates, dateStr, instance) {
@@ -4719,6 +4738,7 @@
                     locale: "es",
                     allowInput: true,
                     clickOpens: true,
+                    appendTo: document.body,
                     defaultDate: fechaPrevistaInput.value || null,
                     onChange: function(selectedDates, dateStr, instance) {
                         if (dateStr) {
@@ -7911,6 +7931,7 @@
                         locale: "es",
                         allowInput: true,
                         clickOpens: true,
+                        appendTo: document.body,
                         maxDate: "today", // La fecha de ingreso no puede ser mayor que hoy
                         onChange: function(selectedDates, dateStr, instance) {
                             // Asegurar formato DD/MM/YYYY
@@ -7934,6 +7955,7 @@
                         locale: "es",
                         allowInput: true,
                         clickOpens: true,
+                        appendTo: document.body,
                         maxDate: "today", // No permitir fechas futuras
                         onChange: function(selectedDates, dateStr, instance) {
                             // Asegurar formato DD/MM/YYYY
@@ -7995,16 +8017,17 @@
                             const fechaHoy = `${dia}/${mes}/${año}`;
                             fechaContratacionInput.value = fechaHoy;
                         }
-                        
+
                         flatpickrContratacion = flatpickr(fechaContratacionInput, {
                             dateFormat: 'd/m/Y',
                             locale: "es",
-                            allowInput: false
+                            allowInput: false,
+                            appendTo: document.body
                         });
                     }
                 }
             }
-            
+
             // Si es el modal de agregar proveedor, cargar residencias desde la API
             if (modalId === 'modalProveedor') {
                 const idProveedor = document.getElementById('prov_id_proveedor');
@@ -8058,6 +8081,7 @@
                         locale: "es",
                         allowInput: true,
                         clickOpens: true,
+                        appendTo: document.body,
                         onChange: function(selectedDates, dateStr, instance) {
                             if (dateStr) {
                                 const partes = dateStr.split('/');
@@ -8908,6 +8932,7 @@
                             locale: "es",
                             allowInput: true,
                             clickOpens: true,
+                            appendTo: document.body,
                             maxDate: "today", // La fecha de ingreso no puede ser mayor que hoy
                             onChange: function(selectedDates, dateStr, instance) {
                                 // Asegurar formato DD/MM/YYYY
@@ -8931,6 +8956,7 @@
                             locale: "es",
                             allowInput: true,
                             clickOpens: true,
+                            appendTo: document.body,
                             maxDate: "today", // No permitir fechas futuras
                             onChange: function(selectedDates, dateStr, instance) {
                                 // Asegurar formato DD/MM/YYYY
@@ -9608,10 +9634,11 @@
                         flatpickrContratacion = flatpickr(fechaContratacionInput, {
                             dateFormat: 'd/m/Y',
                             locale: "es",
-                            allowInput: false
+                            allowInput: false,
+                            appendTo: document.body
                         });
                     }
-                    
+
                     // Cambiar título del modal
                     const modalHeader = document.querySelector('#modalPersonal .modal-header h2');
                     if (modalHeader) {
@@ -9982,6 +10009,7 @@
                                 locale: "es",
                                 allowInput: true,
                                 clickOpens: true,
+                                appendTo: document.body,
                                 onChange: function(selectedDates, dateStr, instance) {
                                     if (dateStr) {
                                         const partes = dateStr.split('/');
