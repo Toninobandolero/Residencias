@@ -777,6 +777,7 @@
                 border-radius: 15px 15px 0 0 !important;
                 max-height: 95vh !important;
                 overflow-y: auto !important;
+                overflow-x: hidden !important;
             }
             
             .modal-header {
@@ -802,13 +803,25 @@
             
             /* Grids de 2 columnas a 1 columna en móviles */
             .modal-content [style*="grid-template-columns: 1fr 1fr"],
-            .modal-content [style*="grid-template-columns: repeat(2"] {
+            .modal-content [style*="grid-template-columns: repeat(2"],
+            div[style*="grid-template-columns: 1fr 1fr"],
+            div[style*="grid-template-columns: repeat(2"] {
                 grid-template-columns: 1fr !important;
+                gap: 12px !important;
             }
             
             /* Grids de 3 columnas a 1 columna en móviles */
-            .modal-content [style*="grid-template-columns: repeat(3"] {
+            .modal-content [style*="grid-template-columns: repeat(3"],
+            div[style*="grid-template-columns: repeat(3"] {
                 grid-template-columns: 1fr !important;
+                gap: 12px !important;
+            }
+
+            /* Prevenir desbordamiento de inputs */
+            input, select, textarea {
+                max-width: 100% !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
             }
         }
         
@@ -821,6 +834,7 @@
                 padding: 15px 12px !important;
                 border-radius: 0 !important;
                 max-height: 100vh !important;
+                overflow-x: hidden !important;
             }
             
             .modal-header h2 {
@@ -829,6 +843,21 @@
             
             .modal-header {
                 margin-bottom: 12px !important;
+            }
+
+            /* Grids más agresivos para iPhone */
+            div[style*="grid-template-columns"] {
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
+            }
+
+            /* Inputs extra compactos para iPhone */
+            input, select, textarea {
+                font-size: 13px !important;
+                padding: 8px 10px !important;
+                max-width: 100% !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
             }
         }
 
@@ -908,6 +937,18 @@
                 height: 18px !important;
                 margin-right: 6px !important;
             }
+
+            /* Inputs más pequeños para evitar desbordamiento */
+            input[type="text"],
+            input[type="number"],
+            input[type="date"],
+            input[type="tel"],
+            input[type="email"],
+            select,
+            textarea {
+                font-size: 14px !important;
+                padding: 10px 12px !important;
+            }
             
             .header-logo {
                 gap: 12px;
@@ -977,6 +1018,39 @@
                 width: 16px !important;
                 height: 16px !important;
                 margin-right: 5px !important;
+            }
+
+            /* Convertir todos los grids de 2 y 3 columnas a 1 columna en móviles */
+            div[style*="grid-template-columns: 1fr 1fr"],
+            div[style*="grid-template-columns: repeat(2"],
+            div[style*="grid-template-columns: repeat(3"] {
+                grid-template-columns: 1fr !important;
+                gap: 12px !important;
+            }
+
+            /* Inputs MÁS pequeños para iPhone */
+            input[type="text"],
+            input[type="number"],
+            input[type="date"],
+            input[type="tel"],
+            input[type="email"],
+            select,
+            textarea {
+                font-size: 13px !important;
+                padding: 8px 10px !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            /* Labels más compactos */
+            label {
+                font-size: 12px !important;
+                margin-bottom: 4px !important;
+            }
+
+            /* Form groups más compactos */
+            .form-group {
+                margin-bottom: 12px !important;
             }
             
             .header-logo {
@@ -1917,11 +1991,11 @@
                 
                 <div id="modalPagoProveedorAlert" class="alert" style="display: none;"></div>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    ${usuarioTienePermiso('crear:pago_proveedor') || usuarioTienePermiso('editar:pago_proveedor') ? `<button type="submit" id="savePagoProveedorBtn" style="flex: 1;">Guardar</button>` : ''}
-                    ${usuarioTienePermiso('eliminar:pago_proveedor') ? `<button type="button" id="pago_eliminar_factura_btn" onclick="eliminar_factura_pago()" style="display: none; flex: 1; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; align-items: center; justify-content: center; gap: 6px;">
+                    <button type="submit" id="savePagoProveedorBtn" style="flex: 1; display: none;">Guardar</button>
+                    <button type="button" id="pago_eliminar_factura_btn" onclick="eliminar_factura_pago()" style="display: none; flex: 1; background: #dc3545; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; align-items: center; justify-content: center; gap: 6px;">
                         <img src="/static/icons/medical/user-x.svg" alt="Eliminar" style="width: 16px; height: 16px; filter: brightness(0) invert(1);">
                         Eliminar
-                    </button>` : ''}
+                    </button>
                     <button type="button" onclick="closeModal('modalPagoProveedor')" style="flex: 1; background: #6c757d;">Cancelar</button>
                 </div>
             </form>
@@ -7170,6 +7244,14 @@
                         }
                     }
                     
+                    // Mostrar botón guardar si tiene permiso de editar
+                    const savePagoBtn = document.getElementById('savePagoProveedorBtn');
+                    if (savePagoBtn && usuarioTienePermiso('editar:pago_proveedor')) {
+                        savePagoBtn.style.display = 'block';
+                    } else if (savePagoBtn) {
+                        savePagoBtn.style.display = 'none';
+                    }
+                    
                     // MOSTRAR el botón de eliminar solo si hay factura Y el usuario tiene permiso
                     const mostrar_boton_eliminar = () => {
                         const btn_eliminar_completa = document.getElementById('pago_eliminar_factura_btn');
@@ -7744,6 +7826,21 @@
             // Si es el modal de pago a proveedor, inicializar date pickers
             if (modalId === 'modalPagoProveedor') {
                 initializePagoProveedorDatePickers();
+                
+                // Controlar visibilidad de botones según permisos
+                const savePagoBtn = document.getElementById('savePagoProveedorBtn');
+                const deletePagoBtn = document.getElementById('pago_eliminar_factura_btn');
+                
+                if (savePagoBtn) {
+                    // Mostrar botón guardar si tiene permiso de crear o editar
+                    if (usuarioTienePermiso('crear:pago_proveedor') || usuarioTienePermiso('editar:pago_proveedor')) {
+                        savePagoBtn.style.display = 'block';
+                    } else {
+                        savePagoBtn.style.display = 'none';
+                    }
+                }
+                
+                // El botón eliminar se controla en editarPagoProveedor
             }
             
             // Si es el modal de usuario, cargar roles
