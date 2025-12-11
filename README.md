@@ -163,6 +163,8 @@ python3 init_database.py
 3. **`GUIA_SEGURIDAD_Y_PERMISOS.md`** - Sistema de seguridad, autenticación, usuarios, roles y permisos IAM
 4. **`REFERENCIA_API.md`** - Referencia completa de endpoints de la API
 5. **`GUIA_TROUBLESHOOTING.md`** - Solución de problemas comunes, logs y debugging
+6. **`GUIA_SISTEMA_PERMISOS_FRONTEND.md`** - Sistema de funciones helper para botones con permisos
+7. **`EJEMPLO_PERMISOS_SOLO_LECTURA.md`** - Comportamiento granular de permisos con ejemplos prácticos
 
 ### Documentación de producción
 

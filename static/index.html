@@ -11213,9 +11213,9 @@
                                     <img src="/static/icons/medical/file-medical.svg" alt="Documentación" style="width: 32px; height: 32px;"> Documentación
                                 </h2>
                                 <div style="display: flex; flex-direction: column; gap: 10px;">
-                                    <button class="add-btn" onclick="resetFormDocumento(); openModal('modalSubirDocumento')" style="padding: 10px 20px; font-size: 16px; white-space: nowrap; width: 100%;">
+                                    ${usuarioTienePermiso('crear:documento') ? `<button class="add-btn" onclick="resetFormDocumento(); openModal('modalSubirDocumento')" style="padding: 10px 20px; font-size: 16px; white-space: nowrap; width: 100%;">
                                         <img src="/static/icons/medical/plus.svg" alt="Agregar" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px; filter: brightness(0) invert(1);"> Subir Documento
-                                    </button>
+                                    </button>` : ''}
                                     <button onclick="limpiarFiltrosDocumentacion()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;">Limpiar Filtros</button>
                                 </div>
                             </div>
