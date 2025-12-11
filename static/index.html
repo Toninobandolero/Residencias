@@ -1747,8 +1747,8 @@
                 
                 <div id="modalCobroAlert" class="alert" style="display: none;"></div>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
-                    ${usuarioTienePermiso('crear:cobro') || usuarioTienePermiso('editar:cobro') ? `<button type="submit" id="saveCobroBtn" style="flex: 1;">Guardar</button>` : ''}
-                    ${usuarioTienePermiso('eliminar:cobro') ? `<button type="button" id="deleteCobroBtn" onclick="confirmarEliminarCobro()" style="flex: 1; background: #dc3545; display: none;">Eliminar</button>` : ''}
+                    <button type="submit" id="saveCobroBtn" style="flex: 1; display: none;">Guardar</button>
+                    <button type="button" id="deleteCobroBtn" onclick="confirmarEliminarCobro()" style="flex: 1; background: #dc3545; display: none;">Eliminar</button>
                     <button type="button" onclick="closeModal('modalCobro')" style="flex: 1; background: #6c757d;">Cancelar</button>
                 </div>
             </form>
@@ -4401,10 +4401,20 @@
                     // Cambiar título del modal
                     document.getElementById('modalCobroTitulo').innerHTML = '<img src="/static/icons/medical/bill.svg" alt="Cobro" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Cobro';
                     
-                    // Mostrar botón de eliminar cuando se está editando
+                    // Mostrar botón de eliminar solo si tiene permiso
                     const deleteBtn = document.getElementById('deleteCobroBtn');
-                    if (deleteBtn) {
+                    if (deleteBtn && usuarioTienePermiso('eliminar:cobro')) {
                         deleteBtn.style.display = 'block';
+                    } else if (deleteBtn) {
+                        deleteBtn.style.display = 'none';
+                    }
+                    
+                    // Mostrar botón guardar si tiene permiso de editar
+                    const saveBtn = document.getElementById('saveCobroBtn');
+                    if (saveBtn && usuarioTienePermiso('editar:cobro')) {
+                        saveBtn.style.display = 'block';
+                    } else if (saveBtn) {
+                        saveBtn.style.display = 'none';
                     }
                     
                     // Abrir modal primero
@@ -7714,6 +7724,21 @@
                     loadResidentesForCobro();
                     initializeCobroDatePickers();
                 }
+                
+                // Controlar visibilidad de botones según permisos
+                const saveBtn = document.getElementById('saveCobroBtn');
+                const deleteBtn = document.getElementById('deleteCobroBtn');
+                
+                if (saveBtn) {
+                    // Mostrar botón guardar si tiene permiso de crear o editar
+                    if (usuarioTienePermiso('crear:cobro') || usuarioTienePermiso('editar:cobro')) {
+                        saveBtn.style.display = 'block';
+                    } else {
+                        saveBtn.style.display = 'none';
+                    }
+                }
+                
+                // El botón eliminar se controla en editCobro
             }
             
             // Si es el modal de pago a proveedor, inicializar date pickers
