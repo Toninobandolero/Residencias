@@ -2600,32 +2600,32 @@ def listar_cobros():
                 # Usuario normal: filtrar por residencias asignadas
                 # Construir filtro para residente (donde clause tiene formato "WHERE p.id_residencia IN (...)")
                 # Necesitamos extraer los IDs de residencia de params
-                placeholders = ','.join(['%s'] * len(params))
-                query_residentes = f"""
-                    SELECT DISTINCT r.id_residente, r.id_residencia, r.costo_habitacion, 
-                           r.metodo_pago_preferido, r.nombre, r.apellido
-                    FROM residente r
-                    JOIN pago_residente p ON r.id_residente = p.id_residente
-                    WHERE r.activo = TRUE
-                      AND r.costo_habitacion IS NOT NULL
-                      AND r.costo_habitacion > 0
-                      AND p.estado = 'cobrado'
-                      AND p.fecha_pago IS NOT NULL
-                      AND r.id_residencia IN ({placeholders})
-                      AND NOT EXISTS (
-                          SELECT 1 FROM pago_residente p2
-                          WHERE p2.id_residente = r.id_residente
-                            AND p2.id_residencia = r.id_residencia
-                            AND p2.mes_pagado = %s
-                            AND (p2.concepto ILIKE 'enero %%' OR p2.concepto ILIKE 'febrero %%' OR p2.concepto ILIKE 'marzo %%' 
-                                 OR p2.concepto ILIKE 'abril %%' OR p2.concepto ILIKE 'mayo %%' OR p2.concepto ILIKE 'junio %%'
-                                 OR p2.concepto ILIKE 'julio %%' OR p2.concepto ILIKE 'agosto %%' OR p2.concepto ILIKE 'septiembre %%'
-                                 OR p2.concepto ILIKE 'octubre %%' OR p2.concepto ILIKE 'noviembre %%' OR p2.concepto ILIKE 'diciembre %%'
-                                 OR p2.concepto ILIKE 'Pago %%')
-                      )
-                """
-                cursor.execute(query_residentes, list(params) + [mes_siguiente_str])
-                residentes_sin_cobro_pendiente = cursor.fetchall()
+                    placeholders = ','.join(['%s'] * len(params))
+                    query_residentes = f"""
+                        SELECT DISTINCT r.id_residente, r.id_residencia, r.costo_habitacion, 
+                               r.metodo_pago_preferido, r.nombre, r.apellido
+                        FROM residente r
+                        JOIN pago_residente p ON r.id_residente = p.id_residente
+                        WHERE r.activo = TRUE
+                          AND r.costo_habitacion IS NOT NULL
+                          AND r.costo_habitacion > 0
+                          AND p.estado = 'cobrado'
+                          AND p.fecha_pago IS NOT NULL
+                          AND r.id_residencia IN ({placeholders})
+                          AND NOT EXISTS (
+                              SELECT 1 FROM pago_residente p2
+                              WHERE p2.id_residente = r.id_residente
+                                AND p2.id_residencia = r.id_residencia
+                                AND p2.mes_pagado = %s
+                                AND (p2.concepto ILIKE 'enero %%' OR p2.concepto ILIKE 'febrero %%' OR p2.concepto ILIKE 'marzo %%' 
+                                     OR p2.concepto ILIKE 'abril %%' OR p2.concepto ILIKE 'mayo %%' OR p2.concepto ILIKE 'junio %%'
+                                     OR p2.concepto ILIKE 'julio %%' OR p2.concepto ILIKE 'agosto %%' OR p2.concepto ILIKE 'septiembre %%'
+                                     OR p2.concepto ILIKE 'octubre %%' OR p2.concepto ILIKE 'noviembre %%' OR p2.concepto ILIKE 'diciembre %%'
+                                     OR p2.concepto ILIKE 'Pago %%')
+                          )
+                    """
+                    cursor.execute(query_residentes, list(params) + [mes_siguiente_str])
+                    residentes_sin_cobro_pendiente = cursor.fetchall()
             elif where_clause and not params:
                 # Usuario sin residencias activas asignadas
                 residentes_sin_cobro_pendiente = []
@@ -2961,8 +2961,8 @@ def regenerar_cobros_historicos_endpoint():
     Solo accesible por Administrador o Administrador.
     """
     try:
-        # Solo Administrador o Administrador pueden ejecutar esto
-        if g.id_rol not in [ADMIN_ROLE_ID, ADMIN_ROLE_ID]:
+        # Solo Administrador puede ejecutar esto
+        if g.id_rol != ADMIN_ROLE_ID:
             return jsonify({'error': 'Solo administradores pueden regenerar cobros históricos'}), 403
         
         conn = get_db_connection()
@@ -4853,13 +4853,11 @@ def procesar_factura():
                                         valor_money = unidades + nanos
                                         if valor_money > 0:
                                             total_amount = valor_money
-                                            app.logger.info(f"🔍 Encontrado total usando money_value de '{entity.type_}': {total_amount}")
                                             break
                                 
                                 # Si money_value es 0.0 o no existe, usar mention_text
                                 if not total_amount and hasattr(entity, 'mention_text') and entity.mention_text:
                                     total_amount = entity.mention_text
-                                    app.logger.info(f"🔍 Encontrado total usando mention_text de '{entity.type_}': {total_amount}")
                                     break
                     
                     if total_amount:
@@ -4926,13 +4924,11 @@ def procesar_factura():
                                         valor_money = unidades + nanos
                                         if valor_money > 0:
                                             tax_amount = valor_money
-                                            app.logger.info(f"🔍 Encontrado IVA usando money_value de '{entity.type_}': {tax_amount}")
                                             break
                                 
                                 # Si money_value es 0.0 o no existe, usar mention_text (más confiable en este caso)
                                 if not tax_amount and hasattr(entity, 'mention_text') and entity.mention_text:
                                     tax_amount = entity.mention_text
-                                    app.logger.info(f"🔍 Encontrado IVA usando mention_text de '{entity.type_}': {tax_amount}")
                                     break
                     
                     if tax_amount:
@@ -5097,12 +5093,10 @@ def procesar_factura():
                                     valor_money = unidades + nanos
                                     if valor_money > 0:
                                         subtotal_amount = valor_money
-                                        app.logger.info(f"🔍 Encontrado subtotal usando entidad '{entity.type_}': {subtotal_amount}")
                                         break
                                 # Si no tiene money_value, usar mention_text
                                 if not subtotal_amount and hasattr(entity, 'mention_text') and entity.mention_text:
                                     subtotal_amount = entity.mention_text
-                                    app.logger.info(f"🔍 Encontrado subtotal usando mention_text de '{entity.type_}': {subtotal_amount}")
                                     break
                     
                     if subtotal_amount:
@@ -5239,7 +5233,7 @@ def procesar_factura():
                         
                         columnas_select = ', '.join(columnas_select_list)
                         
-                        if g.id_rol == ADMIN_ROLE_ID or g.id_rol == ADMIN_ROLE_ID:
+                        if g.id_rol == ADMIN_ROLE_ID:
                             cursor_residencias.execute(f"""
                                 SELECT {columnas_select}
                                 FROM residencia
@@ -5545,7 +5539,7 @@ def procesar_factura():
         # Si se detectó una residencia automáticamente y el usuario tiene acceso, usarla
         if id_residencia_detectada:
             # Verificar que el usuario tiene acceso a la residencia detectada
-            if g.id_rol == ADMIN_ROLE_ID or g.id_rol == ADMIN_ROLE_ID or id_residencia_detectada in g.residencias_acceso:
+            if g.id_rol == ADMIN_ROLE_ID or id_residencia_detectada in g.residencias_acceso:
                 id_residencia = id_residencia_detectada
                 app.logger.info(f"Usando residencia detectada automáticamente: {id_residencia}")
             else:
@@ -8516,7 +8510,7 @@ def listar_usuarios():
                                 ) AS permisos_combinados
                                 ORDER BY nombre_permiso
                             """, (id_usuario, id_rol_usuario))
-                            permisos_usuario = [row[0] for row in cursor.fetchall()]
+                        permisos_usuario = [row[0] for row in cursor.fetchall()]
                     except Exception:
                         # Si la tabla no existe aún, usar lista vacía
                         permisos_usuario = []
@@ -8687,12 +8681,6 @@ def actualizar_usuario(id_usuario):
                     # Eliminar residencias actuales del usuario
                     cursor.execute("DELETE FROM usuario_residencia WHERE id_usuario = %s", (id_usuario,))
                     
-                    # Verificar que después de eliminar y antes de insertar, el usuario tendrá al menos una residencia activa
-                    if len(residencias_validas) == 0:
-                        return jsonify({
-                            'error': 'Debe asignar al menos una residencia activa. No se pueden dejar usuarios sin residencias activas.'
-                        }), 400
-                    
                     # Asignar nuevas residencias (solo activas)
                     for id_residencia in residencias_validas:
                         cursor.execute("""
@@ -8836,6 +8824,7 @@ def listar_documentacion():
         categoria = request.args.get('categoria')
         id_entidad = request.args.get('id_entidad', type=int)
         id_residencia_filtro = request.args.get('id_residencia', type=int)
+
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -8848,10 +8837,11 @@ def listar_documentacion():
             if g.id_rol != ADMIN_ROLE_ID:
                 if g.residencias_acceso:
                     placeholders = ','.join(['%s'] * len(g.residencias_acceso))
-                    residencias_filtro = f" AND id_residencia IN ({placeholders})"
+                    residencias_filtro = f" AND d.id_residencia IN ({placeholders})"
                     params.extend(g.residencias_acceso)
                 else:
                     # Usuario sin residencias
+                    app.logger.warning(f"📍 Usuario sin residencias - retornando vacío")
                     return jsonify({'documentos': [], 'total': 0}), 200
             
             # Si hay filtro específico por residencia, aplicarlo
@@ -8861,7 +8851,7 @@ def listar_documentacion():
                     if id_residencia_filtro not in g.residencias_acceso:
                         return jsonify({'error': 'No tienes acceso a esta residencia'}), 403
                 # Aplicar filtro específico
-                residencias_filtro = " AND id_residencia = %s"
+                residencias_filtro = " AND d.id_residencia = %s"
                 params = [id_residencia_filtro]
             
             # Verificar si la tabla 'documento' existe
