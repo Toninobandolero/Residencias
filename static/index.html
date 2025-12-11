@@ -3248,20 +3248,6 @@
                     // Lista plana para compatibilidad (mantener para debug)
                     const cobrosPrevistos = Object.values(cobrosPrevistosPorResidencia).flatMap(g => g.cobros);
                     
-                    // Debug: mostrar información de todos los cobros previstos
-                        totalCobros: cobrosData.cobros?.length || 0,
-                        todosPrevistos: cobrosPrevistos.length,
-                        pendientes: cobrosPrevistos.length,
-                        detalle: cobrosPrevistos.map(c => ({
-                            id: c.id_pago,
-                            residente: c.residente,
-                            estado: c.estado,
-                            es_cobro_previsto: c.es_cobro_previsto,
-                            metodo_pago: c.metodo_pago,
-                            fecha_prevista: c.fecha_prevista,
-                            mes_pagado: c.mes_pagado
-                        }))
-                    });
                     // Obtener últimos cobros completados (mensual y extra) de cada residente
                     let cobrosCompletados = [];
                     try {
@@ -3278,28 +3264,6 @@
                     } catch (e) {
                         console.error('Error al obtener últimos cobros completados:', e);
                     }
-                    
-                    // Debug: mostrar información detallada de todos los cobros
-                        totalCobros: cobrosData.cobros?.length || 0,
-                        todosPrevistos: cobrosPrevistos.length,
-                        pendientes: cobrosPrevistos.length,
-                        completados: cobrosCompletados.length,
-                        todosLosPrevistos: cobrosPrevistos.map(c => ({
-                            id: c.id_pago,
-                            residente: c.residente,
-                            estado: c.estado,
-                            es_previsto: c.es_cobro_previsto,
-                            metodo_pago: c.metodo_pago,
-                            fecha_prevista: c.fecha_prevista,
-                            fecha_pago: c.fecha_pago,
-                            mes_pagado: c.mes_pagado
-                        })),
-                        pendientesDetalle: cobrosPrevistos.map(c => ({
-                            id: c.id_pago,
-                            residente: c.residente,
-                            estado: c.estado
-                        }))
-                    });
                     
                     let html = `
                         <div class="module-content">
@@ -7098,11 +7062,6 @@
                     // No importa si tiene PDF adjunto o no, si hay registro de factura, se puede borrar
                     const tiene_factura = !!(pago.id_pago);
                     
-                        tiene_factura: tiene_factura,
-                        pago_id: pago.id_pago,
-                        es_edicion: !!pago.id_pago
-                    });
-                    
                     // Verificar si hay PDF adjunto para mostrarlo
                     const tiene_pdf_adjunto = pago.factura_blob_path && 
                         pago.factura_blob_path !== null && 
@@ -7146,10 +7105,6 @@
                             btn_eliminar_completa.style.display = 'none';
                             return;
                         }
-                            boton_encontrado: !!btn_eliminar_completa,
-                            tiene_factura: tiene_factura,
-                            boton_id: 'pago_eliminar_factura_btn'
-                        });
                         
                         if (btn_eliminar_completa) {
                             if (tiene_factura) {
@@ -10451,13 +10406,6 @@
                 activo: document.getElementById('usuario_activo').checked
             };
             
-                email: data.email,
-                id_rol: data.id_rol,
-                residencias: data.residencias,
-                num_permisos: data.permisos.length,
-                activo: data.activo
-            });
-            
             // Agregar campos opcionales solo si tienen valor
             const nombre = formData.get('nombre');
             if (nombre && nombre.trim()) {
@@ -10793,16 +10741,12 @@
                     }
                     
                     container.innerHTML = receivers.map(r => `
-                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: #f8f9fa; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #667eea;">
-                            <div style="flex: 1;">
-                                <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${r.nombre}</div>
-                                ${r.nif_cif ? `<div style="font-size: 12px; color: #666;">NIF/CIF: ${r.nif_cif}</div>` : ''}
-                                ${r.direccion ? `<div style="font-size: 12px; color: #666;">${r.direccion}</div>` : ''}
-                                ${r.cuenta_bancaria ? `<div style="font-size: 12px; color: #667eea; font-weight: 500; margin-top: 4px;">IBAN: ${r.cuenta_bancaria}</div>` : ''}
-                            </div>
-                            <button type="button" onclick="eliminarReceiverResidencia(${r.id_receiver}, '${r.nombre.replace(/'/g, "\\'")}')" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">
-                                Eliminar
-                            </button>
+                        <div style="padding: 12px; background: #f8f9fa; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #667eea;">
+                            <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${r.nombre}</div>
+                            ${r.nif_cif ? `<div style="font-size: 12px; color: #666;">NIF/CIF: ${r.nif_cif}</div>` : ''}
+                            ${r.direccion ? `<div style="font-size: 12px; color: #666;">${r.direccion}</div>` : ''}
+                            <button type="button" onclick="eliminarReceiverResidencia(${r.id_receiver}, '${r.nombre.replace(/'/g, "\\'")}')" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; margin-top: 8px;">Eliminar</button>
+                            ${r.cuenta_bancaria ? `<div style="font-size: 12px; color: #667eea; font-weight: 500; margin-top: 4px;">IBAN: ${r.cuenta_bancaria}</div>` : ''}
                         </div>
                     `).join('');
                 } else {
