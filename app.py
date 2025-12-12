@@ -4934,7 +4934,7 @@ def procesar_factura():
                 primeras_lineas = '\n'.join(texto_completo.split('\n')[:10])
                 proveedor = None
                 # Buscar líneas con texto (sin números ni símbolos)
-                for linea en primeras_lineas.split('\n'):
+                for linea in primeras_lineas.split('\n'):
                     linea_limpia = linea.strip()
                     if linea_limpia and len(linea_limpia) > 3:
                         # Si tiene principalmente letras y espacios
