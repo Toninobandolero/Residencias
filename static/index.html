@@ -2051,16 +2051,6 @@
                     </div>
                 </div>
                 
-                <!-- SECCIÓN: Artículos de la Factura (se muestra dinámicamente) -->
-                <div id="articulosSeccionPago" style="display: none; background: #f0fff4; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #48bb78;">
-                    <h3 style="color: #48bb78; margin-bottom: 15px; font-size: 18px;">
-                        <img src="/static/icons/medical/package.svg" alt="Artículos" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Art\u00edculos de la Factura
-                    </h3>
-                    <div id="articulosContenidoPago" style="overflow-x: auto;">
-                        <!-- Se llenará dinámicamente con JavaScript -->
-                    </div>
-                </div>
-                
                 <!-- SECCIÓN: Observaciones -->
                 <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #718096;">
                     <h3 style="color: #718096; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/settings.svg" alt="Observaciones" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Observaciones</h3>
@@ -5792,120 +5782,9 @@
                         </div>
                     </div>
                     
-                    ${datosExtraidos.articulos && datosExtraidos.articulos.length > 0 ? `
-                    <div style="margin-top: 20px; background: #f0fff4; padding: 20px; border-radius: 10px; border: 2px solid #48bb78;">
-                        <h4 style="color: #48bb78; margin-bottom: 15px; font-size: 16px; display: flex; align-items: center; justify-content: space-between;">
-                            <span><img src="/static/icons/medical/package.svg" alt="Artículos" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;"> Artículos Detectados en la Factura (${datosExtraidos.articulos.length})</span>
-                            <button type="button" onclick="agregarArticuloManual()" style="padding: 6px 12px; background: #48bb78; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 4px;">
-                                + Agregar Artículo
-                            </button>
-                        </h4>
-                        <p style="color: #2f855a; margin-bottom: 15px; font-size: 13px;">
-                            ℹ️ Estos artículos se extraer on automáticamente. Puedes editarlos, eliminarlos o agregar nuevos.
-                        </p>
-                        
-                        <div style="overflow-x: auto;">
-                            <table class="data-table" id="tablaArticulosFactura" style="width: 100%; min-width: 600px;">
-                                <thead>
-                                    <tr style="background: #48bb78; color: white;">
-                                        <th style="padding: 10px; text-align: left;">Descripción</th>
-                                        <th style="padding: 10px; text-align: center; width: 80px;">Cantidad</th>
-                                        <th style="padding: 10px; text-align: center; width: 80px;">Unidad</th>
-                                        <th style="padding: 10px; text-align: right; width: 100px;">Precio Unit. (€)</th>
-                                        <th style="padding: 10px; text-align: right; width: 100px;">Total (€)</th>
-                                        <th style="padding: 10px; text-align: center; width: 60px;">Acción</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${datosExtraidos.articulos.map((art, index) => `
-                                        <tr data-articulo-index="${index}">
-                                            <td style="padding: 8px;">
-                                                <input type="text" 
-                                                       name="articulo_descripcion_${index}" 
-                                                       value="${art.descripcion || ''}" 
-                                                       placeholder="Descripción del artículo"
-                                                       style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 13px;">
-                                            </td>
-                                            <td style="padding: 8px;">
-                                                <input type="number" 
-                                                       name="articulo_cantidad_${index}" 
-                                                       value="${art.cantidad || 1}" 
-                                                       step="0.01" 
-                                                       min="0"
-                                                       onchange="calcularTotalArticulo(${index})"
-                                                       style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 13px; text-align: center;">
-                                            </td>
-                                            <td style="padding: 8px;">
-                                                <select name="articulo_unidad_${index}" 
-                                                        style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 13px;">
-                                                    <option value="ud" ${art.unidad === 'ud' ? 'selected' : ''}>ud</option>
-                                                    <option value="kg" ${art.unidad === 'kg' ? 'selected' : ''}>kg</option>
-                                                    <option value="l" ${art.unidad === 'l' ? 'selected' : ''}>l</option>
-                                                    <option value="cajas" ${art.unidad === 'cajas' ? 'selected' : ''}>cajas</option>
-                                                    <option value="uds" ${art.unidad === 'uds' ? 'selected' : ''}>uds</option>
-                                                </select>
-                                            </td>
-                                            <td style="padding: 8px;">
-                                                <input type="number" 
-                                                       name="articulo_precio_${index}" 
-                                                       value="${art.precio_unitario || ''}" 
-                                                       step="0.01" 
-                                                       min="0"
-                                                       onchange="calcularTotalArticulo(${index})"
-                                                       placeholder="0.00"
-                                                       style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 13px; text-align: right;">
-                                            </td>
-                                            <td style="padding: 8px;">
-                                                <input type="number" 
-                                                       name="articulo_total_${index}" 
-                                                       value="${art.total || ''}" 
-                                                       step="0.01" 
-                                                       min="0"
-                                                       placeholder="0.00"
-                                                       style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 13px; text-align: right; font-weight: 600;">
-                                            </td>
-                                            <td style="padding: 8px; text-align: center;">
-                                                <button type="button" 
-                                                        onclick="eliminarArticulo(${index})" 
-                                                        style="padding: 4px 8px; background: #f56565; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;"
-                                                        title="Eliminar artículo">
-                                                    🗑️
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                                <tfoot>
-                                    <tr style="background: #e6fffa; font-weight: 600;">
-                                        <td colspan="4" style="padding: 10px; text-align: right; color: #2f855a;">Total de Artículos:</td>
-                                        <td id="totalArticulosSum" style="padding: 10px; text-align: right; color: #2f855a; font-size: 16px;">
-                                            ${datosExtraidos.articulos.reduce((sum, art) => sum + (parseFloat(art.total) || 0), 0).toFixed(2)}€
-                                        </td>
-                                        <td></td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    </div>
-                    ` : `
-                    <div style="margin-top: 20px; background: #fffaf0; padding: 15px; border-radius: 10px; border-left: 4px solid #ed8936; display: flex; align-items: start; gap: 12px;">
-                        <span style="font-size: 20px;">ℹ️</span>
-                        <div>
-                            <p style="color: #744210; margin: 0 0 8px 0; font-weight: 600; font-size: 14px;">No se detectaron artículos en esta factura</p>
-                            <p style="color: #744210; margin: 0; font-size: 13px;">
-                                La factura puede no tener un formato detallado o el OCR no pudo extraer las líneas de productos. 
-                                Puedes agregar artículos manualmente si lo deseas.
-                            </p>
-                            <button type="button" onclick="mostrarFormularioArticulosManual()" style="margin-top: 10px; padding: 6px 12px; background: #ed8936; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;">
-                                + Agregar Artículos Manualmente
-                            </button>
-                        </div>
-                    </div>
-                    `}
-                    
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
                         <button type="submit" style="flex: 1; padding: 12px 20px; background: #48bb78; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;">
-                            💾 Guardar Pago${datosExtraidos.articulos && datosExtraidos.articulos.length > 0 ? ` + ${datosExtraidos.articulos.length} Artículo(s)` : ''}
+                            💾 Guardar Pago
                         </button>
                         <button type="button" onclick="abrirModalProcesarFactura()" style="flex: 1; padding: 12px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;">
                             🔄 Procesar Otra Factura
@@ -6282,36 +6161,6 @@
                 return;
             }
             
-            // ============================================================================
-            // RECOPILAR ARTÍCULOS DEL FORMULARIO
-            // ============================================================================
-            const articulos = [];
-            const tablaArticulos = document.getElementById('tablaArticulosFactura');
-            if (tablaArticulos) {
-                const filas = tablaArticulos.querySelectorAll('tbody tr[data-articulo-index]');
-                filas.forEach((fila) => {
-                    const index = fila.getAttribute('data-articulo-index');
-                    const descripcion = form.querySelector(`input[name="articulo_descripcion_${index}"]`)?.value?.trim();
-                    const cantidad = form.querySelector(`input[name="articulo_cantidad_${index}"]`)?.value;
-                    const unidad = form.querySelector(`select[name="articulo_unidad_${index}"]`)?.value;
-                    const precio_unitario = form.querySelector(`input[name="articulo_precio_${index}"]`)?.value;
-                    const total = form.querySelector(`input[name="articulo_total_${index}"]`)?.value;
-                    
-                    // Solo agregar artículos con descripción y total válidos
-                    if (descripcion && total && parseFloat(total) > 0) {
-                        articulos.push({
-                            descripcion: descripcion,
-                            cantidad: cantidad ? parseFloat(cantidad) : 1,
-                            unidad: unidad || 'ud',
-                            precio_unitario: precio_unitario ? parseFloat(precio_unitario) : null,
-                            total: parseFloat(total)
-                        });
-                    }
-                });
-                
-                console.log(`📦 ${articulos.length} artículos recopilados del formulario`);
-            }
-            
             const data = {
                 proveedor: nombreProveedor,
                 concepto: formData.get('concepto'),
@@ -6321,8 +6170,7 @@
                 metodo_pago: formData.get('metodo_pago') || null,
                 numero_factura: formData.get('numero_factura') || null,
                 estado: 'pagado', // Si tiene fecha_pago, está pagado
-                factura_blob_path: window.facturaProcesadaDatos?.blobPath || null,
-                articulos: articulos.length > 0 ? articulos : null
+                factura_blob_path: window.facturaProcesadaDatos?.blobPath || null
             };
             
             // Limpiar valores vacíos
@@ -6367,221 +6215,6 @@
                 alert('Error de conexión al guardar el pago');
                 saveBtn.disabled = false;
                 saveBtn.textContent = originalText;
-            }
-        }
-        
-        // ============================================================================
-        // FUNCIONES PARA MANEJAR ARTÍCULOS DE FACTURA
-        // ============================================================================
-        
-        function calcularTotalArticulo(index) {
-            const cantidadInput = document.querySelector(`input[name="articulo_cantidad_${index}"]`);
-            const precioInput = document.querySelector(`input[name="articulo_precio_${index}"]`);
-            const totalInput = document.querySelector(`input[name="articulo_total_${index}"]`);
-            
-            if (cantidadInput && precioInput && totalInput) {
-                const cantidad = parseFloat(cantidadInput.value) || 0;
-                const precio = parseFloat(precioInput.value) || 0;
-                totalInput.value = (cantidad * precio).toFixed(2);
-                
-                // Actualizar suma total
-                actualizarSumaTotalArticulos();
-            }
-        }
-        
-        function actualizarSumaTotalArticulos() {
-            const totalSumElement = document.getElementById('totalArticulosSum');
-            if (!totalSumElement) return;
-            
-            const tablaArticulos = document.getElementById('tablaArticulosFactura');
-            if (!tablaArticulos) return;
-            
-            const filas = tablaArticulos.querySelectorAll('tbody tr[data-articulo-index]');
-            let sumaTotal = 0;
-            
-            filas.forEach((fila) => {
-                const index = fila.getAttribute('data-articulo-index');
-                const totalInput = document.querySelector(`input[name="articulo_total_${index}"]`);
-                if (totalInput) {
-                    sumaTotal += parseFloat(totalInput.value) || 0;
-                }
-            });
-            
-            totalSumElement.textContent = sumaTotal.toFixed(2) + '€';
-        }
-        
-        function eliminarArticulo(index) {
-            if (!confirm('¿Eliminar este artículo?')) return;
-            
-            const fila = document.querySelector(`tr[data-articulo-index="${index}"]`);
-            if (fila) {
-                fila.remove();
-                actualizarSumaTotalArticulos();
-                
-                // Si no quedan artículos, mostrar mensaje
-                const tablaArticulos = document.getElementById('tablaArticulosFactura');
-                if (tablaArticulos) {
-                    const filasRestantes = tablaArticulos.querySelectorAll('tbody tr[data-articulo-index]');
-                    if (filasRestantes.length === 0) {
-                        const tbody = tablaArticulos.querySelector('tbody');
-                        if (tbody) {
-                            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px; color: #999; font-style: italic;">No hay artículos. Usa "+ Agregar Artículo" para añadir.</td></tr>';
-                        }
-                    }
-                }
-            }
-        }
-        
-        function agregarArticuloManual() {
-            const tablaArticulos = document.getElementById('tablaArticulosFactura');
-            if (!tablaArticulos) {
-                // Si no existe la tabla, crearla
-                mostrarFormularioArticulosManual();
-                return;
-            }
-            
-            const tbody = tablaArticulos.querySelector('tbody');
-            if (!tbody) return;
-            
-            // Eliminar mensaje de "no hay artículos" si existe
-            const mensajeVacio = tbody.querySelector('td[colspan="6"]');
-            if (mensajeVacio) {
-                mensajeVacio.parentElement.remove();
-            }
-            
-            // Encontrar el índice más alto
-            const filasExistentes = tbody.querySelectorAll('tr[data-articulo-index]');
-            let maxIndex = -1;
-            filasExistentes.forEach(fila => {
-                const idx = parseInt(fila.getAttribute('data-articulo-index'));
-                if (idx > maxIndex) maxIndex = idx;
-            });
-            const nuevoIndex = maxIndex + 1;
-            
-            // Crear nueva fila
-            const nuevaFila = document.createElement('tr');
-            nuevaFila.setAttribute('data-articulo-index', nuevoIndex);
-            nuevaFila.innerHTML = `
-                <td style="padding: 8px;">
-                    <input type="text" 
-                           name="articulo_descripcion_${nuevoIndex}" 
-                           value="" 
-                           placeholder="Descripción del artículo"
-                           style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 13px;">
-                </td>
-                <td style="padding: 8px;">
-                    <input type="number" 
-                           name="articulo_cantidad_${nuevoIndex}" 
-                           value="1" 
-                           step="0.01" 
-                           min="0"
-                           onchange="calcularTotalArticulo(${nuevoIndex})"
-                           style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 13px; text-align: center;">
-                </td>
-                <td style="padding: 8px;">
-                    <select name="articulo_unidad_${nuevoIndex}" 
-                            style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 13px;">
-                        <option value="ud" selected>ud</option>
-                        <option value="kg">kg</option>
-                        <option value="l">l</option>
-                        <option value="cajas">cajas</option>
-                        <option value="uds">uds</option>
-                    </select>
-                </td>
-                <td style="padding: 8px;">
-                    <input type="number" 
-                           name="articulo_precio_${nuevoIndex}" 
-                           value="" 
-                           step="0.01" 
-                           min="0"
-                           onchange="calcularTotalArticulo(${nuevoIndex})"
-                           placeholder="0.00"
-                           style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 13px; text-align: right;">
-                </td>
-                <td style="padding: 8px;">
-                    <input type="number" 
-                           name="articulo_total_${nuevoIndex}" 
-                           value="" 
-                           step="0.01" 
-                           min="0"
-                           placeholder="0.00"
-                           style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 13px; text-align: right; font-weight: 600;">
-                </td>
-                <td style="padding: 8px; text-align: center;">
-                    <button type="button" 
-                            onclick="eliminarArticulo(${nuevoIndex})" 
-                            style="padding: 4px 8px; background: #f56565; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;"
-                            title="Eliminar artículo">
-                        🗑️
-                    </button>
-                </td>
-            `;
-            
-            tbody.appendChild(nuevaFila);
-            
-            // Focus en el campo de descripción
-            const inputDescripcion = nuevaFila.querySelector('input[type="text"]');
-            if (inputDescripcion) {
-                inputDescripcion.focus();
-            }
-        }
-        
-        function mostrarFormularioArticulosManual() {
-            // Buscar el contenedor donde mostrar la tabla de artículos
-            const form = document.getElementById('formFacturaProcesada');
-            if (!form) return;
-            
-            // Buscar si ya existe un div de artículos para reemplazarlo
-            let divArticulos = form.querySelector('div[style*="background: #f0fff4"]');
-            if (!divArticulos) {
-                divArticulos = form.querySelector('div[style*="background: #fffaf0"]');
-            }
-            
-            if (divArticulos) {
-                // Crear la tabla de artículos
-                const nuevoHTML = `
-                    <div style="margin-top: 20px; background: #f0fff4; padding: 20px; border-radius: 10px; border: 2px solid #48bb78;">
-                        <h4 style="color: #48bb78; margin-bottom: 15px; font-size: 16px; display: flex; align-items: center; justify-content: space-between;">
-                            <span><img src="/static/icons/medical/package.svg" alt="Artículos" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 8px;"> Artículos de la Factura</span>
-                            <button type="button" onclick="agregarArticuloManual()" style="padding: 6px 12px; background: #48bb78; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 4px;">
-                                + Agregar Artículo
-                            </button>
-                        </h4>
-                        <p style="color: #2f855a; margin-bottom: 15px; font-size: 13px;">
-                            ℹ️ Agrega los artículos de esta factura manualmente.
-                        </p>
-                        
-                        <div style="overflow-x: auto;">
-                            <table class="data-table" id="tablaArticulosFactura" style="width: 100%; min-width: 600px;">
-                                <thead>
-                                    <tr style="background: #48bb78; color: white;">
-                                        <th style="padding: 10px; text-align: left;">Descripción</th>
-                                        <th style="padding: 10px; text-align: center; width: 80px;">Cantidad</th>
-                                        <th style="padding: 10px; text-align: center; width: 80px;">Unidad</th>
-                                        <th style="padding: 10px; text-align: right; width: 100px;">Precio Unit. (€)</th>
-                                        <th style="padding: 10px; text-align: right; width: 100px;">Total (€)</th>
-                                        <th style="padding: 10px; text-align: center; width: 60px;">Acción</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr><td colspan="6" style="text-align: center; padding: 20px; color: #999; font-style: italic;">No hay artículos. Usa "+ Agregar Artículo" para añadir.</td></tr>
-                                </tbody>
-                                <tfoot>
-                                    <tr style="background: #e6fffa; font-weight: 600;">
-                                        <td colspan="4" style="padding: 10px; text-align: right; color: #2f855a;">Total de Artículos:</td>
-                                        <td id="totalArticulosSum" style="padding: 10px; text-align: right; color: #2f855a; font-size: 16px;">0.00€</td>
-                                        <td></td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    </div>
-                `;
-                
-                divArticulos.outerHTML = nuevoHTML;
-                
-                // Agregar un artículo vacío automáticamente
-                setTimeout(() => agregarArticuloManual(), 100);
             }
         }
         
@@ -6776,7 +6409,7 @@
                             `;
                             
                             proveedoresResidencia.forEach(prov => {
-                                const estado = prov.activo ?
+                                const estado = prov.activo ? 
                                     '<img src="/static/icons/medical/check-circle.svg" alt="Activo" style="width: 16px; height: 16px; vertical-align: middle;">' :
                                     '<img src="/static/icons/medical/alert-circle.svg" alt="Inactivo" style="width: 16px; height: 16px; vertical-align: middle;">';
                                 
@@ -7748,60 +7381,6 @@
                     setTimeout(mostrar_boton_eliminar, 1000);
                     setTimeout(mostrar_boton_eliminar, 2000);
                     
-                    // ============================================================================
-                    // MOSTRAR ARTÍCULOS DE LA FACTURA SI EXISTEN
-                    // ============================================================================
-                    const seccionArticulos = document.getElementById('articulosSeccionPago');
-                    const contenidoArticulos = document.getElementById('articulosContenidoPago');
-                    
-                    if (pago.articulos && pago.articulos.length > 0 && seccionArticulos && contenidoArticulos) {
-                        console.log(`📦 Mostrando ${pago.articulos.length} artículos del pago`);
-                        
-                        let htmlArticulos = `
-                            <table class="data-table" style="width: 100%; font-size: 13px;">
-                                <thead>
-                                    <tr style="background: #48bb78; color: white;">
-                                        <th style="padding: 8px; text-align: left;">Descripción</th>
-                                        <th style="padding: 8px; text-align: center; width: 80px;">Cant.</th>
-                                        <th style="padding: 8px; text-align: center; width: 60px;">Unid.</th>
-                                        <th style="padding: 8px; text-align: right; width: 90px;">Precio Unit.</th>
-                                        <th style="padding: 8px; text-align: right; width: 90px;">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                        `;
-                        
-                        let totalArticulos = 0;
-                        pago.articulos.forEach(art => {
-                            totalArticulos += parseFloat(art.total) || 0;
-                            htmlArticulos += `
-                                <tr>
-                                    <td style="padding: 8px;">${art.descripcion || '-'}</td>
-                                    <td style="padding: 8px; text-align: center;">${art.cantidad || 1}</td>
-                                    <td style="padding: 8px; text-align: center;">${art.unidad || 'ud'}</td>
-                                    <td style="padding: 8px; text-align: right;">${art.precio_unitario ? art.precio_unitario.toFixed(2) + '€' : '-'}</td>
-                                    <td style="padding: 8px; text-align: right; font-weight: 600;">${art.total ? art.total.toFixed(2) + '€' : '-'}</td>
-                                </tr>
-                            `;
-                        });
-                        
-                        htmlArticulos += `
-                                </tbody>
-                                <tfoot>
-                                    <tr style="background: #e6fffa; font-weight: 600;">
-                                        <td colspan="4" style="padding: 10px; text-align: right; color: #2f855a;">Total:</td>
-                                        <td style="padding: 10px; text-align: right; color: #2f855a; font-size: 15px;">${totalArticulos.toFixed(2)}€</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        `;
-                        
-                        contenidoArticulos.innerHTML = htmlArticulos;
-                        seccionArticulos.style.display = 'block';
-                    } else if (seccionArticulos) {
-                        seccionArticulos.style.display = 'none';
-                    }
-                    
                     // Inicializar date pickers después de abrir el modal
                     try {
                         initializePagoProveedorDatePickers();
@@ -8509,7 +8088,7 @@
                             const fechaHoy = `${dia}/${mes}/${año}`;
                             fechaContratacionInput.value = fechaHoy;
                         }
-
+                        
                         flatpickrContratacion = flatpickr(fechaContratacionInput, {
                             dateFormat: 'd/m/Y',
                             locale: "es",
@@ -8519,7 +8098,7 @@
                     }
                 }
             }
-
+            
             // Si es el modal de agregar proveedor, cargar residencias desde la API
             if (modalId === 'modalProveedor') {
                 const idProveedor = document.getElementById('prov_id_proveedor');
@@ -10130,7 +9709,7 @@
                             appendTo: document.body
                         });
                     }
-
+                    
                     // Cambiar título del modal
                     const modalHeader = document.querySelector('#modalPersonal .modal-header h2');
                     if (modalHeader) {
@@ -10308,7 +9887,7 @@
                         
                         data.turnos_extra.forEach(t => {
                             const fechaFormateada = t.fecha ? fechaISOToEspanol(t.fecha) : '-';
-                            const estadoBadge = t.aprobado
+                            const estadoBadge = t.aprobado 
                                 ? '<span style="background: #48bb78; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><img src="/static/icons/medical/check-circle.svg" alt="Aprobado" style="width: 14px; height: 14px; filter: brightness(0) invert(1);"> Aprobado</span>'
                                 : '<span style="background: #ed8936; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><img src="/static/icons/medical/alert-circle.svg" alt="Pendiente" style="width: 14px; height: 14px; filter: brightness(0) invert(1);"> Pendiente</span>';
                             
@@ -11125,7 +10704,7 @@
             // Si es edición y hay contraseña, incluirla; si es creación, siempre incluirla
             if (password && password.trim()) {
                 data.password = password.trim();
-            }
+                }
             
             saveBtn.disabled = true;
             saveBtn.textContent = 'Guardando...';
@@ -11291,7 +10870,7 @@
                     `;
                 } else {
                     residencias.forEach(residencia => {
-                        const estadoBadge = residencia.activa
+                        const estadoBadge = residencia.activa 
                             ? '<span style="background: #28a745; color: white; padding: 4px 8px; border-radius: 12px; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; cursor: help;" title="Activa"><img src="/static/icons/medical/check-circle.svg" alt="Activa" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"></span>'
                             : '<span style="background: #dc3545; color: white; padding: 4px 8px; border-radius: 12px; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; cursor: help;" title="Inactiva"><img src="/static/icons/medical/alert-circle.svg" alt="Inactiva" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"></span>';
                         
@@ -11447,11 +11026,11 @@
                     
                     container.innerHTML = receivers.map(r => `
                         <div style="padding: 12px; background: #f8f9fa; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #667eea;">
-                            <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${r.nombre}</div>
-                            ${r.nif_cif ? `<div style="font-size: 12px; color: #666;">NIF/CIF: ${r.nif_cif}</div>` : ''}
-                            ${r.direccion ? `<div style="font-size: 12px; color: #666;">${r.direccion}</div>` : ''}
+                                <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${r.nombre}</div>
+                                ${r.nif_cif ? `<div style="font-size: 12px; color: #666;">NIF/CIF: ${r.nif_cif}</div>` : ''}
+                                ${r.direccion ? `<div style="font-size: 12px; color: #666;">${r.direccion}</div>` : ''}
                             <button type="button" onclick="eliminarReceiverResidencia(${r.id_receiver}, '${r.nombre.replace(/'/g, "\\'")}')" style="padding: 6px 12px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; margin-top: 8px;">Eliminar</button>
-                            ${r.cuenta_bancaria ? `<div style="font-size: 12px; color: #667eea; font-weight: 500; margin-top: 4px;">IBAN: ${r.cuenta_bancaria}</div>` : ''}
+                                ${r.cuenta_bancaria ? `<div style="font-size: 12px; color: #667eea; font-weight: 500; margin-top: 4px;">IBAN: ${r.cuenta_bancaria}</div>` : ''}
                         </div>
                     `).join('');
                 } else {

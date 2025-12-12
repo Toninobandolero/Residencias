@@ -4232,52 +4232,6 @@ def crear_pago_proveedor():
             
             id_pago = cursor.fetchone()[0]
             
-            # ============================================================================
-            # GUARDAR ARTÍCULOS DE LA FACTURA (SI EXISTEN)
-            # ============================================================================
-            articulos = data.get('articulos', [])
-            if articulos and isinstance(articulos, list):
-                app.logger.info(f"📦 Guardando {len(articulos)} artículos para pago {id_pago}...")
-                
-                # Verificar si existe la tabla articulo_factura
-                cursor.execute("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_schema = 'public' 
-                        AND table_name = 'articulo_factura'
-                    )
-                """)
-                tabla_articulos_existe = cursor.fetchone()[0]
-                
-                if tabla_articulos_existe:
-                    articulos_guardados = 0
-                    for articulo in articulos:
-                        try:
-                            cursor.execute("""
-                                INSERT INTO articulo_factura (
-                                    pago_proveedor_id, descripcion, cantidad, unidad,
-                                    precio_unitario, subtotal, iva_porcentaje, iva_importe, total
-                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            """, (
-                                id_pago,
-                                articulo.get('descripcion', ''),
-                                articulo.get('cantidad', 1),
-                                articulo.get('unidad', 'ud'),
-                                articulo.get('precio_unitario'),
-                                articulo.get('subtotal', articulo.get('total', 0)),  # subtotal si existe, sino total
-                                articulo.get('iva_porcentaje'),
-                                articulo.get('iva_importe'),
-                                articulo.get('total', 0)
-                            ))
-                            articulos_guardados += 1
-                        except Exception as e:
-                            app.logger.warning(f"⚠️ No se pudo guardar artículo '{articulo.get('descripcion', 'sin descripción')}': {str(e)}")
-                            continue
-                    
-                    app.logger.info(f"✅ {articulos_guardados}/{len(articulos)} artículos guardados exitosamente")
-                else:
-                    app.logger.warning("⚠️ Tabla articulo_factura no existe. Ejecuta ejecutar_articulos_factura_table.py")
-            
             # Si hay factura_blob_path, también guardar en documentación
             factura_blob_path = data.get('factura_blob_path')
             if factura_blob_path:
@@ -4449,54 +4403,6 @@ def obtener_pago_proveedor(id_pago):
                     respuesta['factura_url'] = None
             else:
                 app.logger.warning(f"No se puede obtener factura_blob_path: tiene_columna_factura={tiene_columna_factura}, len(pago)={len(pago) if pago else 0}")
-            
-            # ============================================================================
-            # OBTENER ARTÍCULOS DE LA FACTURA (SI EXISTEN)
-            # ============================================================================
-            try:
-                # Verificar si existe la tabla articulo_factura
-                cursor.execute("""
-                    SELECT EXISTS (
-                        SELECT FROM information_schema.tables 
-                        WHERE table_schema = 'public' 
-                        AND table_name = 'articulo_factura'
-                    )
-                """)
-                tabla_articulos_existe = cursor.fetchone()[0]
-                
-                if tabla_articulos_existe:
-                    cursor.execute("""
-                        SELECT id, descripcion, cantidad, unidad, precio_unitario,
-                               subtotal, iva_porcentaje, iva_importe, total, categoria, subcategoria
-                        FROM articulo_factura
-                        WHERE pago_proveedor_id = %s
-                        ORDER BY id
-                    """, (id_pago,))
-                    
-                    articulos_rows = cursor.fetchall()
-                    articulos = []
-                    for art in articulos_rows:
-                        articulos.append({
-                            'id': art[0],
-                            'descripcion': art[1],
-                            'cantidad': float(art[2]) if art[2] else 1,
-                            'unidad': art[3],
-                            'precio_unitario': float(art[4]) if art[4] else None,
-                            'subtotal': float(art[5]) if art[5] else 0,
-                            'iva_porcentaje': art[6],
-                            'iva_importe': float(art[7]) if art[7] else None,
-                            'total': float(art[8]) if art[8] else 0,
-                            'categoria': art[9],
-                            'subcategoria': art[10]
-                        })
-                    
-                    respuesta['articulos'] = articulos
-                    app.logger.info(f"✅ {len(articulos)} artículos encontrados para pago {id_pago}")
-                else:
-                    respuesta['articulos'] = []
-            except Exception as e:
-                app.logger.warning(f"⚠️ Error al obtener artículos: {str(e)}")
-                respuesta['articulos'] = []
             
             return jsonify(respuesta), 200
             
@@ -4943,70 +4849,6 @@ def procesar_factura():
                             app.logger.info(f"✅ PROVEEDOR encontrado: {proveedor}")
                             break
                 
-                # 8. ARTÍCULOS/LÍNEAS DE DETALLE (NUEVO)
-                app.logger.info("📊 Buscando ARTÍCULOS/LÍNEAS DE DETALLE...")
-                articulos_extraidos = []
-                
-                # Patrones comunes de líneas de artículos en facturas españolas:
-                # "Verduras frescas    2.5  kg   15,50   38,75"
-                # "Gel desinfectante   3    ud   12,30   36,90"
-                # Patrón: [descripción] [cantidad] [unidad opcional] [precio] [total]
-                
-                patron_linea_articulo = re.compile(
-                    r'([A-Za-zÁÉÍÓÚáéíóúÑñ\s]{3,40})'  # Descripción (letras y espacios)
-                    r'\s+'                              # Espacios
-                    r'([\d,\.]+)'                       # Cantidad o precio
-                    r'\s*'
-                    r'(kg|ud|unid|l|litros?|cajas?|uds?|u\.?)?'  # Unidad opcional
-                    r'\s+'
-                    r'([\d.,]+)'                        # Precio unitario
-                    r'\s+'
-                    r'([\d.,]+)',                       # Total de la línea
-                    re.IGNORECASE | re.MULTILINE
-                )
-                
-                # Buscar en el texto (evitar encabezados y pie de factura)
-                lineas_texto = texto_completo.split('\n')
-                for i, linea in enumerate(lineas_texto):
-                    # Evitar líneas con palabras clave de encabezado/totales
-                    if any(palabra in linea.lower() for palabra in ['total', 'subtotal', 'base', 'iva', 'factura', 'nif', 'cif', 'fecha']):
-                        continue
-                    
-                    match = patron_linea_articulo.search(linea)
-                    if match:
-                        try:
-                            descripcion = match.group(1).strip()
-                            cantidad_str = match.group(2)
-                            unidad = match.group(3) or 'ud'
-                            precio_str = match.group(4)
-                            total_str = match.group(5)
-                            
-                            cantidad = parsear_monto_espanol(cantidad_str)
-                            precio = parsear_monto_espanol(precio_str)
-                            total = parsear_monto_espanol(total_str)
-                            
-                            if cantidad and precio and total:
-                                # Validar coherencia: cantidad * precio ≈ total
-                                calculado = round(cantidad * precio, 2)
-                                if abs(calculado - total) < 1.0:  # Tolerancia 1€
-                                    articulo = {
-                                        'descripcion': descripcion,
-                                        'cantidad': cantidad,
-                                        'unidad': unidad.lower(),
-                                        'precio_unitario': precio,
-                                        'total': total
-                                    }
-                                    articulos_extraidos.append(articulo)
-                                    app.logger.info(f"✅ ARTÍCULO encontrado: {descripcion} | {cantidad} {unidad} × {precio}€ = {total}€")
-                        except Exception as e:
-                            app.logger.debug(f"No se pudo parsear línea como artículo: {linea[:50]}... ({str(e)})")
-                            continue
-                
-                if articulos_extraidos:
-                    app.logger.info(f"✅ Total de {len(articulos_extraidos)} artículos extraídos de la factura")
-                else:
-                    app.logger.info("ℹ️ No se encontraron artículos detallados en esta factura (o formato no reconocido)")
-                
                 # VALIDACIÓN DE COHERENCIA
                 app.logger.info("🔍 Validando coherencia de datos extraídos...")
                 if total_con_iva and base_imponible and iva_importe:
@@ -5040,11 +4882,6 @@ def procesar_factura():
                     datos_extraidos['iva'] = round(iva_importe, 2)
                 if iva_porcentaje_encontrado:
                     datos_extraidos['iva_porcentaje'] = iva_porcentaje_encontrado
-                
-                # Agregar artículos extraídos
-                if articulos_extraidos:
-                    datos_extraidos['articulos'] = articulos_extraidos
-                    app.logger.info(f"📦 Se incluirán {len(articulos_extraidos)} artículos en la respuesta")
                 
                 app.logger.info(f"📊 Datos extraídos con nueva estrategia: {list(datos_extraidos.keys())}")
                 
@@ -5640,37 +5477,7 @@ def procesar_factura():
                             datos_extraidos['metodo_pago'] = 'cheque'
                         app.logger.info(f"✅ Términos de pago (Invoice Parser): {payment_terms}")
                     
-                    # 11. Concepto / Descripción de líneas de factura: Usar mapeo configurado
-                    concepto_mapeado = extraer_campo_con_mapeo('concepto', ['line_item', 'line_item_description', 'line_item_description_line_item_description'])
-                    
-                    if concepto_mapeado:
-                        datos_extraidos['concepto'] = str(concepto_mapeado).strip()[:500]
-                        app.logger.info(f"✅ Concepto (Invoice Parser): {datos_extraidos['concepto']}")
-                    else:
-                        # Si no encontramos con el mapeo, buscar manualmente
-                        line_items = []
-                        line_descriptions = []
-                        for entity in document.entities:
-                            if entity.type_ in ['line_item', 'line_item_description', 'line_item_description_line_item_description']:
-                                valor = None
-                                if hasattr(entity, 'mention_text') and entity.mention_text:
-                                    valor = entity.mention_text
-                                elif hasattr(entity, 'text_anchor') and entity.text_anchor and entity.text_anchor.text_segments:
-                                    for segment in entity.text_anchor.text_segments:
-                                        start_index = segment.start_index if hasattr(segment, 'start_index') else 0
-                                        end_index = segment.end_index if hasattr(segment, 'end_index') else len(texto_completo)
-                                        if end_index > start_index:
-                                            valor = texto_completo[start_index:end_index]
-                                            break
-                                if valor:
-                                    line_descriptions.append(str(valor).strip())
-                        
-                        if line_descriptions and 'concepto' not in datos_extraidos:
-                            # Usar la primera descripción o concatenar las primeras (máximo 3)
-                            concepto = line_descriptions[0] if len(line_descriptions) == 1 else ', '.join(line_descriptions[:3])
-                            datos_extraidos['concepto'] = concepto[:500]
-                            app.logger.info(f"✅ Concepto (Invoice Parser): {datos_extraidos['concepto']}")
-                    
+                    # Solo extraemos datos básicos de factura (no artículos/líneas)
                     app.logger.info(f"📊 Resumen datos extraídos con Invoice Parser: {len([k for k in datos_extraidos.keys() if k != 'texto_completo'])} campos")
                 
                 # NO USAR REGEX - Confiar completamente en Invoice Parser
