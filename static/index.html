@@ -821,7 +821,17 @@
             input, select, textarea {
                 max-width: 100% !important;
                 width: 100% !important;
+                min-width: 0 !important;
                 box-sizing: border-box !important;
+                -webkit-box-sizing: border-box !important;
+                -moz-box-sizing: border-box !important;
+            }
+
+            /* Inputs de fecha con mismo ancho que el resto */
+            input[type="date"] {
+                -webkit-appearance: none !important;
+                -moz-appearance: none !important;
+                appearance: none !important;
             }
         }
         
@@ -857,7 +867,19 @@
                 padding: 8px 10px !important;
                 max-width: 100% !important;
                 width: 100% !important;
+                min-width: 0 !important;
                 box-sizing: border-box !important;
+                -webkit-box-sizing: border-box !important;
+                -moz-box-sizing: border-box !important;
+            }
+
+            /* Normalizar inputs de fecha en iPhone */
+            input[type="date"] {
+                -webkit-appearance: none !important;
+                -moz-appearance: none !important;
+                appearance: none !important;
+                padding: 8px 10px !important;
+                font-size: 13px !important;
             }
         }
 
@@ -1034,12 +1056,25 @@
             input[type="date"],
             input[type="tel"],
             input[type="email"],
+            input[type="password"],
             select,
             textarea {
                 font-size: 13px !important;
                 padding: 8px 10px !important;
                 width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
                 box-sizing: border-box !important;
+                -webkit-box-sizing: border-box !important;
+                -moz-box-sizing: border-box !important;
+            }
+
+            /* Forzar mismo ancho para inputs de fecha en iPhone */
+            input[type="date"] {
+                -webkit-appearance: none !important;
+                -moz-appearance: none !important;
+                appearance: none !important;
+                padding: 8px 10px !important;
             }
 
             /* Labels más compactos */
@@ -1141,6 +1176,29 @@
         input[type="date"]::-webkit-calendar-picker-indicator {
             cursor: pointer;
             z-index: 1;
+        }
+
+        /* Forzar mismo ancho para TODOS los inputs incluyendo fechas */
+        input[type="text"],
+        input[type="number"],
+        input[type="date"],
+        input[type="tel"],
+        input[type="email"],
+        input[type="password"],
+        select,
+        textarea {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+            -webkit-box-sizing: border-box !important;
+            -moz-box-sizing: border-box !important;
+        }
+
+        /* Específico para inputs de fecha - eliminar padding extra del navegador */
+        input[type="date"] {
+            -webkit-appearance: none !important;
+            -moz-appearance: none !important;
+            appearance: none !important;
         }
     </style>
 </head>
@@ -5465,6 +5523,14 @@
             const pdfUrl = resultado.pdf_url || '';
             const idResidenciaDetectada = resultado.id_residencia_detectada || null;
             const entidadesDisponibles = resultado.entidades_disponibles || {};
+
+            // Log para debugging
+            console.log('📄 PDF Debug Info:', {
+                blobPath: blobPath,
+                pdfUrl: pdfUrl,
+                pdfUrlLength: pdfUrl ? pdfUrl.length : 0,
+                hasPdfUrl: !!pdfUrl
+            });
             
             // Guardar entidades disponibles para el mapeo
             window.entidadesDisponiblesFactura = entidadesDisponibles;
@@ -5507,21 +5573,26 @@
             };
             
             let html = `
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                <div style="display: grid; grid-template-columns: ${pdfUrl ? '1fr 1fr' : '1fr'}; gap: 20px; margin-bottom: 20px;">
                     <div>
                         <h3 style="color: #667eea; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/check-circle.svg" alt="OK" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 6px;"> Factura Procesada</h3>
                         <p style="color: #666; margin-bottom: 10px;"><strong>Archivo:</strong> ${nombreArchivo}</p>
                         ${pdfUrl ? `
                             <div style="margin-top: 15px;">
                                 <button onclick="window.open('${pdfUrl}', '_blank')" style="padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;">
-                                    📄 Abrir PDF en Nueva Pestaña
+                                    <img src="/static/icons/medical/file-medical.svg" alt="PDF" style="width: 16px; height: 16px; filter: brightness(0) invert(1);"> Abrir PDF en Nueva Pestaña
                                 </button>
                             </div>
-                        ` : ''}
+                        ` : `
+                            <div style="margin-top: 15px; padding: 12px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 6px;">
+                                <p style="color: #856404; margin: 0; font-size: 14px;"><strong>⚠️ Vista previa no disponible</strong></p>
+                                <p style="color: #856404; margin: 5px 0 0 0; font-size: 13px;">El documento se guardó correctamente pero la vista previa no está disponible en este momento.</p>
+                            </div>
+                        `}
                     </div>
                     ${pdfUrl ? `
                     <div style="border: 2px solid #e0e0e0; border-radius: 8px; overflow: hidden; height: 400px;">
-                        <iframe src="${pdfUrl}" style="width: 100%; height: 100%; border: none;"></iframe>
+                        <iframe src="${pdfUrl}" style="width: 100%; height: 100%; border: none;" title="Vista previa de la factura"></iframe>
                     </div>
                     ` : ''}
                 </div>

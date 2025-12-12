@@ -4232,6 +4232,52 @@ def crear_pago_proveedor():
             
             id_pago = cursor.fetchone()[0]
             
+            # ============================================================================
+            # GUARDAR ARTÍCULOS DE LA FACTURA (SI EXISTEN)
+            # ============================================================================
+            articulos = data.get('articulos', [])
+            if articulos and isinstance(articulos, list):
+                app.logger.info(f"📦 Guardando {len(articulos)} artículos para pago {id_pago}...")
+                
+                # Verificar si existe la tabla articulo_factura
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'articulo_factura'
+                    )
+                """)
+                tabla_articulos_existe = cursor.fetchone()[0]
+                
+                if tabla_articulos_existe:
+                    articulos_guardados = 0
+                    for articulo in articulos:
+                        try:
+                            cursor.execute("""
+                                INSERT INTO articulo_factura (
+                                    pago_proveedor_id, descripcion, cantidad, unidad,
+                                    precio_unitario, subtotal, iva_porcentaje, iva_importe, total
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """, (
+                                id_pago,
+                                articulo.get('descripcion', ''),
+                                articulo.get('cantidad', 1),
+                                articulo.get('unidad', 'ud'),
+                                articulo.get('precio_unitario'),
+                                articulo.get('subtotal', articulo.get('total', 0)),  # subtotal si existe, sino total
+                                articulo.get('iva_porcentaje'),
+                                articulo.get('iva_importe'),
+                                articulo.get('total', 0)
+                            ))
+                            articulos_guardados += 1
+                        except Exception as e:
+                            app.logger.warning(f"⚠️ No se pudo guardar artículo '{articulo.get('descripcion', 'sin descripción')}': {str(e)}")
+                            continue
+                    
+                    app.logger.info(f"✅ {articulos_guardados}/{len(articulos)} artículos guardados exitosamente")
+                else:
+                    app.logger.warning("⚠️ Tabla articulo_factura no existe. Ejecuta ejecutar_articulos_factura_table.py")
+            
             # Si hay factura_blob_path, también guardar en documentación
             factura_blob_path = data.get('factura_blob_path')
             if factura_blob_path:
@@ -4403,6 +4449,54 @@ def obtener_pago_proveedor(id_pago):
                     respuesta['factura_url'] = None
             else:
                 app.logger.warning(f"No se puede obtener factura_blob_path: tiene_columna_factura={tiene_columna_factura}, len(pago)={len(pago) if pago else 0}")
+            
+            # ============================================================================
+            # OBTENER ARTÍCULOS DE LA FACTURA (SI EXISTEN)
+            # ============================================================================
+            try:
+                # Verificar si existe la tabla articulo_factura
+                cursor.execute("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'articulo_factura'
+                    )
+                """)
+                tabla_articulos_existe = cursor.fetchone()[0]
+                
+                if tabla_articulos_existe:
+                    cursor.execute("""
+                        SELECT id, descripcion, cantidad, unidad, precio_unitario,
+                               subtotal, iva_porcentaje, iva_importe, total, categoria, subcategoria
+                        FROM articulo_factura
+                        WHERE pago_proveedor_id = %s
+                        ORDER BY id
+                    """, (id_pago,))
+                    
+                    articulos_rows = cursor.fetchall()
+                    articulos = []
+                    for art in articulos_rows:
+                        articulos.append({
+                            'id': art[0],
+                            'descripcion': art[1],
+                            'cantidad': float(art[2]) if art[2] else 1,
+                            'unidad': art[3],
+                            'precio_unitario': float(art[4]) if art[4] else None,
+                            'subtotal': float(art[5]) if art[5] else 0,
+                            'iva_porcentaje': art[6],
+                            'iva_importe': float(art[7]) if art[7] else None,
+                            'total': float(art[8]) if art[8] else 0,
+                            'categoria': art[9],
+                            'subcategoria': art[10]
+                        })
+                    
+                    respuesta['articulos'] = articulos
+                    app.logger.info(f"✅ {len(articulos)} artículos encontrados para pago {id_pago}")
+                else:
+                    respuesta['articulos'] = []
+            except Exception as e:
+                app.logger.warning(f"⚠️ Error al obtener artículos: {str(e)}")
+                respuesta['articulos'] = []
             
             return jsonify(respuesta), 200
             
@@ -4624,9 +4718,345 @@ def procesar_factura():
                 
                 import re
                 
-                # EXTRAER DATOS ESTRUCTURADOS DEL INVOICE PARSER
+                # ============================================================================
+                # NUEVA ESTRATEGIA: BÚSQUEDA INTELIGENTE EN TEXTO OCR
+                # Ignoramos los campos estructurados de Invoice Parser (son ambiguos)
+                # Buscamos directamente en el texto con conocimiento del dominio español
+                # ============================================================================
+                
+                # ============================================================================
+                # FUNCIONES DE BÚSQUEDA INTELIGENTE CON CONOCIMIENTO DEL DOMINIO
+                # ============================================================================
+                
+                def buscar_en_texto_con_patrones(texto, patrones, nombre_campo="campo"):
+                    """
+                    Busca un valor numérico en el texto usando múltiples patrones.
+                    Devuelve el primer match válido encontrado.
+                    """
+                    for patron in patrones:
+                        matches = re.finditer(patron, texto, re.IGNORECASE | re.MULTILINE)
+                        for match in matches:
+                            try:
+                                valor_str = match.group(1)
+                                valor = parsear_monto_espanol(valor_str)
+                                if valor and valor > 0:
+                                    app.logger.info(f"✅ {nombre_campo} encontrado: {valor} (patrón: '{patron[:50]}...', texto: '{valor_str}')")
+                                    return valor
+                            except:
+                                continue
+                    return None
+                
+                # FUNCIÓN MEJORADA DE PARSING DE NÚMEROS
+                def parsear_monto_espanol(valor_str):
+                    """
+                    Parsea un string de monto manejando formatos españoles Y casos de la IA.
+                    
+                    PROBLEMA: Document AI devuelve mention_text en formato mixto:
+                    - '241,80' (español) → a veces llega como '241.8' (punto decimal)
+                    - '2.418,50' (español con miles)
+                    
+                    Ejemplos:
+                    - "241,80" → 241.80
+                    - "241.8" → 241.8 (de la IA, punto decimal)
+                    - "241.80" → 241.80 (de la IA, punto decimal)
+                    - "2.418,50" → 2418.50 (español, miles + decimales)
+                    - "15234" → 15234.0
+                    """
+                    if not valor_str or not isinstance(valor_str, str):
+                        return None
+                    
+                    # Limpiar espacios, símbolos de moneda
+                    cleaned = valor_str.replace('€', '').replace('EUR', '').replace(' ', '').strip()
+                    
+                    # Sin separadores → número simple
+                    if ',' not in cleaned and '.' not in cleaned:
+                        try:
+                            return float(cleaned)
+                        except:
+                            return None
+                    
+                    # Tiene coma → formato español clásico
+                    if ',' in cleaned:
+                        # Quitar puntos (miles) y cambiar coma por punto (decimal)
+                        cleaned = cleaned.replace('.', '').replace(',', '.')
+                        try:
+                            return float(cleaned)
+                        except:
+                            return None
+                    
+                    # Solo tiene punto, sin coma → ambiguo
+                    # Puede ser:
+                    # - Decimal de la IA: '241.8' → 241.8
+                    # - Miles español: '2.418' → 2418.0
+                    if '.' in cleaned:
+                        partes = cleaned.split('.')
+                        if len(partes) == 2:
+                            parte_entera, parte_decimal = partes
+                            # Si la parte decimal tiene ≤2 dígitos → probablemente es decimal
+                            if len(parte_decimal) <= 2:
+                                # Es decimal: '241.8' → 241.8
+                                try:
+                                    return float(cleaned)
+                                except:
+                                    return None
+                            else:
+                                # Es miles: '2.418' → 2418
+                                cleaned = cleaned.replace('.', '')
+                                try:
+                                    return float(cleaned)
+                                except:
+                                    return None
+                    
+                    # Fallback
+                    try:
+                        return float(cleaned)
+                    except:
+                        return None
+                
+                # ============================================================================
+                # EXTRACCIÓN DIRECTA DEL TEXTO OCR (NUEVA ESTRATEGIA)
+                # ============================================================================
+                
+                app.logger.info("🎯 Iniciando extracción DIRECTA del texto OCR con patrones específicos...")
+                
+                # 1. TOTAL CON IVA (el más importante)
+                app.logger.info("📊 Buscando TOTAL con IVA...")
+                patrones_total = [
+                    r'total\s+facturat?[:\s]+([\d.,]+)',
+                    r'importe\s+total[:\s]+([\d.,]+)',
+                    r'total[:\s]+([\d.,]+)\s*€',
+                    r'total[:\s]+([\d.,]+)\s*\(',  # "241,80 (Euros"
+                    r'importe[:\s]+([\d.,]+)\s*€',
+                ]
+                total_con_iva = buscar_en_texto_con_patrones(texto_completo, patrones_total, "TOTAL CON IVA")
+                
+                # 2. BASE IMPONIBLE
+                app.logger.info("📊 Buscando BASE IMPONIBLE...")
+                patrones_base = [
+                    r'base\s+imp(?:onible)?[:\.\s]+([\d.,]+)',
+                    r'neto\s+fact[:\.\s]+([\d.,]+)',
+                    r'base[:\s]+([\d.,]+)\s*€',
+                    r'total\s+neto[:\s]+([\d.,]+)',
+                ]
+                base_imponible = buscar_en_texto_con_patrones(texto_completo, patrones_base, "BASE IMPONIBLE")
+                
+                # 3. IMPORTE DE IVA (no porcentaje)
+                app.logger.info("📊 Buscando IMPORTE DE IVA...")
+                patrones_iva_importe = [
+                    r'imp\.?\s*iva[:\s]+([\d.,]+)',
+                    r'importe\s+iva[:\s]+([\d.,]+)',
+                    r'cuota\s+iva[:\s]+([\d.,]+)',
+                    r'iva[:\s]+([\d.,]+)\s*€',
+                ]
+                iva_importe = buscar_en_texto_con_patrones(texto_completo, patrones_iva_importe, "IMPORTE IVA")
+                
+                # 4. PORCENTAJE DE IVA
+                app.logger.info("📊 Buscando PORCENTAJE DE IVA...")
+                patrones_iva_porcentaje = [
+                    r'%\s*iva[:\s]+([\d,]+)',
+                    r'iva[:\s]+([\d,]+)\s*%',
+                    r'tipo\s+iva[:\s]+([\d,]+)',
+                ]
+                iva_porcentaje_encontrado = None
+                for patron in patrones_iva_porcentaje:
+                    match = re.search(patron, texto_completo, re.IGNORECASE)
+                    if match:
+                        try:
+                            valor_str = match.group(1).replace(',', '.')
+                            valor = float(valor_str)
+                            # Validar que sea un porcentaje válido en España
+                            if valor in [4, 10, 21]:
+                                iva_porcentaje_encontrado = int(valor)
+                                app.logger.info(f"✅ PORCENTAJE IVA encontrado: {iva_porcentaje_encontrado}% (texto: '{valor_str}')")
+                                break
+                            elif 0 < valor < 1:  # Formato decimal: 0.21 → 21%
+                                valor_convertido = int(valor * 100)
+                                if valor_convertido in [4, 10, 21]:
+                                    iva_porcentaje_encontrado = valor_convertido
+                                    app.logger.info(f"✅ PORCENTAJE IVA encontrado y convertido: {iva_porcentaje_encontrado}% (texto: '{valor_str}')")
+                                    break
+                        except:
+                            continue
+                
+                # Si no encontramos el porcentaje, calcularlo desde base e IVA
+                if not iva_porcentaje_encontrado and base_imponible and iva_importe:
+                    porcentaje_calculado = (iva_importe / base_imponible) * 100
+                    # Redondear al porcentaje español más cercano
+                    porcentajes_validos = [4, 10, 21]
+                    iva_porcentaje_encontrado = min(porcentajes_validos, key=lambda x: abs(x - porcentaje_calculado))
+                    app.logger.info(f"✅ PORCENTAJE IVA calculado: {iva_porcentaje_encontrado}% (desde importe/base: {porcentaje_calculado:.2f}%)")
+                
+                # 5. NÚMERO DE FACTURA
+                app.logger.info("📊 Buscando NÚMERO DE FACTURA...")
+                patrones_factura = [
+                    r'factura\s+n[°º\.]?\s*[:\s]*([\w\-/]+)',
+                    r'n[°º]\s*factura[:\s]*([\w\-/]+)',
+                    r'fact(?:ura)?[:\s]*([\d\-/A-Z]+)',
+                ]
+                numero_factura = None
+                for patron in patrones_factura:
+                    match = re.search(patron, texto_completo, re.IGNORECASE)
+                    if match:
+                        numero_factura = match.group(1).strip()
+                        app.logger.info(f"✅ NÚMERO FACTURA encontrado: {numero_factura}")
+                        break
+                
+                # 6. FECHA
+                app.logger.info("📊 Buscando FECHA...")
+                patrones_fecha = [
+                    r'fecha[:\s]+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
+                    r'(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
+                ]
+                fecha_factura = None
+                for patron in patrones_fecha:
+                    match = re.search(patron, texto_completo, re.IGNORECASE)
+                    if match:
+                        fecha_str = match.group(1)
+                        try:
+                            # Convertir a formato ISO
+                            from datetime import datetime
+                            for fmt in ['%d-%m-%Y', '%d/%m/%Y', '%d-%m-%y', '%d/%m/%y']:
+                                try:
+                                    fecha_obj = datetime.strptime(fecha_str, fmt)
+                                    fecha_factura = fecha_obj.strftime('%Y-%m-%d')
+                                    app.logger.info(f"✅ FECHA encontrada: {fecha_factura} (texto: '{fecha_str}')")
+                                    break
+                                except:
+                                    continue
+                            if fecha_factura:
+                                break
+                        except:
+                            continue
+                
+                # 7. PROVEEDOR (nombre)
+                app.logger.info("📊 Buscando PROVEEDOR...")
+                # Buscar en las primeras líneas (usualmente está al principio)
+                primeras_lineas = '\n'.join(texto_completo.split('\n')[:10])
+                proveedor = None
+                # Buscar líneas con texto (sin números ni símbolos)
+                for linea en primeras_lineas.split('\n'):
+                    linea_limpia = linea.strip()
+                    if linea_limpia and len(linea_limpia) > 3:
+                        # Si tiene principalmente letras y espacios
+                        if sum(c.isalpha() or c.isspace() for c in linea_limpia) / len(linea_limpia) > 0.7:
+                            proveedor = linea_limpia
+                            app.logger.info(f"✅ PROVEEDOR encontrado: {proveedor}")
+                            break
+                
+                # 8. ARTÍCULOS/LÍNEAS DE DETALLE (NUEVO)
+                app.logger.info("📊 Buscando ARTÍCULOS/LÍNEAS DE DETALLE...")
+                articulos_extraidos = []
+                
+                # Patrones comunes de líneas de artículos en facturas españolas:
+                # "Verduras frescas    2.5  kg   15,50   38,75"
+                # "Gel desinfectante   3    ud   12,30   36,90"
+                # Patrón: [descripción] [cantidad] [unidad opcional] [precio] [total]
+                
+                patron_linea_articulo = re.compile(
+                    r'([A-Za-zÁÉÍÓÚáéíóúÑñ\s]{3,40})'  # Descripción (letras y espacios)
+                    r'\s+'                              # Espacios
+                    r'([\d,\.]+)'                       # Cantidad o precio
+                    r'\s*'
+                    r'(kg|ud|unid|l|litros?|cajas?|uds?|u\.?)?'  # Unidad opcional
+                    r'\s+'
+                    r'([\d.,]+)'                        # Precio unitario
+                    r'\s+'
+                    r'([\d.,]+)',                       # Total de la línea
+                    re.IGNORECASE | re.MULTILINE
+                )
+                
+                # Buscar en el texto (evitar encabezados y pie de factura)
+                lineas_texto = texto_completo.split('\n')
+                for i, linea in enumerate(lineas_texto):
+                    # Evitar líneas con palabras clave de encabezado/totales
+                    if any(palabra in linea.lower() for palabra in ['total', 'subtotal', 'base', 'iva', 'factura', 'nif', 'cif', 'fecha']):
+                        continue
+                    
+                    match = patron_linea_articulo.search(linea)
+                    if match:
+                        try:
+                            descripcion = match.group(1).strip()
+                            cantidad_str = match.group(2)
+                            unidad = match.group(3) or 'ud'
+                            precio_str = match.group(4)
+                            total_str = match.group(5)
+                            
+                            cantidad = parsear_monto_espanol(cantidad_str)
+                            precio = parsear_monto_espanol(precio_str)
+                            total = parsear_monto_espanol(total_str)
+                            
+                            if cantidad and precio and total:
+                                # Validar coherencia: cantidad * precio ≈ total
+                                calculado = round(cantidad * precio, 2)
+                                if abs(calculado - total) < 1.0:  # Tolerancia 1€
+                                    articulo = {
+                                        'descripcion': descripcion,
+                                        'cantidad': cantidad,
+                                        'unidad': unidad.lower(),
+                                        'precio_unitario': precio,
+                                        'total': total
+                                    }
+                                    articulos_extraidos.append(articulo)
+                                    app.logger.info(f"✅ ARTÍCULO encontrado: {descripcion} | {cantidad} {unidad} × {precio}€ = {total}€")
+                        except Exception as e:
+                            app.logger.debug(f"No se pudo parsear línea como artículo: {linea[:50]}... ({str(e)})")
+                            continue
+                
+                if articulos_extraidos:
+                    app.logger.info(f"✅ Total de {len(articulos_extraidos)} artículos extraídos de la factura")
+                else:
+                    app.logger.info("ℹ️ No se encontraron artículos detallados en esta factura (o formato no reconocido)")
+                
+                # VALIDACIÓN DE COHERENCIA
+                app.logger.info("🔍 Validando coherencia de datos extraídos...")
+                if total_con_iva and base_imponible and iva_importe:
+                    suma_calculada = round(base_imponible + iva_importe, 2)
+                    diferencia = abs(suma_calculada - total_con_iva)
+                    if diferencia <= 0.50:
+                        app.logger.info(f"✅ COHERENCIA OK: Base ({base_imponible}) + IVA ({iva_importe}) = {suma_calculada} ≈ Total ({total_con_iva}). Dif: {diferencia}€")
+                    else:
+                        app.logger.warning(f"⚠️ INCOHERENCIA: Base ({base_imponible}) + IVA ({iva_importe}) = {suma_calculada} ≠ Total ({total_con_iva}). Dif: {diferencia}€")
+                
+                # Si no encontramos IVA pero tenemos total y base, calcularlo
+                if not iva_importe and total_con_iva and base_imponible:
+                    iva_importe = round(total_con_iva - base_imponible, 2)
+                    app.logger.info(f"✅ IVA calculado (Total - Base): {iva_importe}€")
+                
+                # Construir datos extraídos con la nueva estrategia
+                datos_extraidos = {}
+                if numero_factura:
+                    datos_extraidos['numero_factura'] = numero_factura
+                if fecha_factura:
+                    datos_extraidos['fecha_pago'] = fecha_factura
+                if proveedor:
+                    datos_extraidos['proveedor'] = proveedor
+                if total_con_iva:
+                    datos_extraidos['total_con_impuestos'] = round(total_con_iva, 2)
+                    datos_extraidos['monto'] = round(total_con_iva, 2)
+                if base_imponible:
+                    datos_extraidos['total'] = round(base_imponible, 2)
+                if iva_importe:
+                    datos_extraidos['impuestos'] = round(iva_importe, 2)
+                    datos_extraidos['iva'] = round(iva_importe, 2)
+                if iva_porcentaje_encontrado:
+                    datos_extraidos['iva_porcentaje'] = iva_porcentaje_encontrado
+                
+                # Agregar artículos extraídos
+                if articulos_extraidos:
+                    datos_extraidos['articulos'] = articulos_extraidos
+                    app.logger.info(f"📦 Se incluirán {len(articulos_extraidos)} artículos en la respuesta")
+                
+                app.logger.info(f"📊 Datos extraídos con nueva estrategia: {list(datos_extraidos.keys())}")
+                
+                # ============================================================================
+                # FALLBACK: Si falla la búsqueda directa, usar Invoice Parser
+                # ============================================================================
+                if not datos_extraidos or len(datos_extraidos) < 3:
+                    app.logger.warning("⚠️ Búsqueda directa no encontró suficientes datos, usando Invoice Parser como fallback...")
+                
+                # EXTRAER DATOS ESTRUCTURADOS DEL INVOICE PARSER (SOLO COMO FALLBACK)
                 # El Invoice Parser proporciona entidades estructuradas con campos específicos
-                if hasattr(document, 'entities') and document.entities:
+                if (not datos_extraidos or len(datos_extraidos) < 3) and hasattr(document, 'entities') and document.entities:
                     app.logger.info(f"Invoice Parser detectado. Extrayendo {len(document.entities)} entidades estructuradas...")
                     
                     # Log DETALLADO de todas las entidades disponibles para debugging
@@ -4862,21 +5292,20 @@ def procesar_factura():
                     
                     if total_amount:
                         try:
-                            # Si viene como texto (mention_text), convertir de formato español (38,22) a float
+                            # Usar función de parsing español
                             if isinstance(total_amount, str):
-                                # Limpiar y convertir formato español (coma como decimal)
-                                monto_str = str(total_amount).replace('.', '').replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
-                                total_con_impuestos = float(monto_str)
+                                total_con_impuestos = parsear_monto_espanol(total_amount)
                             elif isinstance(total_amount, (int, float)):
                                 total_con_impuestos = float(total_amount)
                             else:
-                                monto_str = str(total_amount).replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
-                                total_con_impuestos = float(monto_str)
+                                total_con_impuestos = parsear_monto_espanol(str(total_amount))
                             
-                            if total_con_impuestos > 0:
+                            if total_con_impuestos and total_con_impuestos > 0:
                                 datos_extraidos['total_con_impuestos'] = round(total_con_impuestos, 2)
                                 datos_extraidos['monto'] = round(total_con_impuestos, 2)
-                                app.logger.info(f"✅ Total con Impuestos extraído: {datos_extraidos['total_con_impuestos']}")
+                                app.logger.info(f"✅ Total con Impuestos extraído: {datos_extraidos['total_con_impuestos']} (original: '{total_amount}')")
+                            else:
+                                app.logger.warning(f"⚠️ parsear_monto_inteligente retornó None para '{total_amount}'")
                         except (ValueError, AttributeError, TypeError) as e:
                             app.logger.warning(f"No se pudo convertir total_amount '{total_amount}': {str(e)}")
                     else:
@@ -4895,12 +5324,12 @@ def procesar_factura():
                             match = re.search(patron, texto_lower, re.IGNORECASE)
                             if match:
                                 try:
-                                    valor_str = match.group(1).replace('.', '').replace(',', '.').strip()
-                                    total_encontrado = float(valor_str)
-                                    if total_encontrado > 0:
+                                    valor_str = match.group(1)
+                                    total_encontrado = parsear_monto_espanol(valor_str)
+                                    if total_encontrado and total_encontrado > 0:
                                         datos_extraidos['total_con_impuestos'] = round(total_encontrado, 2)
                                         datos_extraidos['monto'] = round(total_encontrado, 2)
-                                        app.logger.info(f"✅ Total encontrado por búsqueda de texto cerca de 'Total': {datos_extraidos['total_con_impuestos']}")
+                                        app.logger.info(f"✅ Total encontrado por búsqueda de texto cerca de 'Total': {datos_extraidos['total_con_impuestos']} (original: '{valor_str}')")
                                         break
                                 except (ValueError, AttributeError):
                                     continue
@@ -4933,20 +5362,22 @@ def procesar_factura():
                     
                     if tax_amount:
                         try:
-                            # Si viene como texto (mention_text), convertir de formato español (1,47) a float
+                            # Usar función de parsing español
                             if isinstance(tax_amount, str):
-                                # Limpiar y convertir formato español (coma como decimal)
-                                iva_str = str(tax_amount).replace('.', '').replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
-                                impuestos = float(iva_str)
+                                impuestos = parsear_monto_espanol(tax_amount)
                             elif isinstance(tax_amount, (int, float)):
                                 impuestos = float(tax_amount)
                             else:
-                                iva_str = str(tax_amount).replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
-                                impuestos = float(iva_str)
-                            if impuestos > 0:
-                                datos_extraidos['impuestos'] = round(impuestos, 2)
-                                datos_extraidos['iva'] = round(impuestos, 2)
-                                app.logger.info(f"✅ Impuestos/IVA extraído: {datos_extraidos['impuestos']}")
+                                impuestos = parsear_monto_espanol(str(tax_amount))
+                            
+                            if impuestos and impuestos > 0:
+                                # VALIDACIÓN: Si el valor es muy pequeño (< 1), probablemente sea porcentaje, no importe
+                                if impuestos < 1:
+                                    app.logger.warning(f"⚠️ tax_amount '{tax_amount}' es < 1 ({impuestos}), probablemente sea porcentaje, no importe. Se descarta.")
+                                else:
+                                    datos_extraidos['impuestos'] = round(impuestos, 2)
+                                    datos_extraidos['iva'] = round(impuestos, 2)
+                                    app.logger.info(f"✅ Impuestos/IVA extraído: {datos_extraidos['impuestos']} (original: '{tax_amount}')")
                         except (ValueError, AttributeError, TypeError) as e:
                             app.logger.warning(f"No se pudo convertir tax_amount '{tax_amount}': {str(e)}")
                     else:
@@ -5101,14 +5532,15 @@ def procesar_factura():
                     
                     if subtotal_amount:
                         try:
+                            # Usar función de parsing español
                             if isinstance(subtotal_amount, (int, float)):
                                 base_imponible = float(subtotal_amount)
                             else:
-                                base_str = str(subtotal_amount).replace(',', '.').replace('€', '').replace('EUR', '').replace(' ', '').strip()
-                                base_imponible = float(base_str)
-                            if base_imponible > 0:
+                                base_imponible = parsear_monto_espanol(str(subtotal_amount))
+                            
+                            if base_imponible and base_imponible > 0:
                                 datos_extraidos['total'] = round(base_imponible, 2)
-                                app.logger.info(f"✅ Base Imponible extraída: {datos_extraidos['total']}")
+                                app.logger.info(f"✅ Base Imponible extraída: {datos_extraidos['total']} (original: '{subtotal_amount}')")
                         except (ValueError, AttributeError, TypeError) as e:
                             app.logger.warning(f"No se pudo convertir base imponible '{subtotal_amount}': {str(e)}")
                     else:
@@ -5127,11 +5559,11 @@ def procesar_factura():
                             match = re.search(patron, texto_lower, re.IGNORECASE)
                             if match:
                                 try:
-                                    valor_str = match.group(1).replace('.', '').replace(',', '.').strip()
-                                    base_imponible = float(valor_str)
-                                    if base_imponible > 0:
+                                    valor_str = match.group(1)
+                                    base_imponible = parsear_monto_espanol(valor_str)
+                                    if base_imponible and base_imponible > 0:
                                         datos_extraidos['total'] = round(base_imponible, 2)
-                                        app.logger.info(f"✅ Base Imponible encontrada por búsqueda de texto cerca de 'Base Imponible': {datos_extraidos['total']}")
+                                        app.logger.info(f"✅ Base Imponible encontrada por búsqueda de texto cerca de 'Base Imponible': {datos_extraidos['total']} (original: '{valor_str}')")
                                         break
                                 except (ValueError, AttributeError):
                                     continue
@@ -5146,6 +5578,52 @@ def procesar_factura():
                                 app.logger.info(f"✅ Base Imponible calculada (Total - IVA): {datos_extraidos['total']}")
                         except (ValueError, TypeError) as e:
                             app.logger.warning(f"No se pudo calcular base imponible: {str(e)}")
+                    
+                    # VALIDACIÓN DE COHERENCIA: Verificar que Base + IVA = Total
+                    if 'total' in datos_extraidos and 'impuestos' in datos_extraidos and 'total_con_impuestos' in datos_extraidos:
+                        base = datos_extraidos['total']
+                        iva = datos_extraidos['impuestos']
+                        total = datos_extraidos['total_con_impuestos']
+                        suma_calculada = round(base + iva, 2)
+                        diferencia = abs(suma_calculada - total)
+                        
+                        if diferencia > 0.50:  # Tolerancia de 0.50€
+                            app.logger.warning(f"⚠️ INCOHERENCIA DETECTADA: Base ({base}) + IVA ({iva}) = {suma_calculada}, pero Total extraído es {total}. Diferencia: {diferencia}€")
+                            app.logger.warning(f"⚠️ Se recalcularán los valores para corregir el error...")
+                            
+                            # Si el total parece correcto pero la suma no coincide, buscar IVA en el texto
+                            if 'impuestos' in datos_extraidos:
+                                # Buscar el importe de IVA en el texto
+                                import re
+                                texto_lower = texto_completo.lower()
+                                patrones_iva_importe = [
+                                    r'imp\.?\s*iva[:\s]+([\d.,]+)',
+                                    r'importe\s+iva[:\s]+([\d.,]+)',
+                                    r'cuota\s+iva[:\s]+([\d.,]+)',
+                                    r'iva[:\s]+([\d.,]+)\s*€',
+                                ]
+                                iva_encontrado = None
+                                for patron in patrones_iva_importe:
+                                    match = re.search(patron, texto_lower, re.IGNORECASE)
+                                    if match:
+                                        valor_str = match.group(1)
+                                        iva_encontrado = parsear_monto_espanol(valor_str)
+                                        if iva_encontrado and iva_encontrado > 0:
+                                            app.logger.info(f"✅ IVA corregido por búsqueda en texto: {iva_encontrado} (original: '{valor_str}')")
+                                            datos_extraidos['impuestos'] = round(iva_encontrado, 2)
+                                            datos_extraidos['iva'] = round(iva_encontrado, 2)
+                                            break
+                                
+                                # Recalcular para verificar coherencia
+                                if iva_encontrado:
+                                    suma_calculada = round(base + iva_encontrado, 2)
+                                    diferencia_nueva = abs(suma_calculada - total)
+                                    if diferencia_nueva <= 0.50:
+                                        app.logger.info(f"✅ Coherencia restaurada: Base ({base}) + IVA ({iva_encontrado}) = {suma_calculada} ≈ Total ({total})")
+                                    else:
+                                        app.logger.warning(f"⚠️ Aún incoherente después de corrección: {suma_calculada} vs {total}, diferencia: {diferencia_nueva}€")
+                        else:
+                            app.logger.info(f"✅ Validación de coherencia: Base ({base}) + IVA ({iva}) = {suma_calculada} ≈ Total ({total}). Diferencia: {diferencia}€")
                     
                     # 10. Términos de pago / Método de pago
                     payment_terms = get_entity_value('payment_terms', ['payment_terms_payment_terms'])
@@ -5570,8 +6048,20 @@ def procesar_factura():
         # Generar URL firmada para el PDF (válida por 1 hora)
         pdf_url = None
         if blob_path:
+            app.logger.info(f"📄 Generando URL firmada para PDF: {blob_path}")
             from storage_manager import get_document_url
-            pdf_url = get_document_url(blob_path, expiration_minutes=60)
+            try:
+                pdf_url = get_document_url(blob_path, expiration_minutes=60)
+                if pdf_url:
+                    app.logger.info(f"✅ PDF URL generada exitosamente: {pdf_url[:100]}...")
+                else:
+                    app.logger.warning(f"⚠️ get_document_url retornó None para blob_path: {blob_path}")
+            except Exception as e:
+                app.logger.error(f"❌ Error al generar URL firmada del PDF: {str(e)}")
+                import traceback
+                app.logger.error(traceback.format_exc())
+        else:
+            app.logger.warning("⚠️ blob_path es None o vacío, no se puede generar PDF URL")
         
         # Preparar entidades disponibles para el frontend (formato simplificado)
         entidades_disponibles_respuesta = {}
