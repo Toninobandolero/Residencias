@@ -4219,25 +4219,44 @@ def crear_pago_proveedor():
             
             # Si se proporciona un nombre de receiver pero no id_receiver, buscar o crear
             receiver_nombre = data.get('receiver')
+            receiver_nif = data.get('receiver_nif')
+            
             if receiver_nombre and not id_receiver:
-                # Buscar receiver existente por nombre
-                cursor.execute("""
-                    SELECT id_receiver FROM receiver 
-                    WHERE UPPER(TRIM(nombre)) = UPPER(TRIM(%s)) AND activo = TRUE
-                    LIMIT 1
-                """, (receiver_nombre,))
-                receiver_existente = cursor.fetchone()
-                
-                if receiver_existente:
-                    id_receiver = receiver_existente[0]
-                else:
-                    # Crear nuevo receiver
+                # PRIORIDAD 1: Buscar por NIF/CIF (más preciso)
+                if receiver_nif:
                     cursor.execute("""
-                        INSERT INTO receiver (nombre, activo)
-                        VALUES (%s, TRUE)
-                        RETURNING id_receiver
+                        SELECT id_receiver FROM receiver 
+                        WHERE UPPER(TRIM(nif_cif)) = UPPER(TRIM(%s)) AND activo = TRUE
+                        LIMIT 1
+                    """, (receiver_nif,))
+                    receiver_existente = cursor.fetchone()
+                    
+                    if receiver_existente:
+                        id_receiver = receiver_existente[0]
+                        app.logger.info(f"✅ Receiver encontrado por NIF: {receiver_nif} (ID: {id_receiver})")
+                
+                # PRIORIDAD 2: Buscar por nombre si no se encontró por NIF
+                if not id_receiver:
+                    cursor.execute("""
+                        SELECT id_receiver FROM receiver 
+                        WHERE UPPER(TRIM(nombre)) = UPPER(TRIM(%s)) AND activo = TRUE
+                        LIMIT 1
                     """, (receiver_nombre,))
+                    receiver_existente = cursor.fetchone()
+                    
+                    if receiver_existente:
+                        id_receiver = receiver_existente[0]
+                        app.logger.info(f"✅ Receiver encontrado por nombre: {receiver_nombre} (ID: {id_receiver})")
+                
+                # Si no existe, crear nuevo receiver
+                if not id_receiver:
+                    cursor.execute("""
+                        INSERT INTO receiver (nombre, nif_cif, activo)
+                        VALUES (%s, %s, TRUE)
+                        RETURNING id_receiver
+                    """, (receiver_nombre, receiver_nif))
                     id_receiver = cursor.fetchone()[0]
+                    app.logger.info(f"✅ Receiver creado: {receiver_nombre} (NIF: {receiver_nif}, ID: {id_receiver})")
                     
                     # Asociar receiver a la residencia si no existe la relación
                     cursor.execute("""
@@ -4659,274 +4678,56 @@ def procesar_factura():
                 
                 # Extraer texto completo
                 texto_completo = document.text
-                app.logger.info(f"Document AI procesado. Texto extraído: {len(texto_completo)} caracteres")
-                app.logger.debug(f"Primeros 500 caracteres del texto: {texto_completo[:500]}")
+                app.logger.info(f"✅ Document AI procesado exitosamente")
+                app.logger.info(f"📄 Texto extraído: {len(texto_completo)} caracteres")
                 
+                # ==============================================
+                # DEBUG: MOSTRAR ENTIDADES QUE DOCUMENT AI YA EXTRAJO
+                # ==============================================
+                app.logger.info("="*80)
+                app.logger.info("🔍 ENTIDADES EXTRAÍDAS POR DOCUMENT AI INVOICE PARSER:")
+                app.logger.info("="*80)
+                if document.entities:
+                    for entity in document.entities:
+                        # Obtener valor normalizado si existe, sino el texto
+                        valor = entity.normalized_value.text if entity.normalized_value and entity.normalized_value.text else entity.mention_text
+                        confianza = entity.confidence if hasattr(entity, 'confidence') else 'N/A'
+                        app.logger.info(f"  📌 {entity.type_}: '{valor}' (confianza: {confianza})")
+                else:
+                    app.logger.warning("  ⚠️ NO SE ENCONTRARON ENTIDADES - El procesador puede no ser Invoice Parser")
+                app.logger.info("="*80)
+                
+                # ==============================================
+                # USAR NUEVO EXTRACTOR ROBUSTO (ÚNICO Y DEFINITIVO)
+                # ==============================================
+                from factura_extractor import FacturaExtractor
+                
+                extractor = FacturaExtractor()
+                datos_extraidos = extractor.extraer_datos_completos(document, texto_completo)
+                
+                # El extractor ya maneja todo (Document AI + OCR fallback + validaciones)
+                # NO ejecutar lógica antigua que sobrescribe datos correctos
+                
+                # Solo importar re para el código que sigue más adelante
                 import re
+                from decimal import Decimal, InvalidOperation
                 
                 # ============================================================================
-                # NUEVA ESTRATEGIA: BÚSQUEDA INTELIGENTE EN TEXTO OCR
-                # Ignoramos los campos estructurados de Invoice Parser (son ambiguos)
-                # Buscamos directamente en el texto con conocimiento del dominio español
+                # BLOQUE DE FALLBACK ANTIGUO DESACTIVADO
+                # El FacturaExtractor ya extrae TODO correctamente usando Document AI
                 # ============================================================================
-                
-                # ============================================================================
-                # FUNCIONES DE BÚSQUEDA INTELIGENTE CON CONOCIMIENTO DEL DOMINIO
-                # ============================================================================
-                
-                def buscar_en_texto_con_patrones(texto, patrones, nombre_campo="campo"):
-                    """
-                    Busca un valor numérico en el texto usando múltiples patrones.
-                    Devuelve el primer match válido encontrado.
-                    """
-                    for patron in patrones:
-                        matches = re.finditer(patron, texto, re.IGNORECASE | re.MULTILINE)
-                        for match in matches:
-                            try:
-                                valor_str = match.group(1)
-                                valor = parsear_monto_espanol(valor_str)
-                                if valor and valor > 0:
-                                    app.logger.info(f"✅ {nombre_campo} encontrado: {valor} (patrón: '{patron[:50]}...', texto: '{valor_str}')")
-                                    return valor
-                            except:
-                                continue
-                    return None
-                
-                # FUNCIÓN MEJORADA DE PARSING DE NÚMEROS
-                def parsear_monto_espanol(valor_str):
-                    """
-                    Parsea un string de monto manejando formatos españoles Y casos de la IA.
-                    
-                    PROBLEMA: Document AI devuelve mention_text en formato mixto:
-                    - '241,80' (español) → a veces llega como '241.8' (punto decimal)
-                    - '2.418,50' (español con miles)
-                    
-                    Ejemplos:
-                    - "241,80" → 241.80
-                    - "241.8" → 241.8 (de la IA, punto decimal)
-                    - "241.80" → 241.80 (de la IA, punto decimal)
-                    - "2.418,50" → 2418.50 (español, miles + decimales)
-                    - "15234" → 15234.0
-                    """
-                    if not valor_str or not isinstance(valor_str, str):
-                        return None
-                    
-                    # Limpiar espacios, símbolos de moneda
-                    cleaned = valor_str.replace('€', '').replace('EUR', '').replace(' ', '').strip()
-                    
-                    # Sin separadores → número simple
-                    if ',' not in cleaned and '.' not in cleaned:
-                        try:
-                            return float(cleaned)
-                        except:
-                            return None
-                    
-                    # Tiene coma → formato español clásico
-                    if ',' in cleaned:
-                        # Quitar puntos (miles) y cambiar coma por punto (decimal)
-                        cleaned = cleaned.replace('.', '').replace(',', '.')
-                        try:
-                            return float(cleaned)
-                        except:
-                            return None
-                    
-                    # Solo tiene punto, sin coma → ambiguo
-                    # Puede ser:
-                    # - Decimal de la IA: '241.8' → 241.8
-                    # - Miles español: '2.418' → 2418.0
-                    if '.' in cleaned:
-                        partes = cleaned.split('.')
-                        if len(partes) == 2:
-                            parte_entera, parte_decimal = partes
-                            # Si la parte decimal tiene ≤2 dígitos → probablemente es decimal
-                            if len(parte_decimal) <= 2:
-                                # Es decimal: '241.8' → 241.8
-                                try:
-                                    return float(cleaned)
-                                except:
-                                    return None
-                            else:
-                                # Es miles: '2.418' → 2418
-                                cleaned = cleaned.replace('.', '')
-                                try:
-                                    return float(cleaned)
-                                except:
-                                    return None
-                    
-                    # Fallback
-                    try:
-                        return float(cleaned)
-                    except:
-                        return None
-                
-                # ============================================================================
-                # EXTRACCIÓN DIRECTA DEL TEXTO OCR (NUEVA ESTRATEGIA)
-                # ============================================================================
-                
-                app.logger.info("🎯 Iniciando extracción DIRECTA del texto OCR con patrones específicos...")
-                
-                # 1. TOTAL CON IVA (el más importante)
-                app.logger.info("📊 Buscando TOTAL con IVA...")
-                patrones_total = [
-                    r'total\s+facturat?[:\s]+([\d.,]+)',
-                    r'importe\s+total[:\s]+([\d.,]+)',
-                    r'total[:\s]+([\d.,]+)\s*€',
-                    r'total[:\s]+([\d.,]+)\s*\(',  # "241,80 (Euros"
-                    r'importe[:\s]+([\d.,]+)\s*€',
-                ]
-                total_con_iva = buscar_en_texto_con_patrones(texto_completo, patrones_total, "TOTAL CON IVA")
-                
-                # 2. BASE IMPONIBLE
-                app.logger.info("📊 Buscando BASE IMPONIBLE...")
-                patrones_base = [
-                    r'base\s+imp(?:onible)?[:\.\s]+([\d.,]+)',
-                    r'neto\s+fact[:\.\s]+([\d.,]+)',
-                    r'base[:\s]+([\d.,]+)\s*€',
-                    r'total\s+neto[:\s]+([\d.,]+)',
-                ]
-                base_imponible = buscar_en_texto_con_patrones(texto_completo, patrones_base, "BASE IMPONIBLE")
-                
-                # 3. IMPORTE DE IVA (no porcentaje)
-                app.logger.info("📊 Buscando IMPORTE DE IVA...")
-                patrones_iva_importe = [
-                    r'imp\.?\s*iva[:\s]+([\d.,]+)',
-                    r'importe\s+iva[:\s]+([\d.,]+)',
-                    r'cuota\s+iva[:\s]+([\d.,]+)',
-                    r'iva[:\s]+([\d.,]+)\s*€',
-                ]
-                iva_importe = buscar_en_texto_con_patrones(texto_completo, patrones_iva_importe, "IMPORTE IVA")
-                
-                # 4. PORCENTAJE DE IVA
-                app.logger.info("📊 Buscando PORCENTAJE DE IVA...")
-                patrones_iva_porcentaje = [
-                    r'%\s*iva[:\s]+([\d,]+)',
-                    r'iva[:\s]+([\d,]+)\s*%',
-                    r'tipo\s+iva[:\s]+([\d,]+)',
-                ]
-                iva_porcentaje_encontrado = None
-                for patron in patrones_iva_porcentaje:
-                    match = re.search(patron, texto_completo, re.IGNORECASE)
-                    if match:
-                        try:
-                            valor_str = match.group(1).replace(',', '.')
-                            valor = float(valor_str)
-                            # Validar que sea un porcentaje válido en España
-                            if valor in [4, 10, 21]:
-                                iva_porcentaje_encontrado = int(valor)
-                                app.logger.info(f"✅ PORCENTAJE IVA encontrado: {iva_porcentaje_encontrado}% (texto: '{valor_str}')")
-                                break
-                            elif 0 < valor < 1:  # Formato decimal: 0.21 → 21%
-                                valor_convertido = int(valor * 100)
-                                if valor_convertido in [4, 10, 21]:
-                                    iva_porcentaje_encontrado = valor_convertido
-                                    app.logger.info(f"✅ PORCENTAJE IVA encontrado y convertido: {iva_porcentaje_encontrado}% (texto: '{valor_str}')")
-                                    break
-                        except:
-                            continue
-                
-                # Si no encontramos el porcentaje, calcularlo desde base e IVA
-                if not iva_porcentaje_encontrado and base_imponible and iva_importe:
-                    porcentaje_calculado = (iva_importe / base_imponible) * 100
-                    # Redondear al porcentaje español más cercano
-                    porcentajes_validos = [4, 10, 21]
-                    iva_porcentaje_encontrado = min(porcentajes_validos, key=lambda x: abs(x - porcentaje_calculado))
-                    app.logger.info(f"✅ PORCENTAJE IVA calculado: {iva_porcentaje_encontrado}% (desde importe/base: {porcentaje_calculado:.2f}%)")
-                
-                # 5. NÚMERO DE FACTURA
-                app.logger.info("📊 Buscando NÚMERO DE FACTURA...")
-                patrones_factura = [
-                    r'factura\s+n[°º\.]?\s*[:\s]*([\w\-/]+)',
-                    r'n[°º]\s*factura[:\s]*([\w\-/]+)',
-                    r'fact(?:ura)?[:\s]*([\d\-/A-Z]+)',
-                ]
-                numero_factura = None
-                for patron in patrones_factura:
-                    match = re.search(patron, texto_completo, re.IGNORECASE)
-                    if match:
-                        numero_factura = match.group(1).strip()
-                        app.logger.info(f"✅ NÚMERO FACTURA encontrado: {numero_factura}")
-                        break
-                
-                # 6. FECHA
-                app.logger.info("📊 Buscando FECHA...")
-                patrones_fecha = [
-                    r'fecha[:\s]+(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
-                    r'(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})',
-                ]
-                fecha_factura = None
-                for patron in patrones_fecha:
-                    match = re.search(patron, texto_completo, re.IGNORECASE)
-                    if match:
-                        fecha_str = match.group(1)
-                        try:
-                            # Convertir a formato ISO
-                            from datetime import datetime
-                            for fmt in ['%d-%m-%Y', '%d/%m/%Y', '%d-%m-%y', '%d/%m/%y']:
-                                try:
-                                    fecha_obj = datetime.strptime(fecha_str, fmt)
-                                    fecha_factura = fecha_obj.strftime('%Y-%m-%d')
-                                    app.logger.info(f"✅ FECHA encontrada: {fecha_factura} (texto: '{fecha_str}')")
-                                    break
-                                except:
-                                    continue
-                            if fecha_factura:
-                                break
-                        except:
-                            continue
-                
-                # 7. PROVEEDOR (nombre)
-                app.logger.info("📊 Buscando PROVEEDOR...")
-                # Buscar en las primeras líneas (usualmente está al principio)
-                primeras_lineas = '\n'.join(texto_completo.split('\n')[:10])
-                proveedor = None
-                # Buscar líneas con texto (sin números ni símbolos)
-                for linea in primeras_lineas.split('\n'):
-                    linea_limpia = linea.strip()
-                    if linea_limpia and len(linea_limpia) > 3:
-                        # Si tiene principalmente letras y espacios
-                        if sum(c.isalpha() or c.isspace() for c in linea_limpia) / len(linea_limpia) > 0.7:
-                            proveedor = linea_limpia
-                            app.logger.info(f"✅ PROVEEDOR encontrado: {proveedor}")
-                            break
-                
-                # VALIDACIÓN DE COHERENCIA
-                app.logger.info("🔍 Validando coherencia de datos extraídos...")
-                if total_con_iva and base_imponible and iva_importe:
-                    suma_calculada = round(base_imponible + iva_importe, 2)
-                    diferencia = abs(suma_calculada - total_con_iva)
-                    if diferencia <= 0.50:
-                        app.logger.info(f"✅ COHERENCIA OK: Base ({base_imponible}) + IVA ({iva_importe}) = {suma_calculada} ≈ Total ({total_con_iva}). Dif: {diferencia}€")
-                    else:
-                        app.logger.warning(f"⚠️ INCOHERENCIA: Base ({base_imponible}) + IVA ({iva_importe}) = {suma_calculada} ≠ Total ({total_con_iva}). Dif: {diferencia}€")
-                
-                # Si no encontramos IVA pero tenemos total y base, calcularlo
-                if not iva_importe and total_con_iva and base_imponible:
-                    iva_importe = round(total_con_iva - base_imponible, 2)
-                    app.logger.info(f"✅ IVA calculado (Total - Base): {iva_importe}€")
-                
-                # Construir datos extraídos con la nueva estrategia
-                datos_extraidos = {}
-                if numero_factura:
-                    datos_extraidos['numero_factura'] = numero_factura
-                if fecha_factura:
-                    datos_extraidos['fecha_pago'] = fecha_factura
-                if proveedor:
-                    datos_extraidos['proveedor'] = proveedor
-                if total_con_iva:
-                    datos_extraidos['total_con_impuestos'] = round(total_con_iva, 2)
-                    datos_extraidos['monto'] = round(total_con_iva, 2)
-                if base_imponible:
-                    datos_extraidos['total'] = round(base_imponible, 2)
-                if iva_importe:
-                    datos_extraidos['impuestos'] = round(iva_importe, 2)
-                    datos_extraidos['iva'] = round(iva_importe, 2)
-                if iva_porcentaje_encontrado:
-                    datos_extraidos['iva_porcentaje'] = iva_porcentaje_encontrado
                 
                 app.logger.info(f"📊 Datos extraídos con nueva estrategia: {list(datos_extraidos.keys())}")
                 
                 # ============================================================================
-                # FALLBACK: Si falla la búsqueda directa, usar Invoice Parser
+                # BÚSQUEDA ADICIONAL DE DATOS COMPLEMENTARIOS (NIF, teléfono, email)
+                # ============================================================================
+                
+                # ============================================================================
+                # TODO EL BLOQUE DE EXTRACCIÓN REGEX HA SIDO ELIMINADO
+                # El FacturaExtractor ya hace todo correctamente usando Document AI
+                # ============================================================================
+                
                 # ============================================================================
                 if not datos_extraidos or len(datos_extraidos) < 3:
                     app.logger.warning("⚠️ Búsqueda directa no encontró suficientes datos, usando Invoice Parser como fallback...")
@@ -5141,6 +4942,12 @@ def procesar_factura():
                     if receiver_name:
                         datos_extraidos['receiver'] = str(receiver_name).strip()
                         app.logger.info(f"✅ Receiver/Sociedad (Invoice Parser): {datos_extraidos['receiver']}")
+                    
+                    # 8.2. RECEIVER NIF/CIF: Extraer receiver_tax_id
+                    receiver_tax_id = get_entity_value('receiver_tax_id', ['receiver_tax_id', 'customer_tax_id', 'buyer_tax_id'])
+                    if receiver_tax_id:
+                        datos_extraidos['receiver_nif'] = str(receiver_tax_id).strip()
+                        app.logger.info(f"✅ Receiver NIF/CIF (Invoice Parser): {datos_extraidos['receiver_nif']}")
                     
                     # 8. TOTAL CON IMPUESTOS: Usar mapeo configurado o buscar con lógica especial
                     total_amount = extraer_campo_con_mapeo('monto', ['total_amount', 'invoice_amount', 'total_amount_due', 'amount_due', 'invoice_total'])
@@ -5789,20 +5596,43 @@ def procesar_factura():
                 
                 # Si no tenemos RECEIVER (Sociedad/Pagador), buscar en el texto
                 if 'receiver' not in datos_extraidos:
-                    patrones_receiver = [
-                        r'(?:receptor|pagador|cliente|sociedad|facturado\s+a)[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s,\.S\.L\.]+?)(?:\n|€|NIF|CIF|IVA|Total|$)',
-                        r'factura\s+a[:\s]+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑa-záéíóúñ\s,\.S\.L\.]+?)(?:\n|€|NIF|CIF|IVA|Total|$)',
-                    ]
-                    for patron in patrones_receiver:
-                        match = re.search(patron, texto_completo, re.IGNORECASE | re.MULTILINE)
-                        if match:
-                            receiver_encontrado = match.group(1).strip()
-                            # Limpiar el nombre (quitar espacios extra, líneas nuevas, etc.)
-                            receiver_encontrado = ' '.join(receiver_encontrado.split())
-                            if len(receiver_encontrado) > 3 and len(receiver_encontrado) < 200:
-                                datos_extraidos['receiver'] = receiver_encontrado
-                                app.logger.info(f"✅ Receiver/Sociedad encontrado por búsqueda en texto: {datos_extraidos['receiver']}")
-                                break
+                    # Buscar en las primeras líneas después del proveedor (generalmente el receiver está ahí)
+                    lineas = texto_completo.split('\n')
+                    for i, linea in enumerate(lineas[:20]):  # Primeras 20 líneas
+                        # Buscar líneas que parezcan nombres de empresa
+                        linea_limpia = linea.strip()
+                        if len(linea_limpia) >= 10 and len(linea_limpia) <= 100:
+                            # Que contenga texto mayoritariamente alfabético
+                            letras = sum(c.isalpha() or c.isspace() for c in linea_limpia)
+                            if letras / len(linea_limpia) > 0.6:
+                                # Evitar que sea el proveedor
+                                if datos_extraidos.get('proveedor') and linea_limpia.upper() != datos_extraidos['proveedor'].upper():
+                                    # Si contiene palabras típicas de empresas
+                                    palabras_empresa = ['S.L.', 'S.A.', 'RESIDENCIA', 'GERIATRIA', 'SOCIEDAD', 'LIMITADA']
+                                    if any(palabra in linea_limpia.upper() for palabra in palabras_empresa):
+                                        datos_extraidos['receiver'] = linea_limpia
+                                        app.logger.info(f"✅ Receiver/Sociedad encontrado por búsqueda en texto: {datos_extraidos['receiver']}")
+                                        break
+                
+                # Si no tenemos RECEIVER NIF, buscar cerca del receiver o en el documento
+                if 'receiver_nif' not in datos_extraidos and 'receiver' in datos_extraidos:
+                    # Buscar NIF cerca del nombre del receiver
+                    receiver_texto = datos_extraidos['receiver']
+                    # Buscar en las líneas cercanas al receiver
+                    lineas = texto_completo.split('\n')
+                    for i, linea in enumerate(lineas):
+                        if receiver_texto in linea and i < len(lineas) - 5:
+                            # Buscar NIF en las próximas 5 líneas
+                            texto_busqueda = '\n'.join(lineas[i:i+5])
+                            patron_nif = r'(?:nif|cif|n\.?i\.?f\.?|c\.?i\.?f\.?)[:\s]*([A-Z][0-9]{8}|[A-Z]{2}[0-9]{7}[A-Z0-9])'
+                            match = re.search(patron_nif, texto_busqueda, re.IGNORECASE)
+                            if match:
+                                receiver_nif = match.group(1).upper().strip()
+                                # Asegurar que no es el NIF del proveedor
+                                if datos_extraidos.get('proveedor_nif') != receiver_nif:
+                                    datos_extraidos['receiver_nif'] = receiver_nif
+                                    app.logger.info(f"✅ Receiver NIF/CIF encontrado cerca del receiver: {receiver_nif}")
+                                    break
                 
                 # Recalcular porcentaje de IVA si ahora tenemos IVA y Base Imponible
                 if 'impuestos' in datos_extraidos and 'total' in datos_extraidos and 'iva_porcentaje' not in datos_extraidos:
