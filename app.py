@@ -5594,6 +5594,33 @@ def procesar_factura():
                         datos_extraidos['proveedor_email'] = email_encontrado
                         app.logger.info(f"✅ Email encontrado por búsqueda en texto: {datos_extraidos['proveedor_email']}")
                 
+                # Extraer MÉTODO DE PAGO
+                if 'metodo_pago' not in datos_extraidos:
+                    # Buscar en un contexto más amplio alrededor de "forma de pago"
+                    patron_contexto = r'(?:forma\s+(?:de\s+)?pago|método\s+(?:de\s+)?pago)[:\s]*([^\n]*(?:\n[^\n]{0,100}){0,3})'
+                    match_contexto = re.search(patron_contexto, texto_completo, re.IGNORECASE | re.MULTILINE)
+                    
+                    if match_contexto:
+                        contexto = match_contexto.group(0).upper()
+                        app.logger.info(f"🔍 Contexto forma de pago encontrado: {contexto[:200]}")
+                        
+                        # Normalizar a los métodos conocidos
+                        if 'TRANSFER' in contexto or 'BANCARIA' in contexto or 'BANCO' in contexto:
+                            datos_extraidos['metodo_pago'] = 'transferencia'
+                            app.logger.info(f"✅ Método de pago encontrado: transferencia")
+                        elif 'REMESA' in contexto or 'DOMICILIACIÓN' in contexto or 'DOMICILIACION' in contexto:
+                            datos_extraidos['metodo_pago'] = 'remesa'
+                            app.logger.info(f"✅ Método de pago encontrado: remesa")
+                        elif 'METAL' in contexto or 'EFECTIVO' in contexto or 'CASH' in contexto or 'CONTADO' in contexto:
+                            datos_extraidos['metodo_pago'] = 'metálico'
+                            app.logger.info(f"✅ Método de pago encontrado: metálico")
+                        elif 'CHEQUE' in contexto:
+                            datos_extraidos['metodo_pago'] = 'cheque'
+                            app.logger.info(f"✅ Método de pago encontrado: cheque")
+                        elif 'TARJETA' in contexto or 'CARD' in contexto:
+                            datos_extraidos['metodo_pago'] = 'tarjeta'
+                            app.logger.info(f"✅ Método de pago encontrado: tarjeta")
+                
                 # Si no tenemos RECEIVER (Sociedad/Pagador), buscar en el texto
                 if 'receiver' not in datos_extraidos:
                     # Buscar en las primeras líneas después del proveedor (generalmente el receiver está ahí)
@@ -5649,6 +5676,24 @@ def procesar_factura():
                         pass
                 
                 app.logger.info(f"📊 Datos extraídos después de búsqueda en texto: {[k for k in datos_extraidos.keys() if k != 'texto_completo']}")
+                
+                # ==============================================
+                # GENERAR CONCEPTO AUTOMÁTICAMENTE
+                # ==============================================
+                if 'concepto' not in datos_extraidos:
+                    concepto_partes = []
+                    
+                    if datos_extraidos.get('numero_factura'):
+                        concepto_partes.append(f"Factura {datos_extraidos['numero_factura']}")
+                    else:
+                        concepto_partes.append("Pago de factura")
+                    
+                    if datos_extraidos.get('proveedor'):
+                        concepto_partes.append(datos_extraidos['proveedor'])
+                    
+                    concepto = " - ".join(concepto_partes)
+                    datos_extraidos['concepto'] = concepto
+                    app.logger.info(f"✅ Concepto generado automáticamente: {concepto}")
                 
                 # Guardar texto_completo para la respuesta (fuera de datos_extraidos)
                 texto_completo_respuesta = texto_completo
@@ -5799,12 +5844,80 @@ def procesar_factura():
                                 'origen': 'búsqueda_en_texto'  # Indicar que viene de búsqueda en texto
                             }
         
+        # ==============================================
+        # BUSCAR O CREAR RECEIVER (ENTIDAD FISCAL) AUTOMÁTICAMENTE
+        # ==============================================
+        if datos_extraidos.get('receiver'):
+            try:
+                conn_receiver = get_db_connection()
+                cursor_receiver = conn_receiver.cursor()
+                
+                receiver_nombre = datos_extraidos.get('receiver')
+                receiver_nif = datos_extraidos.get('receiver_nif')
+                id_receiver_detectado = None
+                
+                # PRIORIDAD 1: Buscar por NIF/CIF
+                if receiver_nif:
+                    cursor_receiver.execute("""
+                        SELECT id_receiver, nombre FROM receiver 
+                        WHERE UPPER(TRIM(nif_cif)) = UPPER(TRIM(%s)) AND activo = TRUE
+                        LIMIT 1
+                    """, (receiver_nif,))
+                    resultado = cursor_receiver.fetchone()
+                    if resultado:
+                        id_receiver_detectado = resultado[0]
+                        app.logger.info(f"✅ Receiver detectado por NIF: {receiver_nif} → {resultado[1]} (ID: {id_receiver_detectado})")
+                
+                # PRIORIDAD 2: Buscar por nombre
+                if not id_receiver_detectado:
+                    cursor_receiver.execute("""
+                        SELECT id_receiver, nombre FROM receiver 
+                        WHERE UPPER(TRIM(nombre)) = UPPER(TRIM(%s)) AND activo = TRUE
+                        LIMIT 1
+                    """, (receiver_nombre,))
+                    resultado = cursor_receiver.fetchone()
+                    if resultado:
+                        id_receiver_detectado = resultado[0]
+                        app.logger.info(f"✅ Receiver detectado por nombre: {receiver_nombre} (ID: {id_receiver_detectado})")
+                
+                # Crear nuevo receiver si no existe
+                if not id_receiver_detectado:
+                    cursor_receiver.execute("""
+                        INSERT INTO receiver (nombre, nif_cif, activo)
+                        VALUES (%s, %s, TRUE)
+                        RETURNING id_receiver
+                    """, (receiver_nombre, receiver_nif))
+                    id_receiver_detectado = cursor_receiver.fetchone()[0]
+                    conn_receiver.commit()
+                    app.logger.info(f"✅ Receiver CREADO: {receiver_nombre} (NIF: {receiver_nif}, ID: {id_receiver_detectado})")
+                    
+                    # Asociar a la residencia
+                    if id_residencia:
+                        cursor_receiver.execute("""
+                            INSERT INTO residencia_receiver (id_residencia, id_receiver, activo)
+                            VALUES (%s, %s, TRUE)
+                            ON CONFLICT (id_residencia, id_receiver) DO UPDATE SET activo = TRUE
+                        """, (id_residencia, id_receiver_detectado))
+                        conn_receiver.commit()
+                
+                # Guardar en datos_extraidos
+                if id_receiver_detectado:
+                    datos_extraidos['id_receiver'] = id_receiver_detectado
+                
+                cursor_receiver.close()
+                conn_receiver.close()
+            except Exception as e:
+                app.logger.error(f"Error al buscar/crear receiver: {str(e)}")
+                import traceback
+                app.logger.error(traceback.format_exc())
+        
         # Preparar respuesta con texto completo si está disponible
         respuesta = {
             'mensaje': 'Factura procesada exitosamente',
             'blob_path': blob_path,  # Ruta del PDF guardado en Cloud Storage (para asociar al registro)
             'pdf_url': pdf_url,  # URL firmada para visualizar el PDF
             'id_residencia_detectada': id_residencia_detectada,  # ID de residencia detectada automáticamente
+            'id_receiver_detectado': datos_extraidos.get('id_receiver'),  # ID de entidad fiscal detectada
             'datos_extraidos': datos_extraidos if datos_extraidos else {},
             'entidades_disponibles': entidades_disponibles_respuesta  # Entidades detectadas por la IA para mapeo
         }

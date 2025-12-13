@@ -1951,8 +1951,9 @@
                         <label for="cobro_observaciones">Observaciones</label>
                         <textarea id="cobro_observaciones" name="observaciones" rows="3" placeholder="Notas adicionales sobre el cobro"></textarea>
                     </div>
-                    <p style="margin-top: 10px; font-size: 12px; color: #666;">
-                        💡 <strong>Nota:</strong> Si no tiene fecha de pago, será un cobro previsto. Si tiene fecha de pago, será un cobro completado.
+                    <p style="margin-top: 10px; font-size: 12px; color: #666; display: flex; align-items: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="#667eea"/><path d="M12 16v-4m0-4h.01" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
+                        <span><strong>Nota:</strong> Si no tiene fecha de pago, será un cobro previsto. Si tiene fecha de pago, será un cobro completado.</span>
                     </p>
                 </div>
                 
@@ -2131,8 +2132,9 @@
                         <label for="pago_observaciones">Observaciones</label>
                         <textarea id="pago_observaciones" name="observaciones" rows="3" placeholder="Notas adicionales sobre el pago"></textarea>
                     </div>
-                    <p style="margin-top: 10px; font-size: 12px; color: #666;">
-                        💡 <strong>Nota:</strong> Si tiene fecha de pago, será un pago completado. Si no tiene fecha de pago, será un pago pendiente.
+                    <p style="margin-top: 10px; font-size: 12px; color: #666; display: flex; align-items: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="#667eea"/><path d="M12 16v-4m0-4h.01" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
+                        <span><strong>Nota:</strong> Si tiene fecha de pago, será un pago completado. Si no tiene fecha de pago, será un pago pendiente.</span>
                     </p>
                 </div>
                 
@@ -2563,11 +2565,14 @@
         // Función para formatear números en formato español (sin decimales, con separador de miles)
         function formatearNumeroEspanol(numero) {
             if (numero === null || numero === undefined || isNaN(numero)) {
-                return '0';
+                return '0,00';
             }
-            // Redondear a entero y formatear con separador de miles
-            const numeroEntero = Math.round(parseFloat(numero));
-            return numeroEntero.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            // Formatear con 2 decimales y separador de miles
+            const numeroFloat = parseFloat(numero);
+            return numeroFloat.toLocaleString('es-ES', { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+            });
         }
         let currentToken = null;
         
@@ -3565,8 +3570,9 @@
                                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                                             ${usuarioTienePermiso('crear:cobro') ? `<button class="add-btn" onclick="openModal('modalCobro')" style="padding: 8px 16px; font-size: 14px;">+ Agregar Cobro</button>` : ''}
                                         </div>
-                                        <p style="font-size: 12px; color: #666; margin-top: -10px; margin-bottom: 15px;">
-                                            💡 <strong>Nota:</strong> Se muestran los cobros pendientes del mes siguiente y los cobros completados recientes. Para ver el historial completo, usa el módulo <strong>Históricos</strong>.
+                                        <p style="font-size: 12px; color: #666; margin-top: -10px; margin-bottom: 15px; display: flex; align-items: center; gap: 6px;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" fill="#667eea"/><path d="M12 16v-4m0-4h.01" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
+                                            <span><strong>Nota:</strong> Se muestran los cobros pendientes del mes siguiente y los cobros completados recientes. Para ver el historial completo, usa el módulo <strong>Históricos</strong>.</span>
                                         </p>
                                         
                                         <!-- Filtros de Cobros -->
@@ -5633,10 +5639,35 @@
                     </div>
                     
                     <div class="form-group" style="margin-bottom: 15px;">
+                        <label for="factura_concepto">Concepto *</label>
+                        ${datosExtraidos.concepto ? `
+                            <div style="background: #e6ffed; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid #48bb78; font-size: 12px; color: #22543d;">
+                                <span style="display: flex; align-items: center; gap: 4px;"><img src="/static/icons/medical/check-circle.svg" alt="OK" style="width: 12px; height: 12px;"> Concepto generado automáticamente</span>
+                            </div>
+                        ` : ''}
+                        <input type="text" id="factura_concepto" name="concepto" value="${datosExtraidos.concepto || ''}" required placeholder="Descripción del pago" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 15px;">
                         <label for="factura_residencia">Residencia *</label>
                         <select id="factura_residencia" name="id_residencia" required style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                             <option value="">Cargando residencias...</option>
                         </select>
+                    </div>
+                    
+                    <div class="form-group" style="margin-bottom: 15px;">
+                        <label for="factura_receiver">Entidad Fiscal (Sociedad) *</label>
+                        ${datosExtraidos.receiver ? `
+                            <div style="background: #e6ffed; padding: 12px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #48bb78;">
+                                <div style="font-size: 12px; color: #22543d; margin-bottom: 5px; font-weight: 600; display: flex; align-items: center; gap: 4px;"><img src="/static/icons/medical/check-circle.svg" alt="OK" style="width: 14px; height: 14px;"> Entidad detectada en la factura:</div>
+                                <div style="font-size: 14px; color: #22543d; font-weight: 600;">${datosExtraidos.receiver}</div>
+                                ${datosExtraidos.receiver_nif ? `<div style="font-size: 12px; color: #22543d; margin-top: 3px;">NIF: ${datosExtraidos.receiver_nif}</div>` : ''}
+                            </div>
+                        ` : ''}
+                        <select id="factura_receiver" name="id_receiver" required style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <option value="">Seleccione una entidad fiscal...</option>
+                        </select>
+                        <input type="hidden" id="factura_receiver_detectado" value="${datosExtraidos.id_receiver || ''}">
                     </div>
                     
                     <div class="form-group" style="margin-bottom: 15px;">
@@ -5658,7 +5689,9 @@
                         <input type="hidden" id="factura_id_proveedor" name="id_proveedor" value="">
                         ${datosExtraidos.proveedor || datosExtraidos.proveedor_nif || datosExtraidos.proveedor_telefono || datosExtraidos.proveedor_email || datosExtraidos.proveedor_direccion ? `
                         <div style="margin-top: 10px; padding: 10px; background: #f0f7ff; border-radius: 6px; border-left: 3px solid #667eea;">
-                            <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600;">📋 Datos adicionales del proveedor extraídos:</div>
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                                <img src="/static/icons/medical/clipboard-medical.svg" alt="Datos" style="width: 14px; height: 14px;"> Datos adicionales del proveedor extraídos:
+                            </div>
                             ${datosExtraidos.proveedor ? `<div style="font-size: 12px; color: #333; margin-bottom: 3px;"><strong>Nombre:</strong> ${datosExtraidos.proveedor}</div>` : ''}
                             ${datosExtraidos.proveedor_nif ? `<div style="font-size: 12px; color: #333; margin-bottom: 3px;"><strong>NIF:</strong> ${datosExtraidos.proveedor_nif}</div>` : ''}
                             ${datosExtraidos.proveedor_telefono ? `<div style="font-size: 12px; color: #333; margin-bottom: 3px;"><strong>Teléfono:</strong> ${datosExtraidos.proveedor_telefono}</div>` : ''}
@@ -5670,13 +5703,19 @@
                     
                     <div class="form-group" style="margin-bottom: 15px;">
                         <label for="factura_metodo_pago">Método de Pago</label>
+                        ${datosExtraidos.metodo_pago ? `
+                            <div style="background: #e6ffed; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid #48bb78; font-size: 12px; color: #22543d;">
+                                <span style="display: flex; align-items: center; gap: 4px;"><img src="/static/icons/medical/check-circle.svg" alt="OK" style="width: 12px; height: 12px;"> Método detectado: <strong>${datosExtraidos.metodo_pago}</strong></span>
+                            </div>
+                        ` : ''}
                         <select id="factura_metodo_pago" name="metodo_pago" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                             <option value="">Seleccione un método</option>
                             <option value="transferencia" ${datosExtraidos.metodo_pago === 'transferencia' ? 'selected' : ''}>Transferencia</option>
                             <option value="remesa" ${datosExtraidos.metodo_pago === 'remesa' ? 'selected' : ''}>Remesa</option>
                             <option value="metálico" ${datosExtraidos.metodo_pago === 'metálico' ? 'selected' : ''}>Metálico</option>
                             <option value="cheque" ${datosExtraidos.metodo_pago === 'cheque' ? 'selected' : ''}>Cheque</option>
-                            <option value="otro" ${datosExtraidos.metodo_pago && !['transferencia', 'remesa', 'metálico', 'cheque'].includes(datosExtraidos.metodo_pago) ? 'selected' : ''}>Otro</option>
+                            <option value="tarjeta" ${datosExtraidos.metodo_pago === 'tarjeta' ? 'selected' : ''}>Tarjeta</option>
+                            <option value="otro" ${datosExtraidos.metodo_pago && !['transferencia', 'remesa', 'metálico', 'cheque', 'tarjeta'].includes(datosExtraidos.metodo_pago) ? 'selected' : ''}>Otro</option>
                         </select>
                     </div>
                     
@@ -5754,7 +5793,9 @@
                         </div>
                         
                         <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #e0e0e0;">
-                            <div style="font-weight: 600; color: #333; margin-bottom: 10px; font-size: 14px;">📋 Todos los campos detectados por la IA:</div>
+                            <div style="font-weight: 600; color: #333; margin-bottom: 10px; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                                <img src="/static/icons/medical/clipboard-medical.svg" alt="Campos" style="width: 16px; height: 16px;"> Todos los campos detectados por la IA:
+                            </div>
                             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; max-height: 200px; overflow-y: auto;">
                                 ${Object.keys(entidadesDisponibles).map(key => {
                                     const entidad = entidadesDisponibles[key];
@@ -5773,11 +5814,11 @@
                     </div>
                     
                     <div style="display: flex; gap: 10px; margin-top: 20px;">
-                        <button type="submit" style="flex: 1; padding: 12px 20px; background: #48bb78; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;">
-                            💾 Guardar Pago
+                        <button type="submit" style="flex: 1; padding: 12px 20px; background: #48bb78; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <img src="/static/icons/medical/check-circle.svg" alt="Guardar" style="width: 18px; height: 18px; filter: brightness(0) invert(1);"> Guardar Pago
                         </button>
-                        <button type="button" onclick="abrirModalProcesarFactura()" style="flex: 1; padding: 12px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;">
-                            🔄 Procesar Otra Factura
+                        <button type="button" onclick="abrirModalProcesarFactura()" style="flex: 1; padding: 12px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                            <img src="/static/icons/medical/file-medical.svg" alt="Procesar" style="width: 18px; height: 18px; filter: brightness(0) invert(1);"> Procesar Otra Factura
                         </button>
                     </div>
                 </form>
@@ -5787,6 +5828,41 @@
             
             // Cargar residencias en el select
             await loadResidenciasIntoSelect('factura_residencia', idResidenciaDetectada);
+            
+            // Cargar entidades fiscales (receivers) en el select
+            try {
+                const token = localStorage.getItem('violetas_token');
+                const receiversResponse = await fetch(`${API_URL}/api/v1/receivers`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (receiversResponse.ok) {
+                    const receiversData = await receiversResponse.json();
+                    const selectReceiver = document.getElementById('factura_receiver');
+                    
+                    if (selectReceiver) {
+                        selectReceiver.innerHTML = '<option value="">Seleccione una entidad fiscal...</option>';
+                        
+                        (receiversData.receivers || []).forEach(rec => {
+                            const option = document.createElement('option');
+                            option.value = rec.id_receiver;
+                            option.textContent = `${rec.nombre}${rec.nif_cif ? ' - ' + rec.nif_cif : ''}`;
+                            selectReceiver.appendChild(option);
+                        });
+                        
+                        // Seleccionar automáticamente el receiver detectado
+                        const idReceiverDetectado = resultado.id_receiver_detectado || datosExtraidos.id_receiver;
+                        if (idReceiverDetectado) {
+                            selectReceiver.value = idReceiverDetectado;
+                            console.log('✅ Receiver detectado automáticamente:', idReceiverDetectado);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error al cargar entidades fiscales:', error);
+            }
             
             // Calcular automáticamente el total con impuestos y el IVA desde el porcentaje
             const facturaTotal = document.getElementById('factura_total');
@@ -6151,11 +6227,20 @@
                 return;
             }
             
+            const concepto = formData.get('concepto');
+            if (!concepto || concepto.trim() === '') {
+                alert('Debe ingresar un concepto para el pago');
+                return;
+            }
+            
+            const id_receiver = formData.get('id_receiver');
+            
             const data = {
                 proveedor: nombreProveedor,
                 concepto: formData.get('concepto'),
                 monto: formData.get('monto') ? parseFloat(formData.get('monto')) : null,
                 id_residencia: parseInt(id_residencia),
+                id_receiver: id_receiver ? parseInt(id_receiver) : null,
                 fecha_pago: fecha_pago,
                 metodo_pago: formData.get('metodo_pago') || null,
                 numero_factura: formData.get('numero_factura') || null,
@@ -6186,7 +6271,18 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    alert('Pago guardado exitosamente');
+                    // Verificar si el pago está fuera del rango visible
+                    const fechaPago = new Date(fecha_pago);
+                    const hoy = new Date();
+                    const primerDiaMesAnterior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+                    
+                    let mensaje = '✅ Pago guardado exitosamente';
+                    if (fechaPago < primerDiaMesAnterior) {
+                        const fechaFormateada = fechaPago.toLocaleDateString('es-ES', { year: 'numeric', month: 'long' });
+                        mensaje += `\n\n⚠️ La factura es de ${fechaFormateada}, por lo que no aparecerá en el listado actual.\n\nPara verla, ve al módulo "Históricos" o ajusta los filtros de fecha.`;
+                    }
+                    
+                    alert(mensaje);
                     closeModal('modalProcesarFactura');
                     // Recargar la sección de facturación
                     if (typeof loadFacturacion === 'function') {
@@ -11815,7 +11911,7 @@
                 noResultados = document.createElement('div');
                 noResultados.className = 'no-resultados-documentacion';
                 noResultados.style.cssText = 'background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 30px; text-align: center; margin: 20px 0;';
-                noResultados.innerHTML = '<p style="margin: 0; color: #856404; font-size: 16px; font-weight: 500;">📄 No se encontraron documentos con los filtros seleccionados</p>';
+                noResultados.innerHTML = '<p style="margin: 0; color: #856404; font-size: 16px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px;"><img src="/static/icons/medical/file-medical.svg" alt="Documentos" style="width: 18px; height: 18px;"> No se encontraron documentos con los filtros seleccionados</p>';
                 
                 // Insertar después de los filtros
                 const filtrosDiv = moduleContent?.querySelector('div[style*="background: #f0f7ff"]');
@@ -11847,8 +11943,9 @@
             } else if (data.total > 0) {
                 html += `
                     <div style="background: #d1ecf1; border-left: 4px solid #0c5460; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
-                        <p style="margin: 0; color: #0c5460; font-weight: 500;">
-                            📊 Mostrando <strong>${data.mostrados}</strong> documento${data.mostrados !== 1 ? 's' : ''}
+                        <p style="margin: 0; color: #0c5460; font-weight: 500; display: flex; align-items: center; gap: 6px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+                            Mostrando <strong>${data.mostrados}</strong> documento${data.mostrados !== 1 ? 's' : ''}
                         </p>
                     </div>
                 `;
@@ -12462,8 +12559,9 @@
                     } else if (totalRegistros > 0) {
                         html += `
                             <div style="background: #d1ecf1; border-left: 4px solid #0c5460; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
-                                <p style="margin: 0; color: #0c5460; font-weight: 500;">
-                                    📊 Mostrando <strong>${mostradosRegistros}</strong> registro${mostradosRegistros !== 1 ? 's' : ''}
+                                <p style="margin: 0; color: #0c5460; font-weight: 500; display: flex; align-items: center; gap: 6px;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+                                    Mostrando <strong>${mostradosRegistros}</strong> registro${mostradosRegistros !== 1 ? 's' : ''}
                                 </p>
                             </div>
                         `;
@@ -12530,7 +12628,7 @@
                                     <thead>
                                         <tr>
                                             <th>Proveedor</th>
-                                            <th>Monto</th>
+                                            <th>TOTAL</th>
                                             <th>Fecha Pago</th>
                                             <th>Fecha Prevista</th>
                                             <th>Estado</th>
