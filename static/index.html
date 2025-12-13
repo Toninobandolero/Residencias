@@ -29,10 +29,10 @@
         })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <!-- Flatpickr para calendarios con formato español -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <!-- Flatpickr DESACTIVADO - Usamos type="date" nativo -->
+    <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script> -->
     <style>
         * {
             margin: 0;
@@ -1402,7 +1402,7 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                         <div class="form-group">
                             <label for="res_fecha_ingreso">Fecha de Ingreso</label>
-                            <input type="date" id="res_fecha_ingreso" name="fecha_ingreso" style="cursor: pointer; background-color: white;">
+                            <input type="date" id="res_fecha_ingreso" name="fecha_ingreso" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background-color: white;">
                         </div>
                         <div class="form-group">
                             <label for="res_costo_habitacion">Costo de Habitación (€)</label>
@@ -1444,7 +1444,7 @@
                         </div>
                         <div class="form-group">
                             <label for="res_fecha_nacimiento">Fecha de Nacimiento</label>
-                            <input type="date" id="res_fecha_nacimiento" name="fecha_nacimiento" onchange="actualizarEdad('res_fecha_nacimiento', 'res_edad')" style="cursor: pointer; background-color: white;">
+                            <input type="date" id="res_fecha_nacimiento" name="fecha_nacimiento" onchange="actualizarEdad('res_fecha_nacimiento', 'res_edad')" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background-color: white;">
                         </div>
                         <div class="form-group">
                             <label for="res_edad">Edad</label>
@@ -1669,7 +1669,7 @@
                     <h3 style="color: #ed8936; margin-bottom: 15px; font-size: 18px;"><img src="/static/icons/medical/clipboard-medical.svg" alt="Laboral" style="width: 18px; height: 18px; vertical-align: middle; margin-right: 8px;"> Información Laboral</h3>
                     <div class="form-group">
                         <label for="per_fecha_contratacion">Fecha de Contratación</label>
-                        <input type="date" id="per_fecha_contratacion" name="fecha_contratacion" style="cursor: pointer; background-color: white;">
+                        <input type="date" id="per_fecha_contratacion" name="fecha_contratacion" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background-color: white;">
                     </div>
                 </div>
                 
@@ -1712,7 +1712,7 @@
                         <div class="form-group">
                             <label for="turno_fecha">Fecha *</label>
                             <div style="position: relative;">
-                                <input type="date" id="turno_fecha" name="fecha" style="cursor: pointer; background-color: white;" required>
+                                <input type="date" id="turno_fecha" name="fecha" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background-color: white;" required>
                                 <svg style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; pointer-events: none; display: none;" fill="none" stroke="#333333" stroke-width="2" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                                     <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -1941,11 +1941,11 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                         <div class="form-group">
                             <label for="cobro_fecha_prevista">Fecha Prevista</label>
-                            <input type="date" id="cobro_fecha_prevista" name="fecha_prevista" style="cursor: pointer; background-color: white;">
+                            <input type="date" id="cobro_fecha_prevista" name="fecha_prevista" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background-color: white;">
                         </div>
                         <div class="form-group">
                             <label for="cobro_fecha_pago">Fecha de Pago </label>
-                            <input type="date" id="cobro_fecha_pago" name="fecha_pago" style="cursor: pointer; background-color: white;">
+                            <input type="date" id="cobro_fecha_pago" name="fecha_pago" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background-color: white;">
                         </div>
                     </div>
                     <div class="form-group" style="margin-top: 15px;">
@@ -2059,12 +2059,22 @@
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                         <div class="form-group">
-                            <label for="pago_fecha_pago">Fecha de Pago</label>
-                            <input type="text" id="pago_fecha_pago" name="fecha_pago" placeholder="DD/MM/YYYY" maxlength="10" readonly style="cursor: pointer; background-color: white;">
+                            <label for="pago_fecha_prevista">Fecha Prevista</label>
+                            <input type="date" id="pago_fecha_prevista" name="fecha_prevista" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background-color: white;">
                         </div>
+                        <div class="form-group">
+                            <label for="pago_fecha_pago">Fecha de Pago</label>
+                            <input type="date" id="pago_fecha_pago" name="fecha_pago" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background-color: white;">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                         <div class="form-group">
                             <label for="pago_base_imponible">Base Imponible (€)</label>
                             <input type="number" id="pago_base_imponible" name="base_imponible" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label for="pago_monto">Monto Total (€)</label>
+                            <input type="number" id="pago_monto" name="monto" step="0.01" placeholder="0.00">
                         </div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
@@ -4264,71 +4274,19 @@
             const idPagoOculto = document.getElementById('cobro_id_pago');
             const esEdicion = idPagoOculto && idPagoOculto.value;
             
-            // Inicializar flatpickr para fecha prevista
+            // Lógica simple: si hay fecha prevista, no puede haber fecha de pago y viceversa
             if (fechaPrevistaInput) {
-                // NO establecer fecha prevista por defecto
-                // Solo se establece si el usuario la selecciona manualmente
-                
-                flatpickrCobroPrevista = flatpickr(fechaPrevistaInput, {
-                    dateFormat: "d/m/Y",
-                    locale: "es",
-                    allowInput: true,
-                    clickOpens: true,
-                    appendTo: document.body,
-                    defaultDate: fechaPrevistaInput.value || null,
-                    onChange: function(selectedDates, dateStr, instance) {
-                        if (dateStr) {
-                            const partes = dateStr.split('/');
-                            if (partes.length === 3) {
-                                const dia = partes[0].padStart(2, '0');
-                                const mes = partes[1].padStart(2, '0');
-                                const año = partes[2];
-                                instance.input.value = `${dia}/${mes}/${año}`;
-                            }
-                        }
-                        // Si se selecciona una fecha prevista, borrar la fecha de pago automáticamente
-                        if (dateStr && fechaPagoInput && flatpickrCobroPago) {
-                            fechaPagoInput.value = '';
-                            flatpickrCobroPago.clear();
-                        }
+                fechaPrevistaInput.addEventListener('change', function() {
+                    if (this.value && fechaPagoInput) {
+                        fechaPagoInput.value = ''; // Si se pone fecha prevista, se borra fecha de pago
                     }
                 });
             }
             
-            // Inicializar flatpickr para fecha de pago
             if (fechaPagoInput) {
-                // Si no tiene valor y no estamos editando, establecerlo a hoy por defecto
-                if (!fechaPagoInput.value && !esEdicion) {
-                    const hoy = new Date();
-                    const dia = String(hoy.getDate()).padStart(2, '0');
-                    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
-                    const año = hoy.getFullYear();
-                    fechaPagoInput.value = `${dia}/${mes}/${año}`;
-                }
-                
-                flatpickrCobroPago = flatpickr(fechaPagoInput, {
-                    dateFormat: "d/m/Y",
-                    locale: "es",
-                    allowInput: true,
-                    clickOpens: true,
-                    appendTo: document.body,
-                    maxDate: "today",
-                    defaultDate: fechaPagoInput.value || new Date(),
-                    onChange: function(selectedDates, dateStr, instance) {
-                        if (dateStr) {
-                            const partes = dateStr.split('/');
-                            if (partes.length === 3) {
-                                const dia = partes[0].padStart(2, '0');
-                                const mes = partes[1].padStart(2, '0');
-                                const año = partes[2];
-                                instance.input.value = `${dia}/${mes}/${año}`;
-                            }
-                        }
-                        // Si se selecciona una fecha de pago, borrar la fecha prevista automáticamente
-                        if (dateStr && fechaPrevistaInput && flatpickrCobroPrevista) {
-                            fechaPrevistaInput.value = '';
-                            flatpickrCobroPrevista.clear();
-                        }
+                fechaPagoInput.addEventListener('change', function() {
+                    if (this.value && fechaPrevistaInput) {
+                        fechaPrevistaInput.value = ''; // Si se pone fecha de pago, se borra fecha prevista
                     }
                 });
             }
@@ -4372,69 +4330,39 @@
                 return;
             }
             
-            // Convertir fechas de formato español a ISO
-            const fecha_pago_es = formData.get('fecha_pago');
-            let fecha_prevista_es = formData.get('fecha_prevista');
+            // Obtener fechas (type="date" devuelve YYYY-MM-DD)
+            const fecha_pago = formData.get('fecha_pago');
+            const fecha_prevista = formData.get('fecha_prevista');
             
-            // Si no hay fecha prevista, establecerla a hoy por defecto
-            if (!fecha_prevista_es) {
-                const hoy = new Date();
-                const dia = String(hoy.getDate()).padStart(2, '0');
-                const mes = String(hoy.getMonth() + 1).padStart(2, '0');
-                const año = hoy.getFullYear();
-                fecha_prevista_es = `${dia}/${mes}/${año}`;
-                // Actualizar el campo en el formulario
-                document.getElementById('cobro_fecha_prevista').value = fecha_prevista_es;
+            // LÓGICA SIMPLE: Si hay fecha prevista → pago previsto. Si hay fecha pago → pago realizado
+            const es_cobro_previsto = !!fecha_prevista && !fecha_pago;
+            const estado = fecha_pago ? 'cobrado' : 'pendiente';
+            
+            // Calcular mes_pagado desde la fecha que tenga valor
+            let mes_pagado = null;
+            const fechaParaMes = fecha_pago || fecha_prevista;
+            if (fechaParaMes) {
+                const partes = fechaParaMes.split('-');
+                if (partes.length === 3) {
+                    mes_pagado = `${partes[0]}-${partes[1]}`; // YYYY-MM
+                }
             }
             
-            // Si el concepto es "Pago mensual habitación", generar el concepto basado en la fecha prevista
-            if (concepto === 'Pago mensual habitación' && fecha_prevista_es) {
+            // Si el concepto es "Pago mensual habitación", generar el concepto basado en la fecha
+            if (concepto === 'Pago mensual habitación' && fechaParaMes) {
                 const mesesEspanol = {
                     1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
                     5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
                     9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
                 };
                 
-                const partes = fecha_prevista_es.split('/');
+                const partes = fechaParaMes.split('-');
                 if (partes.length === 3) {
+                    const año = parseInt(partes[0]);
                     const mes = parseInt(partes[1]);
-                    const año = parseInt(partes[2]);
                     const nombreMes = mesesEspanol[mes] || 'mes';
-                    // Formato: "Diciembre 25", "Enero 26" (solo mes y año, sin "Pago")
-                    const añoCorto = año.toString().slice(-2); // Últimos 2 dígitos del año
+                    const añoCorto = año.toString().slice(-2);
                     concepto = `${nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1)} ${añoCorto}`;
-                }
-            }
-            
-            // Determinar si es cobro previsto: si NO tiene fecha_pago, es previsto
-            const es_cobro_previsto = !fecha_pago_es || fecha_pago_es.trim() === '';
-            
-            // Validar fechas
-            if (fecha_pago_es && !validarFechaEspanol(fecha_pago_es)) {
-                showCobroModalError('La fecha de pago no es válida. Use formato DD/MM/YYYY');
-                saveBtn.disabled = false;
-                saveBtn.textContent = originalText;
-                return;
-            }
-            
-            if (fecha_prevista_es && !validarFechaEspanol(fecha_prevista_es)) {
-                showCobroModalError('La fecha prevista no es válida. Use formato DD/MM/YYYY');
-                saveBtn.disabled = false;
-                saveBtn.textContent = originalText;
-                return;
-            }
-            
-            // Calcular mes_pagado desde fecha_prevista o fecha_pago
-            let mes_pagado = null;
-            if (fecha_prevista_es) {
-                const partes = fecha_prevista_es.split('/');
-                if (partes.length === 3) {
-                    mes_pagado = `${partes[2]}-${partes[1]}`;
-                }
-            } else if (fecha_pago_es) {
-                const partes = fecha_pago_es.split('/');
-                if (partes.length === 3) {
-                    mes_pagado = `${partes[2]}-${partes[1]}`;
                 }
             }
             
@@ -4443,11 +4371,11 @@
                 monto: formData.get('monto') ? parseFloat(formData.get('monto')) : null,
                 concepto: concepto,
                 metodo_pago: formData.get('metodo_pago') || null,
-                fecha_pago: fecha_pago_es ? fechaEspanolToISO(fecha_pago_es) : null,
-                fecha_prevista: fecha_prevista_es ? fechaEspanolToISO(fecha_prevista_es) : null,
+                fecha_pago: fecha_pago || null,
+                fecha_prevista: fecha_prevista || null,
                 mes_pagado: mes_pagado,
-                es_cobro_previsto: es_cobro_previsto,  // Automático: true si no hay fecha_pago
-                estado: fecha_pago_es ? 'cobrado' : 'pendiente',
+                es_cobro_previsto: es_cobro_previsto,
+                estado: estado,
                 observaciones: formData.get('observaciones') || null
             };
             
@@ -4607,20 +4535,9 @@
                     document.getElementById('cobro_metodo_pago').value = cobro.metodo_pago || '';
                     document.getElementById('cobro_observaciones').value = cobro.observaciones || '';
                     
-                    // Convertir fechas de ISO a formato español
-                    if (cobro.fecha_prevista) {
-                        document.getElementById('cobro_fecha_prevista').value = fechaISOToEspanol(cobro.fecha_prevista);
-                    } else {
-                        // Si no hay fecha prevista, establecerla a hoy
-                        const hoy = new Date();
-                        const dia = String(hoy.getDate()).padStart(2, '0');
-                        const mes = String(hoy.getMonth() + 1).padStart(2, '0');
-                        const año = hoy.getFullYear();
-                        document.getElementById('cobro_fecha_prevista').value = `${dia}/${mes}/${año}`;
-                    }
-                    if (cobro.fecha_pago) {
-                        document.getElementById('cobro_fecha_pago').value = fechaISOToEspanol(cobro.fecha_pago);
-                    }
+                    // LÓGICA SIMPLE: O tiene fecha prevista O tiene fecha de pago, nunca ambas
+                    document.getElementById('cobro_fecha_prevista').value = cobro.fecha_prevista || '';
+                    document.getElementById('cobro_fecha_pago').value = cobro.fecha_pago || '';
                     
                     // Cambiar título del modal
                     document.getElementById('modalCobroTitulo').innerHTML = '<img src="/static/icons/medical/bill.svg" alt="Cobro" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> Editar Cobro';
@@ -5681,7 +5598,7 @@
                         </div>
                         <div class="form-group">
                             <label for="factura_fecha">Fecha de Pago *</label>
-                            <input type="text" id="factura_fecha" name="fecha_pago" value="${fechaFormateada}" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)" required style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                            <input type="date" id="factura_fecha" name="fecha_pago" value="${datosExtraidos.fecha_pago || ''}" required style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                         </div>
                     </div>
                     
@@ -6990,35 +6907,12 @@
             const selectProveedor = document.getElementById('pago_id_proveedor');
             const nombreProveedor = selectProveedor.options[selectProveedor.selectedIndex].text.split(' - ')[0];
             
-            // Convertir fechas de formato español a ISO
-            const fecha_pago_es = formData.get('fecha_pago');
-            const fecha_prevista_es = formData.get('fecha_prevista');
+            // Obtener fechas (type="date" devuelve YYYY-MM-DD)
+            const fecha_pago = formData.get('fecha_pago');
+            const fecha_prevista = formData.get('fecha_prevista');
             
-            // Validar fechas
-            if (fecha_pago_es && !validarFechaEspanol(fecha_pago_es)) {
-                showPagoProveedorModalError('La fecha de pago no es válida. Use formato DD/MM/YYYY');
-                saveBtn.disabled = false;
-                saveBtn.textContent = originalText;
-                return;
-            }
-            
-            if (fecha_prevista_es && !validarFechaEspanol(fecha_prevista_es)) {
-                showPagoProveedorModalError('La fecha prevista no es válida. Use formato DD/MM/YYYY');
-                saveBtn.disabled = false;
-                saveBtn.textContent = originalText;
-                return;
-            }
-            
-            // Calcular estado automáticamente basado en las fechas
-            // Si tiene fecha_pago → pagado, si tiene fecha_prevista → pendiente
-            let estado;
-            if (fecha_pago_es) {
-                estado = 'pagado';
-            } else if (fecha_prevista_es) {
-                estado = 'pendiente';
-            } else {
-                estado = 'pendiente'; // Por defecto
-            }
+            // LÓGICA SIMPLE: Si hay fecha de pago → pagado. Si hay fecha prevista → pendiente
+            const estado = fecha_pago ? 'pagado' : 'pendiente';
             
             const idPago = document.getElementById('pago_id_pago').value;
             const method = idPago ? 'PUT' : 'POST';
@@ -7052,8 +6946,8 @@
                 formDataMultipart.append('concepto', formData.get('concepto'));
                 formDataMultipart.append('monto', montoFinalMultipart > 0 ? montoFinalMultipart : '');
                 formDataMultipart.append('id_residencia', id_residencia);
-                if (fecha_pago_es) formDataMultipart.append('fecha_pago', fechaEspanolToISO(fecha_pago_es));
-                if (fecha_prevista_es) formDataMultipart.append('fecha_prevista', fechaEspanolToISO(fecha_prevista_es));
+                if (fecha_pago) formDataMultipart.append('fecha_pago', fecha_pago);
+                if (fecha_prevista) formDataMultipart.append('fecha_prevista', fecha_prevista);
                 if (formData.get('fecha_emision')) formDataMultipart.append('fecha_emision', formData.get('fecha_emision'));
                 if (formData.get('fecha_vencimiento')) formDataMultipart.append('fecha_vencimiento', formData.get('fecha_vencimiento'));
                 if (formData.get('metodo_pago')) formDataMultipart.append('metodo_pago', formData.get('metodo_pago'));
@@ -7117,8 +7011,8 @@
                 concepto: formData.get('concepto'),
                 monto: formData.get('monto') ? parseFloat(formData.get('monto')) : null,
                 id_residencia: parseInt(id_residencia),
-                fecha_pago: fecha_pago_es ? fechaEspanolToISO(fecha_pago_es) : null,
-                fecha_prevista: fecha_prevista_es ? fechaEspanolToISO(fecha_prevista_es) : null,
+                fecha_pago: fecha_pago || null,
+                fecha_prevista: fecha_prevista || null,
                 fecha_emision: formData.get('fecha_emision') || null,
                 fecha_vencimiento: formData.get('fecha_vencimiento') || null,
                 metodo_pago: formData.get('metodo_pago') || null,
@@ -7308,9 +7202,15 @@
                     setValue('pago_numero_factura', pago.numero_factura || '');
                     setValue('pago_observaciones', pago.observaciones || '');
                     
-                    // Convertir fechas de ISO a formato español
+                    // Campos de fecha (formato ISO para type="date")
+                    if (pago.fecha_prevista) {
+                        setValue('pago_fecha_prevista', pago.fecha_prevista);
+                    } else {
+                        setValue('pago_fecha_prevista', '');
+                    }
+                    
                     if (pago.fecha_pago) {
-                        setValue('pago_fecha_pago', fechaISOToEspanol(pago.fecha_pago));
+                        setValue('pago_fecha_pago', pago.fecha_pago);
                     } else {
                         setValue('pago_fecha_pago', '');
                     }
@@ -7331,6 +7231,7 @@
                     setValue('pago_base_imponible', pago.base_imponible || '');
                     setValue('pago_iva', pago.iva || '');
                     setValue('pago_iva_monto', pago.iva_monto || '');
+                    setValue('pago_monto', pago.monto || '');
                     
                     // Generar concepto automáticamente: Nombre del proveedor y fecha de factura
                     const generarConcepto = () => {
@@ -8792,7 +8693,7 @@
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
                                     <div class="form-group">
                                         <label for="edit_fecha_ingreso">Fecha de Ingreso</label>
-                                        <input type="text" id="edit_fecha_ingreso" name="fecha_ingreso" value="${res.fecha_ingreso ? fechaISOToEspanol(res.fecha_ingreso) : ''}" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this)" readonly style="cursor: pointer; background-color: white;">
+                                        <input type="date" id="edit_fecha_ingreso" name="fecha_ingreso" value="${res.fecha_ingreso || ''}" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background-color: white;">
                                     </div>
                                     <div class="form-group">
                                         <label for="edit_costo_habitacion">Costo de Habitación (€)</label>
@@ -8834,7 +8735,7 @@
                                     </div>
                                     <div class="form-group">
                                         <label for="edit_fecha_nacimiento">Fecha de Nacimiento</label>
-                                        <input type="text" id="edit_fecha_nacimiento" name="fecha_nacimiento" value="${res.fecha_nacimiento ? fechaISOToEspanol(res.fecha_nacimiento) : ''}" placeholder="DD/MM/YYYY" maxlength="10" oninput="formatearFechaInput(this); actualizarEdad('edit_fecha_nacimiento', 'edit_edad')" readonly style="cursor: pointer; background-color: white;">
+                                        <input type="date" id="edit_fecha_nacimiento" name="fecha_nacimiento" value="${res.fecha_nacimiento || ''}" onchange="actualizarEdad('edit_fecha_nacimiento', 'edit_edad')" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; background-color: white;">
                                     </div>
                                     <div class="form-group">
                                         <label for="edit_edad">Edad</label>

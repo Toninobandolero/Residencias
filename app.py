@@ -2799,10 +2799,16 @@ def crear_cobro():
         fecha_prevista = data.get('fecha_prevista')
         fecha_pago = data.get('fecha_pago')
         
-        # Determinar automáticamente si es cobro previsto: si NO tiene fecha_pago, es previsto
-        es_cobro_previsto = data.get('es_cobro_previsto')
-        if es_cobro_previsto is None:
-            es_cobro_previsto = not fecha_pago or fecha_pago == ''
+        # LÓGICA SIMPLE: Si hay fecha_pago → cobrado y NO hay fecha_prevista
+        #                Si hay fecha_prevista → previsto y NO hay fecha_pago
+        if fecha_pago:
+            fecha_prevista = None  # Si está pagado, NO tiene fecha prevista
+            es_cobro_previsto = False
+        elif fecha_prevista:
+            fecha_pago = None  # Si es previsto, NO tiene fecha de pago
+            es_cobro_previsto = True
+        else:
+            es_cobro_previsto = data.get('es_cobro_previsto', True)
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -3927,6 +3933,18 @@ def actualizar_cobro(id_pago):
                 if not valid:
                     return jsonify({'error': error}), 400
             
+            # LÓGICA SIMPLE: Si se pone fecha_pago, eliminar fecha_prevista y viceversa
+            if 'fecha_pago' in data and data.get('fecha_pago'):
+                # Si hay fecha de pago, NO puede haber fecha prevista
+                data['fecha_prevista'] = None
+                data['es_cobro_previsto'] = False
+                data['estado'] = 'cobrado'
+            elif 'fecha_prevista' in data and data.get('fecha_prevista'):
+                # Si hay fecha prevista, NO puede haber fecha de pago
+                data['fecha_pago'] = None
+                data['es_cobro_previsto'] = True
+                data['estado'] = 'pendiente'
+            
             # Campos actualizables
             campos_actualizables = [
                 'estado', 'fecha_pago', 'fecha_prevista', 'monto', 'concepto',
@@ -4157,14 +4175,16 @@ def crear_pago_proveedor():
             if not valid:
                 return jsonify({'error': error}), 400
         
-        # Calcular estado automáticamente basado en las fechas
-        # Si tiene fecha_pago → pagado, si tiene fecha_prevista → pendiente
+        # LÓGICA SIMPLE: Si hay fecha_pago → pagado y NO hay fecha_prevista
+        #                Si hay fecha_prevista → pendiente y NO hay fecha_pago
         if fecha_pago:
             estado = 'pagado'
+            fecha_prevista = None  # Si está pagado, NO tiene fecha prevista
         elif fecha_prevista:
             estado = 'pendiente'
+            fecha_pago = None  # Si es previsto, NO tiene fecha de pago
         else:
-            estado = data.get('estado', 'pendiente')  # Por defecto pendiente si no hay fechas
+            estado = data.get('estado', 'pendiente')
         
         if not monto or monto <= 0:
             return jsonify({'error': 'monto es requerido'}), 400
@@ -6129,15 +6149,24 @@ def actualizar_pago_proveedor(id_pago):
                 updates.append('factura_blob_path = %s')
                 valores.append(data['factura_blob_path'])
             
-            # Calcular estado automáticamente basado en las fechas
+            # LÓGICA SIMPLE: Si hay fecha_pago → pagado y eliminar fecha_prevista
+            #                Si hay fecha_prevista → pendiente y eliminar fecha_pago
             if 'fecha_pago' in data or 'fecha_prevista' in data:
                 fecha_pago = data.get('fecha_pago')
                 fecha_prevista = data.get('fecha_prevista')
                 
                 if fecha_pago:
                     estado = 'pagado'
+                    # Si hay fecha de pago, NO puede haber fecha prevista
+                    if 'fecha_prevista' not in updates:
+                        updates.append('fecha_prevista = %s')
+                        valores.append(None)
                 elif fecha_prevista:
                     estado = 'pendiente'
+                    # Si hay fecha prevista, NO puede haber fecha de pago
+                    if 'fecha_pago' not in updates:
+                        updates.append('fecha_pago = %s')
+                        valores.append(None)
                 else:
                     estado = data.get('estado', 'pendiente')
                 
