@@ -9115,12 +9115,14 @@ def listar_documentacion():
     - categoria: 'medica', 'fiscal', 'sanitaria', 'laboral', 'otra' (opcional)
     - id_residencia: ID de residencia (opcional, se filtra automáticamente por permisos)
     - id_entidad: ID específico de la entidad (opcional)
+    - limit: Número máximo de resultados (opcional, default: 200)
     """
     try:
         tipo_entidad = request.args.get('tipo_entidad')
         categoria = request.args.get('categoria')
         id_entidad = request.args.get('id_entidad', type=int)
         id_residencia_filtro = request.args.get('id_residencia', type=int)
+        limit = request.args.get('limit', type=int, default=200)
 
         
         conn = get_db_connection()
@@ -9378,9 +9380,21 @@ def listar_documentacion():
                 app.logger.error(f"Error al ordenar documentos: {str(e)}")
                 # Si falla el ordenamiento, continuar sin ordenar
             
+            # ORDENAR POR FECHA (más recientes primero)
+            # doc[8] es fecha_subida
+            documentos_ordenados = sorted(documentos, key=lambda x: x[8] if x[8] else datetime.min, reverse=True)
+            
+            # Guardar el total ANTES de limitar
+            total_documentos = len(documentos_ordenados)
+            
+            # APLICAR LÍMITE
+            documentos_limitados = documentos_ordenados[:limit] if limit and limit > 0 else documentos_ordenados
+            
+            app.logger.info(f"📊 Documentación: {len(documentos_limitados)} de {total_documentos} documentos (límite: {limit})")
+            
             # Obtener nombres de las entidades
             resultado = []
-            for doc in documentos:
+            for doc in documentos_limitados:
                 try:
                     # Verificar que el documento tiene suficientes campos
                     if len(doc) < 15:
@@ -9449,7 +9463,9 @@ def listar_documentacion():
             
             return jsonify({
                 'documentos': resultado,
-                'total': len(resultado),
+                'total': total_documentos,  # Total real (sin límite)
+                'mostrados': len(resultado),  # Documentos mostrados (con límite)
+                'limit': limit,  # Límite aplicado
                 'filtros': {
                     'tipo_entidad': tipo_entidad,
                     'categoria': categoria,
@@ -9791,6 +9807,7 @@ def listar_historicos():
     - id_residencia: ID de residencia (opcional)
     - estado: 'pendiente', 'cobrado', 'pagado' (opcional)
     - exportar: 'pdf', 'excel' (opcional, si se especifica genera el archivo)
+    - limit: Número máximo de resultados (opcional, default: 500)
     """
     try:
         tipo = request.args.get('tipo', 'todos')  # 'cobros', 'pagos', 'todos'
@@ -9799,6 +9816,7 @@ def listar_historicos():
         id_residencia_filtro = request.args.get('id_residencia', type=int)
         estado_filtro = request.args.get('estado')
         exportar = request.args.get('exportar')  # 'pdf' o 'excel'
+        limit = request.args.get('limit', type=int, default=500)
         
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -9933,20 +9951,51 @@ def listar_historicos():
                         'tipo': 'pago'
                     })
             
-            # Si se solicita exportación, generar archivo
+            # Si se solicita exportación, generar archivo (con todos los datos, sin límite)
             if exportar == 'pdf':
                 return generar_pdf_historicos(cobros, pagos, fecha_desde, fecha_hasta)
             elif exportar == 'excel':
                 return generar_excel_historicos(cobros, pagos, fecha_desde, fecha_hasta)
             
+            # Guardar totales ANTES de aplicar límite
+            total_cobros_real = len(cobros)
+            total_pagos_real = len(pagos)
+            total_cobros_monto_real = sum(c['monto'] for c in cobros)
+            total_pagos_monto_real = sum(p['monto'] for p in pagos)
+            
+            # APLICAR LÍMITE (dividido entre cobros y pagos proporcionalmente si es 'todos')
+            if limit and limit > 0:
+                if tipo == 'todos':
+                    # Dividir límite proporcionalmente
+                    total_registros = total_cobros_real + total_pagos_real
+                    if total_registros > 0:
+                        porcentaje_cobros = total_cobros_real / total_registros
+                        limite_cobros = int(limit * porcentaje_cobros)
+                        limite_pagos = limit - limite_cobros
+                        
+                        cobros = cobros[:limite_cobros]
+                        pagos = pagos[:limite_pagos]
+                    else:
+                        cobros = []
+                        pagos = []
+                elif tipo == 'cobros':
+                    cobros = cobros[:limit]
+                elif tipo == 'pagos':
+                    pagos = pagos[:limit]
+            
+            app.logger.info(f"📊 Históricos: {len(cobros)} cobros + {len(pagos)} pagos de {total_cobros_real + total_pagos_real} registros (límite: {limit})")
+            
             # Retornar JSON
             return jsonify({
                 'cobros': cobros,
                 'pagos': pagos,
-                'total_cobros': len(cobros),
-                'total_pagos': len(pagos),
-                'total_cobros_monto': sum(c['monto'] for c in cobros),
-                'total_pagos_monto': sum(p['monto'] for p in pagos),
+                'total_cobros': total_cobros_real,  # Total real sin límite
+                'total_pagos': total_pagos_real,  # Total real sin límite
+                'mostrados_cobros': len(cobros),  # Con límite
+                'mostrados_pagos': len(pagos),  # Con límite
+                'total_cobros_monto': total_cobros_monto_real,
+                'total_pagos_monto': total_pagos_monto_real,
+                'limit': limit,
                 'filtros': {
                     'tipo': tipo,
                     'fecha_desde': fecha_desde,

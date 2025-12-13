@@ -11,6 +11,10 @@
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="alternate icon" href="/favicon.ico">
+    <!-- Google Fonts - Tipografía moderna -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
         // SEGURIDAD CRÍTICA: Limpiar credenciales de URL ANTES DE QUE CHROME PARSEE EL RESTO
         (function() {
@@ -37,7 +41,7 @@
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
@@ -45,6 +49,28 @@
             align-items: center;
             padding: 20px;
             position: relative;
+        }
+        
+        /* Tipografía moderna para títulos */
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Poppins', 'Inter', sans-serif;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+        
+        h1 {
+            font-size: 32px;
+            font-weight: 800;
+        }
+        
+        h2 {
+            font-size: 24px;
+            font-weight: 700;
+        }
+        
+        h3 {
+            font-size: 20px;
+            font-weight: 600;
         }
 
 
@@ -67,9 +93,12 @@
         }
 
         .logo h1 {
+            font-family: 'Poppins', sans-serif;
+            font-weight: 800;
             color: #667eea;
-            font-size: 32px;
+            font-size: 36px;
             margin-bottom: 10px;
+            letter-spacing: -0.03em;
         }
 
         .logo img {
@@ -79,11 +108,12 @@
         }
 
         .logo p {
+            font-family: 'Poppins', sans-serif;
             color: #8d2f77;
-            font-size: 14px;
             font-size: 28px;
-            font-weight: 600;
+            font-weight: 700;
             margin: 0;
+            letter-spacing: -0.02em;
         }
 
         .header {
@@ -244,6 +274,7 @@
         }
 
         label {
+            font-family: 'Inter', sans-serif;
             display: block;
             margin-bottom: 8px;
             color: #333;
@@ -284,6 +315,7 @@
         }
 
         button {
+            font-family: 'Poppins', sans-serif;
             width: 100%;
             padding: 14px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -294,6 +326,7 @@
             font-weight: 600;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
+            letter-spacing: -0.01em;
             margin-top: 10px;
         }
 
@@ -341,9 +374,12 @@
         }
 
         .token-display h3 {
+            font-family: 'Poppins', sans-serif;
+            font-weight: 600;
             color: #333;
             font-size: 14px;
             margin-bottom: 10px;
+            letter-spacing: -0.01em;
         }
 
         .token-value {
@@ -373,9 +409,12 @@
         }
 
         .user-info h3 {
+            font-family: 'Poppins', sans-serif;
+            font-weight: 600;
             color: #667eea;
             font-size: 16px;
             margin-bottom: 10px;
+            letter-spacing: -0.01em;
         }
 
         .user-info p {
@@ -394,6 +433,7 @@
         }
 
         .module-btn {
+            font-family: 'Poppins', sans-serif;
             padding: 15px;
             color: white;
             border: none;
@@ -405,6 +445,7 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            letter-spacing: -0.01em;
         }
 
         .module-btn-residentes {
@@ -891,8 +932,11 @@
         }
 
         .modal-header h2 {
+            font-family: 'Poppins', sans-serif;
+            font-weight: 700;
             color: #667eea;
             margin: 0;
+            letter-spacing: -0.02em;
         }
 
         .close-modal {
@@ -11618,19 +11662,16 @@
             `;
             
             try {
-                // Obtener filtros actuales de la URL o usar valores por defecto
+                console.log('📥 Cargando TODOS los documentos desde el servidor...');
+                
+                // Guardar filtros de URL para aplicar DESPUÉS en el cliente
                 const urlParams = new URLSearchParams(window.location.search);
                 const tipoEntidadFiltro = urlParams.get('tipo_entidad') || '';
                 const categoriaFiltro = urlParams.get('categoria') || '';
                 const residenciaFiltro = urlParams.get('id_residencia') || '';
                 
-                // Construir URL con filtros
+                // IMPORTANTE: NO enviar filtros al servidor - traer TODOS los documentos
                 let url = `${API_URL}/api/v1/documentacion`;
-                const params = new URLSearchParams();
-                if (tipoEntidadFiltro) params.append('tipo_entidad', tipoEntidadFiltro);
-                if (categoriaFiltro) params.append('categoria', categoriaFiltro);
-                if (residenciaFiltro) params.append('id_residencia', residenciaFiltro);
-                if (params.toString()) url += '?' + params.toString();
                 
                 const response = await fetch(url, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -11707,181 +11748,14 @@
                             </div>
                     `;
                     
-                    if (data.documentos && data.documentos.length > 0) {
-                        // Ordenar documentos por fecha descendente
-                        data.documentos.sort((a, b) => {
-                            const fechaA = a.fecha_subida ? new Date(a.fecha_subida) : new Date(0);
-                            const fechaB = b.fecha_subida ? new Date(b.fecha_subida) : new Date(0);
-                            return fechaB - fechaA;
-                        });
-                        
-                        // Agrupar primero por tipo de entidad, luego por categoría
-                        const documentosPorTipo = {};
-                        data.documentos.forEach(doc => {
-                            const tipoEntidad = doc.tipo_entidad || 'otro';
-                            if (!documentosPorTipo[tipoEntidad]) {
-                                documentosPorTipo[tipoEntidad] = {};
-                            }
-                            const categoria = doc.categoria_documento || 'otra';
-                            if (!documentosPorTipo[tipoEntidad][categoria]) {
-                                documentosPorTipo[tipoEntidad][categoria] = [];
-                            }
-                            documentosPorTipo[tipoEntidad][categoria].push(doc);
-                        });
-                        
-                        const tiposOrden = ['residente', 'proveedor', 'pago_proveedor', 'personal'];
-                        const nombresTipo = {
-                            'residente': 'Residentes',
-                            'proveedor': 'Proveedores',
-                            'pago_proveedor': 'Facturas de Pagos',
-                            'personal': 'Personal'
-                        };
-                        
-                        const categoriasOrden = ['medica', 'fiscal', 'sanitaria', 'laboral', 'Pagos', 'otra'];
-                        const nombresCategoria = {
-                            'medica': 'Médica',
-                            'fiscal': 'Fiscal',
-                            'sanitaria': 'Sanitaria',
-                            'laboral': 'Laboral',
-                            'Pagos': 'Pagos',
-                            'otra': 'Otra'
-                        };
-                        
-                        const coloresTipo = {
-                            'residente': '#667eea',
-                            'proveedor': '#48bb78',
-                            'pago_proveedor': '#ed8936',
-                            'personal': '#9f7aea'
-                        };
-                        
-                        tiposOrden.forEach(tipo => {
-                            if (documentosPorTipo[tipo]) {
-                                const categorias = documentosPorTipo[tipo];
-                                let totalTipo = 0;
-                                Object.values(categorias).forEach(cat => {
-                                    totalTipo += cat.length;
-                                });
-                                
-                                if (totalTipo > 0) {
-                                    html += `
-                                        <div style="margin-bottom: 40px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid ${coloresTipo[tipo] || '#667eea'};">
-                                            <h3 style="color: ${coloresTipo[tipo] || '#667eea'}; margin-bottom: 20px; font-size: 20px; font-weight: 600;">
-                                                <img src="/static/icons/medical/${tipo === 'residente' ? 'users' : tipo === 'proveedor' ? 'package' : tipo === 'pago_proveedor' ? 'bill' : 'user-medical'}.svg" alt="${nombresTipo[tipo]}" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> 
-                                                ${nombresTipo[tipo]} (${totalTipo} documento${totalTipo !== 1 ? 's' : ''})
-                                            </h3>
-                                    `;
-                                    
-                                    categoriasOrden.forEach(cat => {
-                                        if (categorias[cat] && categorias[cat].length > 0) {
-                                            html += `
-                                                <div style="margin-bottom: 25px;">
-                                                    <h4 style="color: #555; margin-bottom: 12px; font-size: 16px; font-weight: 600; padding: 8px; background: white; border-radius: 6px;">
-                                                        ${nombresCategoria[cat]} (${categorias[cat].length})
-                                                    </h4>
-                                                    <div style="overflow-x: auto;">
-                                                        <table class="data-table">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th style="min-width: 150px;">Entidad / Residencia</th>
-                                                                    <th style="min-width: 120px;">Tipo de Documento</th>
-                                                                    <th style="min-width: 200px;">Nombre del Archivo</th>
-                                                                    <th style="min-width: 200px;">Descripción</th>
-                                                                    <th style="min-width: 100px;">Fecha</th>
-                                                                    <th style="min-width: 150px;">Acciones</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                            `;
-                                            
-                                            categorias[cat].forEach(doc => {
-                                                const tipoEntidadNombre = {
-                                                    'residente': 'Residente',
-                                                    'proveedor': 'Proveedor',
-                                                    'pago_proveedor': 'Pago Proveedor',
-                                                    'personal': 'Personal'
-                                                };
-                                                
-                                                const fechaSubida = doc.fecha_subida ? fechaISOToEspanol(doc.fecha_subida.split('T')[0]) : '-';
-                                                
-                                                html += `
-                                                    <tr data-tipo-entidad="${doc.tipo_entidad}" data-categoria="${doc.categoria_documento || ''}" data-residencia="${doc.id_residencia || ''}" data-nombre="${(doc.nombre_entidad || '').toLowerCase()} ${(doc.tipo_documento || '').toLowerCase()} ${(doc.nombre_archivo || '').toLowerCase()} ${(doc.descripcion || '').toLowerCase()}">
-                                                        <td>
-                                                            <div style="display: flex; flex-direction: column; gap: 4px;">
-                                                                <span style="padding: 4px 8px; background: ${coloresTipo[doc.tipo_entidad] || '#e0e0e0'}; color: white; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block; width: fit-content;">
-                                                                    ${tipoEntidadNombre[doc.tipo_entidad] || doc.tipo_entidad}
-                                                                </span>
-                                                                <span style="font-weight: 600; color: #333;">${doc.nombre_entidad || `ID: ${doc.id_entidad}`}</span>
-                                                                ${doc.nombre_residencia ? `<span style="font-size: 12px; color: #666;">${doc.nombre_residencia}</span>` : ''}
-                                                            </div>
-                                                        </td>
-                                                        <td>${doc.tipo_documento || '-'}</td>
-                                                        <td style="word-break: break-word;">${doc.nombre_archivo || '-'}</td>
-                                                        <td style="word-break: break-word;">${doc.descripcion || '-'}</td>
-                                                        <td>${fechaSubida}</td>
-                                                        <td>
-                                                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; width: 100%;">
-                                                                ${doc.url_descarga ? `
-                                                                    <button onclick="verDocumento(${doc.id_documento}, '${doc.tipo_entidad}')" style="padding: 8px; background: #17a2b8; color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Ver documento">
-                                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);">
-                                                                            <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" fill="currentColor"/>
-                                                                        </svg>
-                                                                    </button>
-                                                                    <button onclick="descargarDocumento(${doc.id_documento}, '${doc.tipo_entidad}')" style="padding: 8px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Descargar documento">
-                                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);">
-                                                                            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/>
-                                                                        </svg>
-                                                                    </button>
-                                                                ` : `
-                                                                    <div></div>
-                                                                    <div></div>
-                                                                `}
-                                                                ${(function() {
-                                                                    if (doc.tipo_entidad === 'pago_proveedor') return '';
-                                                                    if (!usuarioTienePermiso('eliminar:documento')) return '<div></div>';
-                                                                    return '<button onclick="eliminarDocumentoUnificado(' + doc.id_documento + ')" style="padding: 8px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Eliminar documento"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: brightness(0) invert(1);"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg></button>';
-                                                                })()}
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                `;
-                                            });
-                                            
-                                            html += `
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            `;
-                                        }
-                                    });
-                                    
-                                    html += `</div>`;
-                                }
-                            }
-                        });
-                    } else {
-                        html += '<p style="color: #666; text-align: center; padding: 40px;">No hay documentos registrados.</p>';
-                    }
-                    
+                    // Crear contenedor para tablas (se llenará con actualizarTablaDocumentos)
+                    html += '<div id="contenidoTablas"></div>';
                     html += '</div>';
                     content.innerHTML = html;
                     
-                    // Aplicar valores de filtros DESPUÉS de insertar el HTML
-                    setTimeout(() => {
-                        const filtroResidencia = document.getElementById('filtroResidenciaDocumentacion');
-                        const filtroTipo = document.getElementById('filtroTipoEntidad');
-                        const filtroCat = document.getElementById('filtroCategoria');
-                        const filtroBusqueda = document.getElementById('filtroBusquedaDocumentacion');
-                        const busquedaFiltro = urlParams.get('busqueda') || '';
-                        
-                        if (filtroResidencia && residenciaFiltro) filtroResidencia.value = residenciaFiltro;
-                        if (filtroTipo && tipoEntidadFiltro) filtroTipo.value = tipoEntidadFiltro;
-                        if (filtroCat && categoriaFiltro) filtroCat.value = categoriaFiltro;
-                        if (filtroBusqueda && busquedaFiltro) {
-                            filtroBusqueda.value = busquedaFiltro;
-                            aplicarBusquedaDocumentacion(busquedaFiltro);
-                        }
-                    }, 100);
+                    // Cargar documentos usando el nuevo sistema de filtrado
+                    console.log('📥 Cargando documentos iniciales desde servidor...');
+                    await aplicarFiltrosDocumentacion();
                 } else {
                     const error = await response.json();
                     content.innerHTML = `<div class="module-content"><p style="color: red;">Error: ${error.error || 'Error desconocido'}</p></div>`;
@@ -11892,52 +11766,77 @@
             }
         }
         
-        function aplicarFiltrosDocumentacion() {
+        async function aplicarFiltrosDocumentacion() {
             const residencia = document.getElementById('filtroResidenciaDocumentacion')?.value || '';
             const tipoEntidad = document.getElementById('filtroTipoEntidad')?.value || '';
             const categoria = document.getElementById('filtroCategoria')?.value || '';
             const busqueda = document.getElementById('filtroBusquedaDocumentacion')?.value?.toLowerCase() || '';
             
-            // Actualizar URL sin recargar página
+            console.log('🔍 Aplicando filtros en servidor:', { residencia, tipoEntidad, categoria, busqueda });
+            
+            // Construir URL con filtros
             const params = new URLSearchParams();
             if (tipoEntidad) params.append('tipo_entidad', tipoEntidad);
             if (categoria) params.append('categoria', categoria);
             if (residencia) params.append('id_residencia', residencia);
+            params.append('limit', '200');  // Límite de 200 documentos
             
-            window.history.pushState({}, '', params.toString() ? `?${params.toString()}` : window.location.pathname);
+            const url = `${API_URL}/api/v1/documentacion${params.toString() ? '?' + params.toString() : ''}`;
             
-            // Filtrar documentos en el cliente (sin recargar)
+            try {
+                // Mostrar indicador de carga
+                const contenidoTablas = document.getElementById('contenidoTablas');
+                if (contenidoTablas) {
+                    contenidoTablas.innerHTML = '<div style="text-align: center; padding: 40px; color: #667eea;"><p>⏳ Cargando documentos...</p></div>';
+                }
+                
+                const token = localStorage.getItem('violetas_token');
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log(`✅ Servidor devolvió: ${data.mostrados} de ${data.total} documentos (límite: ${data.limit})`);
+                    
+                    // Actualizar solo el contenido de documentos
+                    actualizarTablaDocumentos(data);
+                    
+                    // Aplicar filtro de búsqueda local si existe
+                    if (busqueda) {
+                        aplicarBusquedaLocalDocumentacion(busqueda);
+                    }
+                } else {
+                    console.error('❌ Error al aplicar filtros:', response.status);
+                    if (contenidoTablas) {
+                        contenidoTablas.innerHTML = '<div style="text-align: center; padding: 40px; color: #dc3545;"><p>❌ Error al cargar documentos</p></div>';
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error en aplicarFiltrosDocumentacion:', error);
+            }
+        }
+        
+        function aplicarBusquedaLocalDocumentacion(busqueda) {
+            // Búsqueda local en los documentos ya cargados (sin nueva petición)
             const filas = document.querySelectorAll('#moduleContent tbody tr');
             let visibles = 0;
             
             filas.forEach(fila => {
-                let mostrar = true;
+                const filaNombre = (fila.dataset.nombre || '').toLowerCase();
+                const mostrar = filaNombre.includes(busqueda);
                 
-                // Filtrar por tipo de entidad
-                if (tipoEntidad && fila.dataset.tipoEntidad !== tipoEntidad) {
-                    mostrar = false;
-        }
-        
-                // Filtrar por categoría
-                if (categoria && fila.dataset.categoria !== categoria) {
-                    mostrar = false;
-                }
-                
-                // Filtrar por residencia
-                if (residencia && fila.dataset.residencia !== residencia) {
-                    mostrar = false;
-                }
-                
-                // Filtrar por búsqueda de texto
-                if (busqueda && !fila.dataset.nombre.includes(busqueda)) {
-                    mostrar = false;
-                }
-                
-                // Mostrar/ocultar fila
                 fila.style.display = mostrar ? '' : 'none';
                 if (mostrar) visibles++;
             });
             
+            console.log(`🔎 Búsqueda local: ${visibles}/${filas.length} filas visibles`);
+            
+            // Ocultar bloques vacíos después de búsqueda local
+            ocultarBloquesVaciosDocumentacion();
+        }
+        
+        function ocultarBloquesVaciosDocumentacion() {
             // Ocultar bloques de categoría que queden vacíos (nivel más interno)
             const tablas = document.querySelectorAll('#moduleContent .data-table');
             tablas.forEach(tabla => {
@@ -11992,6 +11891,112 @@
                     moduleContent?.appendChild(noResultados);
                 }
             }
+        }
+        
+        function actualizarTablaDocumentos(data) {
+            // Generar HTML con los documentos del servidor
+            const contenidoTablas = document.getElementById('contenidoTablas');
+            if (!contenidoTablas) return;
+            
+            let html = '';
+            
+            // Mensaje informativo de cantidad
+            if (data.total > data.mostrados) {
+                html += `
+                    <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
+                        <p style="margin: 0; color: #856404; font-weight: 500;">
+                            ℹ️ Mostrando los <strong>${data.mostrados}</strong> documentos más recientes de un total de <strong>${data.total}</strong>. 
+                            ${data.total > data.limit ? 'Use filtros para encontrar documentos específicos.' : ''}
+                        </p>
+                    </div>
+                `;
+            } else if (data.total > 0) {
+                html += `
+                    <div style="background: #d1ecf1; border-left: 4px solid #0c5460; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
+                        <p style="margin: 0; color: #0c5460; font-weight: 500;">
+                            📊 Mostrando <strong>${data.mostrados}</strong> documento${data.mostrados !== 1 ? 's' : ''}
+                        </p>
+                    </div>
+                `;
+            }
+            
+            if (data.documentos && data.documentos.length > 0) {
+                // Agrupar por tipo de entidad y categoría (mismo código que loadDocumentacion)
+                const documentosPorTipo = {};
+                data.documentos.forEach(doc => {
+                    const tipoEntidad = doc.tipo_entidad || 'otro';
+                    if (!documentosPorTipo[tipoEntidad]) documentosPorTipo[tipoEntidad] = {};
+                    const categoria = doc.categoria_documento || 'otra';
+                    if (!documentosPorTipo[tipoEntidad][categoria]) documentosPorTipo[tipoEntidad][categoria] = [];
+                    documentosPorTipo[tipoEntidad][categoria].push(doc);
+                });
+                
+                const tiposOrden = ['residente', 'proveedor', 'pago_proveedor', 'personal'];
+                const nombresTipo = {'residente': 'Residentes', 'proveedor': 'Proveedores', 'pago_proveedor': 'Facturas de Pagos', 'personal': 'Personal'};
+                const categoriasOrden = ['medica', 'fiscal', 'sanitaria', 'laboral', 'Pagos', 'otra'];
+                const nombresCategoria = {'medica': 'Médica', 'fiscal': 'Fiscal', 'sanitaria': 'Sanitaria', 'laboral': 'Laboral', 'Pagos': 'Pagos', 'otra': 'Otra'};
+                const coloresTipo = {'residente': '#667eea', 'proveedor': '#48bb78', 'pago_proveedor': '#ed8936', 'personal': '#9f7aea'};
+                
+                tiposOrden.forEach(tipo => {
+                    if (documentosPorTipo[tipo]) {
+                        const categorias = documentosPorTipo[tipo];
+                        let totalTipo = 0;
+                        Object.values(categorias).forEach(cat => totalTipo += cat.length);
+                        
+                        if (totalTipo > 0) {
+                            html += `<div style="margin-bottom: 40px; padding: 20px; background: #f8f9fa; border-radius: 10px; border-left: 4px solid ${coloresTipo[tipo]};">
+                                <h3 style="color: ${coloresTipo[tipo]}; margin-bottom: 20px; font-size: 20px; font-weight: 600;">
+                                    <img src="/static/icons/medical/${tipo === 'residente' ? 'users' : tipo === 'proveedor' ? 'package' : tipo === 'pago_proveedor' ? 'bill' : 'user-medical'}.svg" style="width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"> 
+                                    ${nombresTipo[tipo]} (${totalTipo} documento${totalTipo !== 1 ? 's' : ''})
+                                </h3>`;
+                            
+                            categoriasOrden.forEach(cat => {
+                                if (categorias[cat] && categorias[cat].length > 0) {
+                                    html += `<div style="margin-bottom: 25px;">
+                                        <h4 style="color: #555; margin-bottom: 12px; font-size: 16px; font-weight: 600; padding: 8px; background: white; border-radius: 6px;">${nombresCategoria[cat]} (${categorias[cat].length})</h4>
+                                        <div style="overflow-x: auto;"><table class="data-table"><thead><tr>
+                                            <th style="min-width: 150px;">Entidad / Residencia</th>
+                                            <th style="min-width: 120px;">Tipo de Documento</th>
+                                            <th style="min-width: 200px;">Nombre del Archivo</th>
+                                            <th style="min-width: 200px;">Descripción</th>
+                                            <th style="min-width: 100px;">Fecha</th>
+                                            <th style="min-width: 150px;">Acciones</th>
+                                        </tr></thead><tbody>`;
+                                    
+                                    categorias[cat].forEach(doc => {
+                                        const tipoEntidadNombre = {'residente': 'Residente', 'proveedor': 'Proveedor', 'pago_proveedor': 'Pago Proveedor', 'personal': 'Personal'};
+                                        const fechaSubida = doc.fecha_subida ? fechaISOToEspanol(doc.fecha_subida.split('T')[0]) : '-';
+                                        
+                                        html += `<tr data-tipo-entidad="${doc.tipo_entidad}" data-categoria="${doc.categoria_documento || ''}" data-residencia="${doc.id_residencia || ''}" data-nombre="${(doc.nombre_entidad || '').toLowerCase()} ${(doc.tipo_documento || '').toLowerCase()} ${(doc.nombre_archivo || '').toLowerCase()} ${(doc.descripcion || '').toLowerCase()}">
+                                            <td><div style="display: flex; flex-direction: column; gap: 4px;">
+                                                <span style="padding: 4px 8px; background: ${coloresTipo[doc.tipo_entidad]}; color: white; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block; width: fit-content;">${tipoEntidadNombre[doc.tipo_entidad] || doc.tipo_entidad}</span>
+                                                <span style="font-weight: 600; color: #333;">${doc.nombre_entidad || `ID: ${doc.id_entidad}`}</span>
+                                                ${doc.nombre_residencia ? `<span style="font-size: 12px; color: #666;">${doc.nombre_residencia}</span>` : ''}
+                                            </div></td>
+                                            <td>${doc.tipo_documento || '-'}</td>
+                                            <td style="word-break: break-word;">${doc.nombre_archivo || '-'}</td>
+                                            <td style="word-break: break-word;">${doc.descripcion || '-'}</td>
+                                            <td>${fechaSubida}</td>
+                                            <td><div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;">
+                                                ${doc.url_descarga ? `<button onclick="verDocumento(${doc.id_documento}, '${doc.tipo_entidad}')" style="padding: 8px; background: #17a2b8; color: white; border: none; border-radius: 6px; cursor: pointer;" title="Ver"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="filter: brightness(0) invert(1);"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" fill="currentColor"/></svg></button>
+                                                <button onclick="descargarDocumento(${doc.id_documento}, '${doc.tipo_entidad}')" style="padding: 8px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer;" title="Descargar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="filter: brightness(0) invert(1);"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/></svg></button>` : '<div></div><div></div>'}
+                                                ${doc.tipo_entidad === 'pago_proveedor' ? '' : usuarioTienePermiso('eliminar:documento') ? `<button onclick="eliminarDocumentoUnificado(${doc.id_documento})" style="padding: 8px; background: #dc3545; color: white; border: none; border-radius: 6px; cursor: pointer;" title="Eliminar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="filter: brightness(0) invert(1);"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg></button>` : '<div></div>'}
+                                            </div></td>
+                                        </tr>`;
+                                    });
+                                    
+                                    html += `</tbody></table></div></div>`;
+                                }
+                            });
+                            html += `</div>`;
+                        }
+                    }
+                });
+            } else {
+                html += '<p style="color: #666; text-align: center; padding: 40px;">No hay documentos registrados con los filtros seleccionados.</p>';
+            }
+            
+            contenidoTablas.innerHTML = html;
         }
         
         function aplicarBusquedaDocumentacion(terminoBusqueda) {
@@ -12073,7 +12078,9 @@
             }
         }
         
-        function limpiarFiltrosDocumentacion() {
+        async function limpiarFiltrosDocumentacion() {
+            console.log('🧹 Limpiando filtros de documentación...');
+            
             // Limpiar todos los campos de filtro
             const filtroResidencia = document.getElementById('filtroResidenciaDocumentacion');
             const filtroTipoEntidad = document.getElementById('filtroTipoEntidad');
@@ -12085,11 +12092,9 @@
             if (filtroCategoria) filtroCategoria.value = '';
             if (filtroBusqueda) filtroBusqueda.value = '';
             
-            // Limpiar URL
-            window.history.pushState({}, '', window.location.pathname);
-            
-            // Aplicar filtros (mostrará todos los documentos)
-            aplicarFiltrosDocumentacion();
+            // Recargar documentos desde el servidor (sin filtros = todos los documentos)
+            console.log('✅ Recargando todos los documentos desde el servidor...');
+            await aplicarFiltrosDocumentacion();
         }
         
         async function actualizarEntidadesDocumento() {
@@ -12362,7 +12367,7 @@
         // FUNCIONES DEL MÓDULO DE HISTÓRICOS
         // ========================================================================
         
-        async function loadHistoricos() {
+        async function loadHistoricos(tipoParam = null, fechaDesdeParam = null, fechaHastaParam = null, estadoParam = null, residenciaParam = null) {
             const content = document.getElementById('moduleContent');
             const token = localStorage.getItem('violetas_token');
             
@@ -12376,15 +12381,28 @@
             `;
             
             try {
-                // Obtener filtros de la URL
-                const urlParams = new URLSearchParams(window.location.search);
-                const tipoFiltro = urlParams.get('tipo') || 'todos';
-                const fechaDesdeFiltro = urlParams.get('fecha_desde') || '';
-                const fechaHastaFiltro = urlParams.get('fecha_hasta') || '';
-                const estadoFiltro = urlParams.get('estado') || '';
-                const residenciaFiltro = urlParams.get('id_residencia') || '';
+                // Usar parámetros pasados o leer de URL (para carga inicial)
+                let tipoFiltro, fechaDesdeFiltro, fechaHastaFiltro, estadoFiltro, residenciaFiltro;
+                
+                if (tipoParam !== null) {
+                    // Parámetros pasados desde aplicarFiltrosHistoricos() - PRIORITARIOS
+                    tipoFiltro = tipoParam;
+                    fechaDesdeFiltro = fechaDesdeParam || '';
+                    fechaHastaFiltro = fechaHastaParam || '';
+                    estadoFiltro = estadoParam || '';
+                    residenciaFiltro = residenciaParam || '';
+                } else {
+                    // Leer de URL (solo primera carga)
+                    const urlParams = new URLSearchParams(window.location.search);
+                    tipoFiltro = urlParams.get('tipo') || 'todos';
+                    fechaDesdeFiltro = urlParams.get('fecha_desde') || '';
+                    fechaHastaFiltro = urlParams.get('fecha_hasta') || '';
+                    estadoFiltro = urlParams.get('estado') || '';
+                    residenciaFiltro = urlParams.get('id_residencia') || '';
+                }
                 
                 // Construir URL con filtros
+                console.log('📥 Cargando históricos desde servidor con filtros...');
                 let url = `${API_URL}/api/v1/historicos`;
                 const params = new URLSearchParams();
                 params.append('tipo', tipoFiltro);
@@ -12392,6 +12410,7 @@
                 if (fechaHastaFiltro) params.append('fecha_hasta', fechaHastaFiltro);
                 if (estadoFiltro) params.append('estado', estadoFiltro);
                 if (residenciaFiltro) params.append('id_residencia', residenciaFiltro);
+                params.append('limit', '500');  // Límite de 500 registros
                 url += '?' + params.toString();
                 
                 const response = await fetch(url, {
@@ -12430,13 +12449,13 @@
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
                                     <div>
                                         <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Residencia</label>
-                                        <select id="filtroResidenciaHistorico" onchange="aplicarFiltrosHistoricos()" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                        <select id="filtroResidenciaHistorico" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                                             ${residenciasOptions}
                                         </select>
                                     </div>
                                     <div>
                                         <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Tipo</label>
-                                        <select id="filtroTipoHistorico" onchange="aplicarFiltrosHistoricos()" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                        <select id="filtroTipoHistorico" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                                             <option value="todos">Todos</option>
                                             <option value="cobros">Solo Cobros</option>
                                             <option value="pagos">Solo Pagos</option>
@@ -12444,15 +12463,15 @@
                                     </div>
                                     <div>
                                         <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Fecha Desde</label>
-                                        <input type="date" id="filtroFechaDesde" onchange="aplicarFiltrosHistoricos()" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                        <input type="date" id="filtroFechaDesde" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                                     </div>
                                     <div>
                                         <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Fecha Hasta</label>
-                                        <input type="date" id="filtroFechaHasta" onchange="aplicarFiltrosHistoricos()" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                        <input type="date" id="filtroFechaHasta" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                                     </div>
                                     <div>
                                         <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">Estado</label>
-                                        <select id="filtroEstadoHistorico" onchange="aplicarFiltrosHistoricos()" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                                        <select id="filtroEstadoHistorico" style="width: 100%; padding: 10px 15px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
                                             <option value="">Todos</option>
                                             <option value="pendiente">Pendiente</option>
                                             <option value="cobrado">Cobrado</option>
@@ -12461,6 +12480,9 @@
                                     </div>
                                 </div>
                                 <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                    <button onclick="aplicarFiltrosHistoricos()" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+                                        <img src="/static/icons/medical/check-circle.svg" alt="Aplicar" style="width: 18px; height: 18px; filter: brightness(0) invert(1);"> Aplicar Filtros
+                                    </button>
                                     <button onclick="limpiarFiltrosHistoricos()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px;">
                                         <img src="/static/icons/medical/settings.svg" alt="Limpiar" style="width: 18px; height: 18px; filter: brightness(0) invert(1);"> Limpiar Filtros
                                     </button>
@@ -12489,6 +12511,29 @@
                         if (filtroFechaHasta && fechaHastaFiltro) filtroFechaHasta.value = fechaHastaFiltro;
                         if (filtroEstado && estadoFiltro) filtroEstado.value = estadoFiltro;
                     }, 100);
+                    
+                    // Mensaje informativo de cantidad
+                    const totalRegistros = (data.total_cobros || 0) + (data.total_pagos || 0);
+                    const mostradosRegistros = (data.mostrados_cobros || data.cobros.length) + (data.mostrados_pagos || data.pagos.length);
+                    
+                    if (totalRegistros > mostradosRegistros) {
+                        html += `
+                            <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
+                                <p style="margin: 0; color: #856404; font-weight: 500;">
+                                    ℹ️ Mostrando los <strong>${mostradosRegistros}</strong> registros más recientes de un total de <strong>${totalRegistros}</strong>. 
+                                    Use filtros de fecha o residencia para encontrar registros específicos.
+                                </p>
+                            </div>
+                        `;
+                    } else if (totalRegistros > 0) {
+                        html += `
+                            <div style="background: #d1ecf1; border-left: 4px solid #0c5460; padding: 15px; margin-bottom: 20px; border-radius: 8px;">
+                                <p style="margin: 0; color: #0c5460; font-weight: 500;">
+                                    📊 Mostrando <strong>${mostradosRegistros}</strong> registro${mostradosRegistros !== 1 ? 's' : ''}
+                                </p>
+                            </div>
+                        `;
+                    }
                     
                     // Mostrar cobros
                     if (data.cobros && data.cobros.length > 0) {
@@ -12633,7 +12678,9 @@
             }
         }
         
-        function limpiarFiltrosHistoricos() {
+        async function limpiarFiltrosHistoricos() {
+            console.log('🧹 Limpiando filtros de históricos...');
+            
             // Limpiar todos los campos de filtro
             const filtroResidencia = document.getElementById('filtroResidenciaHistorico');
             const filtroTipo = document.getElementById('filtroTipoHistorico');
@@ -12647,111 +12694,23 @@
             if (filtroFechaHasta) filtroFechaHasta.value = '';
             if (filtroEstado) filtroEstado.value = '';
             
-            // Limpiar URL
-            window.history.pushState({}, '', window.location.pathname);
-            
-            // Aplicar filtros (mostrará todos los registros)
-            aplicarFiltrosHistoricos();
+            // Recargar todos los históricos desde el servidor
+            console.log('✅ Recargando históricos desde el servidor...');
+            await aplicarFiltrosHistoricos();
         }
         
-        function aplicarFiltrosHistoricos() {
+        async function aplicarFiltrosHistoricos() {
+            // Leer valores ANTES de cualquier recarga
             const residencia = document.getElementById('filtroResidenciaHistorico')?.value || '';
             const tipo = document.getElementById('filtroTipoHistorico')?.value || 'todos';
             const fechaDesde = document.getElementById('filtroFechaDesde')?.value || '';
             const fechaHasta = document.getElementById('filtroFechaHasta')?.value || '';
             const estado = document.getElementById('filtroEstadoHistorico')?.value || '';
             
-            // Actualizar URL sin recargar página
-            const params = new URLSearchParams();
-            params.append('tipo', tipo);
-            if (residencia) params.append('id_residencia', residencia);
-            if (fechaDesde) params.append('fecha_desde', fechaDesde);
-            if (fechaHasta) params.append('fecha_hasta', fechaHasta);
-            if (estado) params.append('estado', estado);
+            console.log('🔍 Aplicando filtros de históricos:', { residencia, tipo, fechaDesde, fechaHasta, estado });
             
-            window.history.pushState({}, '', params.toString() ? `?${params.toString()}` : window.location.pathname);
-            
-            // Filtrar en el cliente (sin recargar)
-            const filas = document.querySelectorAll('#moduleContent tbody tr');
-            let visiblesCobros = 0;
-            let visiblesPagos = 0;
-            
-            filas.forEach(fila => {
-                let mostrar = true;
-                
-                // Filtrar por tipo (cobro/pago)
-                if (tipo === 'cobros' && fila.dataset.tipo !== 'cobro') {
-                    mostrar = false;
-                } else if (tipo === 'pagos' && fila.dataset.tipo !== 'pago') {
-                    mostrar = false;
-                }
-                
-                // Filtrar por estado
-                if (estado && fila.dataset.estado !== estado) {
-                    mostrar = false;
-                }
-                
-                // Filtrar por residencia
-                if (residencia && fila.dataset.residencia !== residencia) {
-                    mostrar = false;
-                }
-                
-                // Filtrar por rango de fechas
-                if (fechaDesde && fila.dataset.fecha && fila.dataset.fecha < fechaDesde) {
-                    mostrar = false;
-                }
-                if (fechaHasta && fila.dataset.fecha && fila.dataset.fecha > fechaHasta) {
-                    mostrar = false;
-                }
-                
-                // Mostrar/ocultar fila
-                fila.style.display = mostrar ? '' : 'none';
-                
-                // Contar visibles por tipo
-                if (mostrar) {
-                    if (fila.dataset.tipo === 'cobro') visiblesCobros++;
-                    else if (fila.dataset.tipo === 'pago') visiblesPagos++;
-                }
-            });
-            
-            // Ocultar secciones completas de cobros y pagos si quedan vacías (la "concha vacía")
-            const tablas = document.querySelectorAll('#moduleContent .data-table');
-            tablas.forEach((tabla, index) => {
-                const tbody = tabla.querySelector('tbody');
-                if (tbody) {
-                    // Contar filas visibles en esta tabla
-                    const filasVisibles = Array.from(tbody.querySelectorAll('tr')).filter(fila => fila.style.display !== 'none').length;
-                    
-                    // Buscar el contenedor padre (el div con el h3 y la tabla)
-                    const contenedorSeccion = tabla.closest('div[style*="margin-bottom: 30px"]');
-                    if (contenedorSeccion) {
-                        // Si no hay filas visibles, ocultar todo el bloque
-                        contenedorSeccion.style.display = filasVisibles > 0 ? '' : 'none';
-                    }
-                }
-            });
-            
-            // Contar secciones visibles para el mensaje
-            const seccionesCobros = document.querySelectorAll('#moduleContent .data-table')[0]?.closest('div[style*="margin-bottom: 30px"]');
-            const seccionesPagos = document.querySelectorAll('#moduleContent .data-table')[1]?.closest('div[style*="margin-bottom: 30px"]');
-            const seccionCobrosVisible = seccionesCobros && seccionesCobros.style.display !== 'none';
-            const seccionPagosVisible = seccionesPagos && seccionesPagos.style.display !== 'none';
-            
-            // Mostrar mensaje si no hay resultados
-            if (!seccionCobrosVisible && !seccionPagosVisible && filas.length > 0) {
-                const moduleContent = document.getElementById('moduleContent');
-                const noResultados = moduleContent?.querySelector('.no-resultados-historicos');
-                if (noResultados) noResultados.remove();
-                
-                const mensaje = document.createElement('div');
-                mensaje.className = 'no-resultados-historicos';
-                mensaje.style.cssText = 'background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;';
-                mensaje.innerHTML = '<p style="margin: 0; color: #856404; font-size: 16px;">No se encontraron registros con los filtros seleccionados</p>';
-                moduleContent?.appendChild(mensaje);
-            } else {
-                const noResultados = document.querySelector('.no-resultados-historicos');
-                if (noResultados) noResultados.remove();
-            }
+            // Recargar con los filtros preservados
+            await loadHistoricos(tipo, fechaDesde, fechaHasta, estado, residencia);
         }
         
         async function exportarHistoricos(formato) {
