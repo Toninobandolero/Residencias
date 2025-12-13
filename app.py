@@ -4044,12 +4044,23 @@ def eliminar_cobro(id_pago):
 @app.route('/api/v1/facturacion/proveedores', methods=['GET'])
 @permiso_requerido('leer:pago_proveedor')
 def listar_pagos_proveedores():
-    """Lista los pagos a proveedores de la residencia."""
+    """
+    Lista los pagos a proveedores de la residencia.
+    Por defecto muestra solo los pagos de este mes y el anterior (últimos 2 meses).
+    Para ver históricos completos, usar el módulo de Históricos.
+    """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
         try:
+            # Calcular fecha límite: inicio del mes anterior
+            fecha_limite = datetime.now().replace(day=1) - timedelta(days=1)  # Último día del mes anterior
+            fecha_limite = fecha_limite.replace(day=1)  # Primer día del mes anterior
+            fecha_limite_str = fecha_limite.strftime('%Y-%m-%d')
+            
+            app.logger.info(f"📊 Pagos a proveedores - mostrando desde: {fecha_limite_str}")
+            
             # Construir query con filtros por residencias de acceso
             query = """
                 SELECT p.id_pago, p.proveedor, p.concepto, p.monto, p.fecha_pago, 
@@ -4070,6 +4081,15 @@ def listar_pagos_proveedores():
                 else:
                     # Usuario sin residencias
                     return jsonify({'pagos': [], 'total': 0}), 200
+            
+            # FILTRAR: Solo pagos de este mes y el anterior
+            # Mostrar si fecha_pago O fecha_prevista O fecha_creacion >= inicio del mes anterior
+            query += """ AND (
+                (p.fecha_pago IS NOT NULL AND p.fecha_pago >= %s) OR
+                (p.fecha_pago IS NULL AND p.fecha_prevista IS NOT NULL AND p.fecha_prevista >= %s) OR
+                (p.fecha_pago IS NULL AND p.fecha_prevista IS NULL AND p.fecha_creacion::date >= %s)
+            )"""
+            params.extend([fecha_limite_str, fecha_limite_str, fecha_limite_str])
             
             query += " ORDER BY COALESCE(p.fecha_pago, p.fecha_prevista, p.fecha_creacion::date) DESC, p.fecha_creacion DESC"
             
